@@ -4,16 +4,21 @@ node_modules/
 # Build output
 dist/
 .wrangler/
+.vercel
 
 # Environment
 .env
 .dev.vars
+
+# Database (개발용만, 프로덕션은 포함)
+# database.sqlite
 
 # PM2
 .pm2/
 pids/
 logs/
 *.log
+server.pid
 
 # Backup
 *.backup
