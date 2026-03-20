@@ -3,25 +3,29 @@
   "version": "12.2.6",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:sandbox": "wrangler pages dev dist --d1=webapp-db --local --ip 0.0.0.0 --port 3000",
-    "build": "vite build",
-    "preview": "wrangler pages dev dist",
-    "deploy": "npm run build && wrangler pages deploy dist --project-name webapp",
-    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "start:prod": "NODE_ENV=production node dist/server.js",
+    "db:init": "node -e \"const Database = require('better-sqlite3'); const fs = require('fs'); const db = new Database('database.sqlite'); const sql = fs.readFileSync('migrations/0001_initial_schema.sql', 'utf8'); sql.split(';').filter(s => s.trim()).forEach(stmt => { if(stmt.trim()) db.exec(stmt); }); console.log('Database initialized'); db.close();\"",
     "clean-port": "fuser -k 3000/tcp 2>/dev/null || true",
-    "test": "curl http://localhost:3000",
-    "db:migrate:local": "wrangler d1 migrations apply webapp-db --local",
-    "db:migrate:prod": "wrangler d1 migrations apply webapp-db",
-    "db:console:local": "wrangler d1 execute webapp-db --local",
-    "db:console:prod": "wrangler d1 execute webapp-db"
+    "test": "curl http://localhost:3000/api/health"
   },
   "dependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "better-sqlite3": "^12.8.0",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "hono": "^4.6.14"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250705.0",
     "@hono/vite-cloudflare-pages": "^0.4.2",
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
     "vite": "^5.4.11",
     "wrangler": "^3.90.0"
   }
