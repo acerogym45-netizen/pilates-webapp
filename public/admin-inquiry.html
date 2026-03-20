@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>문의 관리 - 관리사무소</title>
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Header -->
+        <header class="admin-header">
+            <h1><i class="fas fa-comment-dots"></i> 필라테스 문의 관리</h1>
+            <p>마스터플랜리소스 × 청주SK뷰자이</p>
+            <div class="nav-tabs">
+                <a href="admin-main.html" class="nav-tab">
+                    <i class="fas fa-file-contract"></i> 신청 관리
+                </a>
+                <a href="admin-cancellation.html" class="nav-tab">
+                    <i class="fas fa-user-times"></i> 해지 관리
+                </a>
+                <a href="admin-inquiry.html" class="nav-tab active">
+                    <i class="fas fa-comment-dots"></i> 문의 관리
+                </a>
+                <a href="admin-notices.html" class="nav-tab">
+                    <i class="fas fa-bullhorn"></i> 공지사항
+                </a>
+                <a href="admin-instructors.html" class="nav-tab">
+                    <i class="fas fa-user-tie"></i> 강사 관리
+                </a>
+                <a href="admin-programs.html" class="nav-tab">
+                    <i class="fas fa-clipboard-list"></i> 프로그램 관리
+                </a>
+                <a href="admin-complex.html" class="nav-tab">
+                    <i class="fas fa-building"></i> 단지 관리
+                </a>
+                <a href="index.html" class="nav-tab" target="_blank">
+                    <i class="fas fa-home"></i> 입주자 페이지
+                </a>
+            </div>
+        </header>
+
+        <!-- Stats Section -->
+        <section class="stats-section">
+            <div class="stat-card">
+                <div class="stat-icon pending">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="pendingCount">0</h3>
+                    <p>답변대기</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon approved">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="completedCount">0</h3>
+                    <p>답변완료</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-globe"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="publicCount">0</h3>
+                    <p>공개</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon total">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="totalCount">0</h3>
+                    <p>전체</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Filter Section -->
+        <section class="filter-section">
+            <div class="filter-group">
+                <label for="statusFilter">상태 필터:</label>
+                <select id="statusFilter" onchange="filterInquiries()">
+                    <option value="all" selected>전체</option>
+                    <option value="대기">답변대기</option>
+                    <option value="완료">답변완료</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="privacyFilter">공개 필터:</label>
+                <select id="privacyFilter" onchange="filterInquiries()">
+                    <option value="all" selected>전체</option>
+                    <option value="public">공개</option>
+                    <option value="private">비공개</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="searchInput">검색:</label>
+                <input type="text" id="searchInput" placeholder="이름, 제목 검색..." onkeyup="filterInquiries()">
+            </div>
+            <button class="btn-refresh" onclick="loadInquiries()">
+                <i class="fas fa-sync-alt"></i> 새로고침
+            </button>
+            <button class="btn-export" onclick="exportToCSV()">
+                <i class="fas fa-download"></i> CSV 다운로드
+            </button>
+        </section>
+
+        <!-- Inquiries List -->
+        <section class="contracts-section">
+            <div id="loadingSpinner" class="loading" style="display: none;">
+                <i class="fas fa-spinner fa-spin"></i> 불러오는 중...
+            </div>
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <i class="fas fa-inbox"></i>
+                <p>문의 내역이 없습니다.</p>
+            </div>
+            <div id="inquiriesList" class="contracts-list">
+                <!-- Dynamically populated -->
+            </div>
+        </section>
+    </div>
+
+    <!-- Reply Modal -->
+    <div id="replyModal" class="modal">
+        <div class="modal-content detail">
+            <div class="modal-header">
+                <h2><i class="fas fa-reply"></i> 답변 작성</h2>
+                <button class="modal-close" onclick="closeReplyModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="inquiryDetail" class="inquiry-detail-view">
+                    <!-- Dynamically populated -->
+                </div>
+                <form id="replyForm" class="reply-form">
+                    <input type="hidden" id="replyInquiryId">
+                    <div class="form-group">
+                        <label for="replyContent">답변 내용</label>
+                        <textarea id="replyContent" rows="6" placeholder="답변 내용을 입력하세요" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeReplyModal()">취소</button>
+                <button class="btn btn-approve" onclick="submitReply()">
+                    <i class="fas fa-paper-plane"></i> 답변 전송
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/admin-inquiry.js"></script>
+</body>
+</html>

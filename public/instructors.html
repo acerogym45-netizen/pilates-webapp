@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>강사 소개 - 청주SK뷰자이 필라테스</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>청주SK뷰자이</h1>
+            <h2>필라테스 강사 소개</h2>
+            <p class="subtitle">전문 강사진을 소개합니다</p>
+            
+            <div class="instructor-link-wrapper">
+                <a href="index.html" class="instructor-link">
+                    <i class="fas fa-arrow-left"></i> 신청 페이지로 돌아가기
+                </a>
+            </div>
+        </header>
+
+        <!-- Instructors Section -->
+        <section class="instructors-page-section">
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>강사 정보를 불러오는 중...</p>
+            </div>
+            
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <i class="fas fa-user-slash"></i>
+                <p>등록된 강사 정보가 없습니다</p>
+            </div>
+            
+            <div id="instructorsContainer" class="instructors-grid" style="display: none;"></div>
+        </section>
+        
+        <!-- Image Modal -->
+        <div id="imageModal" class="image-modal" onclick="closeImageModal(event)">
+            <span class="image-modal-close" onclick="closeImageModal()">&times;</span>
+            <img class="image-modal-content" id="modalImage">
+            <div class="image-modal-caption" id="modalCaption"></div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p style="color: #666; margin-bottom: 15px;">
+                <i class="fas fa-comment-dots"></i> 문의사항이 있으시면 문의처에 남겨주세요
+            </p>
+            <a href="index.html" class="btn-inquiry">
+                <i class="fas fa-arrow-left"></i> 메인으로 돌아가기
+            </a>
+        </footer>
+    </div>
+
+    <script src="js/complex-context.js"></script>
+    <script>
+        // Load instructors
+        async function loadInstructors() {
+            const loading = document.getElementById('loading');
+            const emptyState = document.getElementById('emptyState');
+            const container = document.getElementById('instructorsContainer');
+            
+            try {
+                // 먼저 단지 컨텍스트 초기화
+                await initializeComplexContext();
+                const complexCode = complexContext.getComplexCode();  // Use complex_code
+                
+                const response = await fetch('tables/instructors?limit=100');
+                const result = await response.json();
+                
+                const instructors = (result.data || [])
+                    .filter(i => i.is_active && i.complex_id === complexCode)  // Filter by complex_code
+                    .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+                
+                console.log(`👥 Loaded ${instructors.length} active instructors for complex ${complexCode}`);
+                
+                loading.style.display = 'none';
+                
+                if (instructors.length === 0) {
+                    emptyState.style.display = 'block';
+                    return;
+                }
+                
+                displayInstructors(instructors);
+                
+            } catch (error) {
+                console.error('Error loading instructors:', error);
+                loading.style.display = 'none';
+                emptyState.style.display = 'block';
+                emptyState.innerHTML = '<i class="fas fa-exclamation-triangle"></i><p>강사 정보를 불러오는데 실패했습니다</p>';
+            }
+        }
+
+        // Display instructors
+        function displayInstructors(instructors) {
+            const container = document.getElementById('instructorsContainer');
+            container.style.display = 'grid';
+            
+            container.innerHTML = instructors.map(instructor => {
+                const certifications = Array.isArray(instructor.certifications) 
+                    ? instructor.certifications 
+                    : (instructor.certifications || '').split(',').map(c => c.trim()).filter(c => c);
+                
+                return `
+                    <div class="instructor-card">
+                        <div class="instructor-photo" onclick="openImageModal('${instructor.photo_url ? instructor.photo_url.replace(/'/g, "\\'") : ''}', '${escapeHtml(instructor.name)}')">
+                            ${instructor.photo_url 
+                                ? `<img src="${instructor.photo_url}" alt="${escapeHtml(instructor.name)}">` 
+                                : '<i class="fas fa-user"></i>'}
+                        </div>
+                        <div class="instructor-name">${escapeHtml(instructor.name)}</div>
+                        <div class="instructor-position">${escapeHtml(instructor.position || '')}</div>
+                        ${instructor.experience_years ? `
+                            <div class="instructor-experience">
+                                <i class="fas fa-calendar-check"></i> 경력 ${instructor.experience_years}년
+                            </div>
+                        ` : ''}
+                        ${instructor.bio ? `<div class="instructor-bio">${escapeHtml(instructor.bio)}</div>` : ''}
+                        ${certifications.length > 0 ? `
+                            <div class="instructor-certifications">
+                                <div class="cert-title"><i class="fas fa-award"></i> 자격 및 경력</div>
+                                ${certifications.map(cert => `
+                                    <div class="certification-item">
+                                        <i class="fas fa-check-circle"></i>
+                                        <span>${escapeHtml(cert)}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Utility function to escape HTML
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // Open image modal
+        function openImageModal(imageUrl, caption) {
+            if (!imageUrl) return;
+            
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            const modalCaption = document.getElementById('modalCaption');
+            
+            modal.classList.add('active');
+            modalImg.src = imageUrl;
+            modalCaption.textContent = caption + ' 강사님';
+            
+            // Prevent body scroll
+            document.body.style.overflow = 'hidden';
+        }
+        
+        // Close image modal
+        function closeImageModal(event) {
+            // Close only if clicking on background or close button, not the image
+            if (event && event.target.id === 'modalImage') {
+                return;
+            }
+            
+            const modal = document.getElementById('imageModal');
+            modal.classList.remove('active');
+            
+            // Restore body scroll
+            document.body.style.overflow = '';
+        }
+        
+        // Close modal on ESC key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeImageModal();
+            }
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', loadInstructors);
+    </script>
+</body>
+</html>

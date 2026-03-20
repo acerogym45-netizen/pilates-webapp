@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>강사 관리 - 청주SK뷰자이 필라테스</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="admin-header">
+            <h1><i class="fas fa-dumbbell"></i> 청주SK뷰자이 필라테스 관리자</h1>
+            <p>마스터플랜리소스 × 청주SK뷰자이</p>
+            <div class="nav-tabs">
+                <a href="admin-main.html" class="nav-tab">
+                    <i class="fas fa-file-contract"></i> 신청 관리
+                </a>
+                <a href="admin-cancellation.html" class="nav-tab">
+                    <i class="fas fa-user-times"></i> 해지 관리
+                </a>
+                <a href="admin-inquiry.html" class="nav-tab">
+                    <i class="fas fa-comment-dots"></i> 문의 관리
+                </a>
+                <a href="admin-notices.html" class="nav-tab">
+                    <i class="fas fa-bullhorn"></i> 공지사항
+                </a>
+                <a href="admin-instructors.html" class="nav-tab">
+                    <i class="fas fa-user-tie"></i> 강사 관리
+                </a>
+                <a href="admin-programs.html" class="nav-tab">
+                    <i class="fas fa-clipboard-list"></i> 프로그램 관리
+                </a>
+                <a href="admin-complex.html" class="nav-tab">
+                    <i class="fas fa-building"></i> 단지 관리
+                </a>
+                <a href="index.html" class="nav-tab" target="_blank">
+                    <i class="fas fa-home"></i> 입주자 페이지
+                </a>
+            </div>
+        </header>
+
+        <!-- Stats Section -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon approved">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="activeCount">0</h3>
+                    <p>활성화</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon pending">
+                    <i class="fas fa-eye-slash"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="inactiveCount">0</h3>
+                    <p>비활성화</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon total">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="totalCount">0</h3>
+                    <p>전체</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions Section -->
+        <section class="filter-section">
+            <button class="btn-refresh" onclick="loadInstructors()">
+                <i class="fas fa-sync-alt"></i> 새로고침
+            </button>
+            <button class="btn-primary" onclick="openAddModal()">
+                <i class="fas fa-plus"></i> 강사 추가
+            </button>
+        </section>
+
+        <!-- Instructors List -->
+        <section class="contracts-section">
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>데이터 로딩 중...</p>
+            </div>
+            
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <i class="fas fa-inbox"></i>
+                <p>등록된 강사가 없습니다</p>
+            </div>
+            
+            <div class="contracts-list" id="instructorsList" style="display: none;"></div>
+        </section>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="instructorModal" class="modal">
+        <div class="modal-content detail">
+            <div class="modal-header">
+                <h2 id="modalTitle"><i class="fas fa-user-tie"></i> 강사 추가</h2>
+                <button class="modal-close" onclick="closeInstructorModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="instructorForm" onsubmit="return false;">
+                    <input type="hidden" id="instructorId">
+                    
+                    <div class="form-group">
+                        <label for="instructorName">이름 <span class="required">*</span></label>
+                        <input type="text" id="instructorName" required placeholder="강사 이름">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="instructorPosition">포지션/자격 <span class="required">*</span></label>
+                        <input type="text" id="instructorPosition" required placeholder="예: 필라테스 마스터 트레이너">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="instructorPhotoFile">프로필 사진 업로드</label>
+                        <input type="file" id="instructorPhotoFile" accept="image/*" onchange="handlePhotoUpload(event)">
+                        <small style="color: #666;">또는</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="instructorPhotoUrl">프로필 사진 URL</label>
+                        <input type="text" id="instructorPhotoUrl" placeholder="https://example.com/photo.jpg (선택사항)" readonly>
+                        <small style="color: #666;">파일 업로드 시 자동으로 채워집니다. 비워두면 기본 아이콘이 표시됩니다</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="instructorBio">소개</label>
+                        <textarea id="instructorBio" rows="4" placeholder="강사 소개를 입력하세요"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="instructorExperience">경력 (년)</label>
+                        <input type="number" id="instructorExperience" min="0" placeholder="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="instructorCertifications">자격증 및 경력</label>
+                        <textarea id="instructorCertifications" rows="4" placeholder="한 줄에 하나씩 입력하세요&#10;예:&#10;BASI Pilates 자격증&#10;재활 필라테스 전문가&#10;스포츠 마사지 자격증"></textarea>
+                        <small style="color: #666;">한 줄에 하나씩 입력해주세요</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="instructorOrder">표시 순서</label>
+                        <input type="number" id="instructorOrder" value="1" min="0">
+                        <small style="color: #666;">숫자가 작을수록 먼저 표시됩니다</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="instructorActive" checked>
+                            <span>활성화 (입주민 페이지에 표시)</span>
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveInstructor()">
+                    <i class="fas fa-save"></i> 저장
+                </button>
+                <button class="btn btn-secondary" onclick="closeInstructorModal()">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/admin-instructors.js"></script>
+</body>
+</html>

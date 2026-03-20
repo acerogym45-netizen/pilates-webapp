@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>단지 관리 - 관리사무소</title>
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <style>
+        /* Password Protection Screen */
+        #passwordScreen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #f8f9fa;
+        }
+        
+        .password-box {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+            border: 1px solid #dee2e6;
+        }
+        
+        .password-box h2 {
+            color: #2c3e50;
+            margin-bottom: 12px;
+            font-size: 1.5rem;
+        }
+        
+        .password-box p {
+            color: #6c757d;
+            margin-bottom: 24px;
+            font-size: 0.9375rem;
+        }
+        
+        .password-box input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 1rem;
+            margin-bottom: 16px;
+        }
+        
+        .password-box input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
+        
+        .password-box button {
+            width: 100%;
+            padding: 12px;
+            background: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .password-box button:hover {
+            background: #34495e;
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            font-size: 0.875rem;
+            margin-top: 12px;
+            display: none;
+        }
+        
+        .error-message.show {
+            display: block;
+        }
+        
+        #mainContent {
+            display: none;
+        }
+        
+        #mainContent.show {
+            display: block;
+        }
+        
+        body.authenticated #passwordScreen {
+            display: none;
+        }
+        
+        body.authenticated #mainContent {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Password Protection Screen -->
+    <div id="passwordScreen">
+        <div class="password-box">
+            <i class="fas fa-lock" style="font-size: 3rem; color: #2c3e50; margin-bottom: 20px;"></i>
+            <h2><i class="fas fa-building"></i> 단지 관리</h2>
+            <p>마스터 관리자 전용 페이지입니다</p>
+            <input 
+                type="password" 
+                id="passwordInput" 
+                placeholder="비밀번호를 입력하세요"
+                autocomplete="off"
+            />
+            <button onclick="checkPassword()">
+                <i class="fas fa-sign-in-alt"></i> 접속
+            </button>
+            <p class="error-message" id="errorMessage">
+                <i class="fas fa-exclamation-circle"></i> 비밀번호가 올바르지 않습니다
+            </p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="admin-container">
+        <!-- Header -->
+        <header class="admin-header">
+            <h1><i class="fas fa-building"></i> 단지 관리</h1>
+            <p>마스터플랜리소스 × 다중 단지 시스템</p>
+            <div class="nav-tabs">
+                <a href="admin-main.html" class="nav-tab">
+                    <i class="fas fa-file-contract"></i> 신청 관리
+                </a>
+                <a href="admin-cancellation.html" class="nav-tab">
+                    <i class="fas fa-user-times"></i> 해지 관리
+                </a>
+                <a href="admin-inquiry.html" class="nav-tab">
+                    <i class="fas fa-comment-dots"></i> 문의 관리
+                </a>
+                <a href="admin-notices.html" class="nav-tab">
+                    <i class="fas fa-bullhorn"></i> 공지사항
+                </a>
+                <a href="admin-instructors.html" class="nav-tab">
+                    <i class="fas fa-user-tie"></i> 강사 관리
+                </a>
+                <a href="admin-programs.html" class="nav-tab">
+                    <i class="fas fa-clipboard-list"></i> 프로그램 관리
+                </a>
+                <a href="admin-complex.html" class="nav-tab active">
+                    <i class="fas fa-building"></i> 단지 관리
+                </a>
+                <a href="index.html" class="nav-tab" target="_blank">
+                    <i class="fas fa-home"></i> 입주자 페이지
+                </a>
+            </div>
+        </header>
+
+        <!-- Stats Section -->
+        <section class="stats-section">
+            <div class="stat-card">
+                <div class="stat-icon approved">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="activeCount">0</h3>
+                    <p>활성화</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon rejected">
+                    <i class="fas fa-times-circle"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="inactiveCount">0</h3>
+                    <p>비활성화</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon total">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="totalCount">0</h3>
+                    <p>전체</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions -->
+        <section class="filter-section">
+            <button class="btn-refresh" onclick="loadComplexes()">
+                <i class="fas fa-sync-alt"></i> 새로고침
+            </button>
+            <button class="btn-export" onclick="openAddModal()">
+                <i class="fas fa-plus"></i> 단지 추가
+            </button>
+            <button class="btn-export" onclick="openMonthlyReportModal()" style="background: #10b981; margin-left: 10px;">
+                <i class="fas fa-chart-line"></i> 월간 리포트
+            </button>
+        </section>
+
+        <!-- Complex List -->
+        <section class="contracts-section">
+            <div id="loadingSpinner" class="loading" style="display: none;">
+                <i class="fas fa-spinner fa-spin"></i> 불러오는 중...
+            </div>
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <i class="fas fa-inbox"></i>
+                <p>등록된 단지가 없습니다.</p>
+            </div>
+            <div id="complexList" class="contracts-list">
+                <!-- Dynamically populated -->
+            </div>
+        </section>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-edit"></i> 단지 정보 수정</h3>
+            </div>
+            
+            <input type="hidden" id="editComplexId">
+            
+            <div class="form-section">
+                <h3><i class="fas fa-info-circle"></i> 기본 정보</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>단지명 <span class="required">*</span></label>
+                        <input type="text" id="editComplexName" required placeholder="예: 청주SK뷰자이">
+                    </div>
+                    <div class="form-group">
+                        <label>단지 코드 <span class="required">*</span></label>
+                        <input type="text" id="editComplexCode" required placeholder="예: cheongju-sk">
+                    </div>
+                    <div class="form-group">
+                        <label>관리사무소 전화</label>
+                        <input type="tel" id="editContactPhone" placeholder="043-XXX-XXXX">
+                    </div>
+                    <div class="form-group">
+                        <label>관리사무소 이메일</label>
+                        <input type="text" id="editContactEmail" placeholder="info@example.com">
+                    </div>
+                    <div class="form-group full-width">
+                        <label>주소</label>
+                        <input type="text" id="editAddress" placeholder="충청북도 청주시 서원구">
+                    </div>
+                    <div class="form-group">
+                        <label>로고 URL</label>
+                        <input type="text" id="editLogoUrl" placeholder="https://...">
+                    </div>
+                    <div class="form-group">
+                        <label>기본 색상</label>
+                        <input type="text" id="editPrimaryColor" placeholder="#2c3e50">
+                    </div>
+                    <div class="form-group">
+                        <label>운영 시간</label>
+                        <input type="text" id="editBusinessHours" placeholder="월-금 09:00-21:00">
+                    </div>
+                    <div class="form-group">
+                        <label>표시 순서</label>
+                        <input type="number" id="editDisplayOrder" value="1" min="1">
+                    </div>
+                    <div class="form-group full-width">
+                        <label>
+                            관리자 접근 비밀번호
+                            <span style="font-size: 0.85rem; color: #6c757d; font-weight: normal;">
+                                (입주자 페이지에서 관리자 페이지로 전환 시 사용)
+                            </span>
+                        </label>
+                        <input type="text" id="editAdminPassword" placeholder="예: admin1234">
+                        <small style="color: #6c757d; display: block; margin-top: 5px;">
+                            <i class="fas fa-info-circle"></i> 입주자가 로고를 5번 클릭하면 이 비밀번호로 관리자 페이지에 접근할 수 있습니다
+                        </small>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>활성화 여부</label>
+                        <select id="editIsActive">
+                            <option value="true">활성화</option>
+                            <option value="false">비활성화</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h3><i class="fas fa-list"></i> 프로그램 설정</h3>
+                <div class="form-group">
+                    <label>제공 프로그램 (쉼표로 구분)</label>
+                    <textarea id="editLessonTypes" rows="4" placeholder="화&목 6:1 그룹수업, 수&금 6:1 그룹수업, 2:1 듀엣레슨, 1:1 개인레슨"></textarea>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn-primary" onclick="saveComplex()">
+                    <i class="fas fa-save"></i> 저장
+                </button>
+                <button class="btn-secondary" onclick="closeEditModal()">
+                    <i class="fas fa-times"></i> 취소
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🆕 D. Monthly Report Modal -->
+    <div id="monthlyReportModal" class="modal">
+        <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-header">
+                <h3><i class="fas fa-chart-line"></i> 월간 리포트</h3>
+            </div>
+            
+            <div class="form-section">
+                <h3><i class="fas fa-calendar"></i> 기간 및 단지 선택</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>단지</label>
+                        <select id="reportComplex">
+                            <option value="all">📊 전체 단지 통합</option>
+                            <!-- Dynamically populated -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>연도</label>
+                        <input type="number" id="reportYear" min="2020" max="2099" value="2026">
+                    </div>
+                    <div class="form-group">
+                        <label>월</label>
+                        <select id="reportMonth">
+                            <option value="1">1월</option>
+                            <option value="2">2월</option>
+                            <option value="3">3월</option>
+                            <option value="4">4월</option>
+                            <option value="5">5월</option>
+                            <option value="6">6월</option>
+                            <option value="7">7월</option>
+                            <option value="8">8월</option>
+                            <option value="9">9월</option>
+                            <option value="10">10월</option>
+                            <option value="11">11월</option>
+                            <option value="12">12월</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="generateMonthlyReport()" style="margin-top: 15px;">
+                    <i class="fas fa-cog fa-spin" id="reportLoadingIcon" style="display: none;"></i>
+                    <i class="fas fa-file-chart-line" id="reportIcon"></i>
+                    리포트 생성
+                </button>
+            </div>
+            
+            <div id="reportResult" style="display: none; margin-top: 30px;">
+                <div class="form-section">
+                    <h3><i class="fas fa-chart-bar"></i> 리포트 결과</h3>
+                    <div id="reportContent" style="background: #f8f9fa; padding: 20px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 0.9rem;">
+                        <!-- Dynamically populated -->
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button class="btn-primary" onclick="downloadReportCSV()">
+                        <i class="fas fa-download"></i> CSV 다운로드
+                    </button>
+                    <button class="btn-primary" onclick="downloadReportPDF()" style="background: #e74c3c;">
+                        <i class="fas fa-file-pdf"></i> PDF 다운로드
+                    </button>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeMonthlyReportModal()">
+                    <i class="fas fa-times"></i> 닫기
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Password Protection
+        const MASTER_PASSWORD = 'master2026';
+        
+        // Always show password screen on page load (removed sessionStorage check for security)
+        document.addEventListener('DOMContentLoaded', function() {
+            // Always require password entry
+            document.getElementById('passwordScreen').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+            
+            // Focus on password input
+            const input = document.getElementById('passwordInput');
+            if (input) {
+                input.focus();
+            }
+        });
+        
+        function checkPassword() {
+            const input = document.getElementById('passwordInput');
+            const password = input.value;
+            const errorMsg = document.getElementById('errorMessage');
+            
+            if (password === MASTER_PASSWORD) {
+                // Don't save to sessionStorage - require password every time
+                showMainContent();
+            } else {
+                errorMsg.classList.add('show');
+                input.value = '';
+                input.focus();
+                
+                // Hide error after 3 seconds
+                setTimeout(() => {
+                    errorMsg.classList.remove('show');
+                }, 3000);
+            }
+        }
+        
+        function showMainContent() {
+            document.getElementById('passwordScreen').style.display = 'none';
+            const mainContent = document.getElementById('mainContent');
+            mainContent.style.display = 'block';
+            mainContent.classList.add('show');
+            document.body.classList.add('authenticated');
+        }
+        
+        // Allow Enter key to submit
+        document.addEventListener('DOMContentLoaded', function() {
+            const input = document.getElementById('passwordInput');
+            if (input) {
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        checkPassword();
+                    }
+                });
+            }
+            
+            // Set default report month to current month
+            const now = new Date();
+            document.getElementById('reportYear').value = now.getFullYear();
+            document.getElementById('reportMonth').value = now.getMonth() + 1;
+        });
+        
+        // 🆕 D. Monthly Report Functions
+        let currentReportData = null;
+        
+        async function openMonthlyReportModal() {
+            document.getElementById('monthlyReportModal').classList.add('active');
+            document.getElementById('reportResult').style.display = 'none';
+            
+            // Load complex list for report
+            await loadComplexListForReport();
+        }
+        
+        // Load complex list for report selection
+        async function loadComplexListForReport() {
+            try {
+                const response = await fetch('tables/complex_settings?limit=100');
+                const result = await response.json();
+                const complexes = result.data || [];
+                
+                const select = document.getElementById('reportComplex');
+                select.innerHTML = '<option value="all">📊 전체 단지 통합</option>';
+                
+                complexes.forEach(complex => {
+                    const option = document.createElement('option');
+                    option.value = complex.complex_code;
+                    option.textContent = `${complex.complex_name} (${complex.complex_code})`;
+                    select.appendChild(option);
+                });
+                
+                console.log(`✅ Loaded ${complexes.length} complexes for report`);
+            } catch (error) {
+                console.error('❌ Error loading complexes for report:', error);
+            }
+        }
+        
+        function closeMonthlyReportModal() {
+            document.getElementById('monthlyReportModal').classList.remove('active');
+        }
+        
+        async function generateMonthlyReport() {
+            const year = document.getElementById('reportYear').value;
+            const month = document.getElementById('reportMonth').value;
+            const selectedComplex = document.getElementById('reportComplex').value;
+            
+            const reportLoadingIcon = document.getElementById('reportLoadingIcon');
+            const reportIcon = document.getElementById('reportIcon');
+            
+            reportLoadingIcon.style.display = 'inline-block';
+            reportIcon.style.display = 'none';
+            
+            try {
+                console.log(`📊 Generating monthly report for ${year}-${month}, complex: ${selectedComplex}`);
+                
+                // 1. Fetch all contracts
+                console.log('🔍 Step 1/4: Fetching contracts...');
+                const contractsResponse = await fetch('tables/pilates_contracts?limit=1000');
+                console.log('Contract response status:', contractsResponse.status);
+                if (!contractsResponse.ok) {
+                    throw new Error(`Contracts fetch failed: ${contractsResponse.status} ${contractsResponse.statusText}`);
+                }
+                const contractsResult = await contractsResponse.json();
+                const allContracts = contractsResult.data || [];
+                console.log(`✅ Loaded ${allContracts.length} contracts`);
+                
+                // 2. Fetch all cancellations
+                console.log('🔍 Step 2/4: Fetching cancellations...');
+                const cancellationsResponse = await fetch('tables/pilates_cancellations?limit=1000');
+                console.log('Cancellation response status:', cancellationsResponse.status);
+                if (!cancellationsResponse.ok) {
+                    throw new Error(`Cancellations fetch failed: ${cancellationsResponse.status} ${cancellationsResponse.statusText}`);
+                }
+                const cancellationsResult = await cancellationsResponse.json();
+                const allCancellations = cancellationsResult.data || [];
+                console.log(`✅ Loaded ${allCancellations.length} cancellations`);
+                
+                // 3. Fetch all programs
+                console.log('🔍 Step 3/4: Fetching programs...');
+                const programsResponse = await fetch('tables/programs?limit=1000');
+                console.log('Programs response status:', programsResponse.status);
+                if (!programsResponse.ok) {
+                    throw new Error(`Programs fetch failed: ${programsResponse.status} ${programsResponse.statusText}`);
+                }
+                const programsResult = await programsResponse.json();
+                const allPrograms = programsResult.data || [];
+                console.log(`✅ Loaded ${allPrograms.length} programs`);
+                
+                // 4. Fetch all inquiries
+                console.log('🔍 Step 4/4: Fetching inquiries...');
+                const inquiriesResponse = await fetch('tables/pilates_inquiries?limit=1000');
+                console.log('Inquiries response status:', inquiriesResponse.status);
+                if (!inquiriesResponse.ok) {
+                    throw new Error(`Inquiries fetch failed: ${inquiriesResponse.status} ${inquiriesResponse.statusText}`);
+                }
+                const inquiriesResult = await inquiriesResponse.json();
+                const allInquiries = inquiriesResult.data || [];
+                console.log(`✅ Loaded ${allInquiries.length} inquiries`);
+                
+                console.log('📊 Processing data...');
+                
+                // Filter by complex (if not "all")
+                let filteredContracts = allContracts;
+                let filteredCancellations = allCancellations;
+                let filteredPrograms = allPrograms;
+                let filteredInquiries = allInquiries;
+                
+                if (selectedComplex !== 'all') {
+                    filteredContracts = allContracts.filter(c => c.complex_id === selectedComplex);
+                    filteredCancellations = allCancellations.filter(c => c.complex_id === selectedComplex);
+                    filteredPrograms = allPrograms.filter(p => p.complex_id === selectedComplex);
+                    filteredInquiries = allInquiries.filter(i => i.complex_id === selectedComplex);
+                    console.log(`📍 Filtered by complex: ${selectedComplex}`);
+                    console.log(`   Contracts: ${allContracts.length} → ${filteredContracts.length}`);
+                    console.log(`   Cancellations: ${allCancellations.length} → ${filteredCancellations.length}`);
+                    console.log(`   Programs: ${allPrograms.length} → ${filteredPrograms.length}`);
+                    console.log(`   Inquiries: ${allInquiries.length} → ${filteredInquiries.length}`);
+                }
+                
+                // Filter by month
+                const startDate = new Date(year, month - 1, 1);
+                const endDate = new Date(year, month, 0, 23, 59, 59);
+                
+                const newContracts = filteredContracts.filter(c => {
+                    const createdDate = new Date(c.created_at);
+                    return createdDate >= startDate && createdDate <= endDate && c.status === 'approved';
+                });
+                
+                const newCancellations = filteredCancellations.filter(c => {
+                    const createdDate = new Date(c.created_at);
+                    return createdDate >= startDate && createdDate <= endDate && c.status === 'approved';
+                });
+                
+                const netChange = newContracts.length - newCancellations.length;
+                const currentMembers = filteredContracts.filter(c => c.status === 'approved').length;
+                
+                // Revenue calculation (assuming 120,000 per member)
+                const avgPrice = 120000;
+                const monthlyRevenue = currentMembers * avgPrice;
+                
+                // Program stats
+                const programStats = filteredPrograms.map(program => {
+                    const currentCount = filteredContracts.filter(c =>
+                        c.status === 'approved' &&
+                        (c.lesson_type === program.program_name || 
+                         c.lesson_type.includes(program.program_name) || 
+                         program.program_name.includes(c.lesson_type))
+                    ).length;
+                    
+                    const maxCapacity = program.max_capacity || 6;
+                    const rate = maxCapacity > 0 ? Math.round((currentCount / maxCapacity) * 100) : 0;
+                    
+                    return {
+                        name: program.program_name,
+                        current: currentCount,
+                        max: maxCapacity,
+                        rate: rate
+                    };
+                }).sort((a, b) => b.rate - a.rate);
+                
+                // Top inquiries
+                const monthInquiries = filteredInquiries.filter(inq => {
+                    const createdDate = new Date(inq.created_at);
+                    return createdDate >= startDate && createdDate <= endDate;
+                });
+                
+                const inquiryTitles = monthInquiries.map(inq => inq.title);
+                const inquiryCounts = {};
+                inquiryTitles.forEach(title => {
+                    inquiryCounts[title] = (inquiryCounts[title] || 0) + 1;
+                });
+                
+                const topInquiries = Object.entries(inquiryCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([title, count]) => ({ title, count }));
+                
+                // Get complex name
+                let complexName = '전체 단지';
+                if (selectedComplex !== 'all') {
+                    const complexSelect = document.getElementById('reportComplex');
+                    const selectedOption = complexSelect.options[complexSelect.selectedIndex];
+                    complexName = selectedOption.textContent;
+                }
+                
+                // Store report data
+                currentReportData = {
+                    complexId: selectedComplex,
+                    complexName: complexName,
+                    year,
+                    month,
+                    newContracts: newContracts.length,
+                    newCancellations: newCancellations.length,
+                    netChange,
+                    currentMembers,
+                    monthlyRevenue,
+                    programStats,
+                    topInquiries,
+                    generatedAt: new Date().toISOString()
+                };
+                
+                // Display report
+                console.log('✅ Report generated successfully');
+                displayReportResult(currentReportData);
+                
+            } catch (error) {
+                console.error('❌ Error generating report:', error);
+                alert(`리포트 생성에 실패했습니다.\n\n에러 내용: ${error.message}\n\n콘솔(F12)에서 자세한 내용을 확인하세요.`);
+            } finally {
+                reportLoadingIcon.style.display = 'none';
+                reportIcon.style.display = 'inline-block';
+            }
+        }
+        
+        function displayReportResult(data) {
+            const content = document.getElementById('reportContent');
+            
+            const html = `
+                <div style="line-height: 1.8;">
+                    <h4 style="color: #2c3e50; margin-bottom: 10px;">
+                        📊 ${data.year}년 ${data.month}월 월간 리포트
+                    </h4>
+                    <p style="color: #6c757d; font-size: 0.9rem; margin-bottom: 20px;">
+                        🏢 ${data.complexName}
+                    </p>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                        <h5 style="color: #34495e; margin-bottom: 10px;">💰 수익 현황</h5>
+                        <p>• 현재 회원 수: <strong>${data.currentMembers}명</strong></p>
+                        <p>• 월 예상 매출: <strong>${data.monthlyRevenue.toLocaleString()}원</strong> <span style="color: #6c757d;">(회원당 120,000원)</span></p>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                        <h5 style="color: #34495e; margin-bottom: 10px;">📈 신청/해지 현황</h5>
+                        <p>• 신규 신청: <strong style="color: #10b981;">${data.newContracts}건</strong></p>
+                        <p>• 해지 신청: <strong style="color: #e74c3c;">${data.newCancellations}건</strong></p>
+                        <p>• 순증가: <strong style="color: ${data.netChange >= 0 ? '#10b981' : '#e74c3c'};">${data.netChange >= 0 ? '+' : ''}${data.netChange}명</strong></p>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                        <h5 style="color: #34495e; margin-bottom: 10px;">📊 프로그램 현황</h5>
+                        ${data.programStats.slice(0, 5).map(p => `
+                            <p>• ${p.name}: <strong>${p.current}/${p.max}명 (${p.rate}%)</strong></p>
+                        `).join('')}
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                        <h5 style="color: #34495e; margin-bottom: 10px;">💬 주요 문의 TOP 5</h5>
+                        ${data.topInquiries.length > 0 ? data.topInquiries.map((inq, idx) => `
+                            <p>${idx + 1}. ${inq.title} (${inq.count}건)</p>
+                        `).join('') : '<p>이번 달 문의가 없습니다.</p>'}
+                    </div>
+                    
+                    <div style="color: #6c757d; font-size: 0.85rem; margin-top: 20px;">
+                        <p>생성 일시: ${new Date(data.generatedAt).toLocaleString('ko-KR')}</p>
+                    </div>
+                </div>
+            `;
+            
+            content.innerHTML = html;
+            document.getElementById('reportResult').style.display = 'block';
+        }
+        
+        function downloadReportCSV() {
+            if (!currentReportData) {
+                alert('먼저 리포트를 생성해주세요.');
+                return;
+            }
+            
+            const data = currentReportData;
+            const csv = [
+                '\uFEFF', // UTF-8 BOM
+                `월간 리포트 - ${data.year}년 ${data.month}월\n`,
+                `단지: ${data.complexName}\n\n`,
+                `항목,값\n`,
+                `현재 회원 수,${data.currentMembers}명\n`,
+                `월 예상 매출,${data.monthlyRevenue.toLocaleString()}원\n`,
+                `회원당 단가,120000원\n`,
+                `신규 신청,${data.newContracts}건\n`,
+                `해지 신청,${data.newCancellations}건\n`,
+                `순증가,${data.netChange}명\n\n`,
+                `프로그램 현황\n`,
+                `프로그램명,현재인원,최대정원,충족률\n`,
+                ...data.programStats.map(p => `${p.name},${p.current},${p.max},${p.rate}%\n`),
+                `\n주요 문의\n`,
+                `순위,문의 제목,건수\n`,
+                ...data.topInquiries.map((inq, idx) => `${idx + 1},${inq.title},${inq.count}\n`)
+            ].join('');
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            const complexSlug = data.complexId !== 'all' ? `_${data.complexId}` : '_전체단지';
+            link.setAttribute('href', url);
+            link.setAttribute('download', `월간리포트_${data.year}년${data.month}월${complexSlug}.csv`);
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            console.log('✅ CSV downloaded');
+        }
+        
+        function downloadReportPDF() {
+            alert('PDF 다운로드 기능은 향후 추가 예정입니다.\n\n현재는 CSV 다운로드 또는 화면 캡처를 이용해주세요.');
+        }
+    </script>
+    <script src="js/admin-complex.js"></script>
+</body>
+</html>
