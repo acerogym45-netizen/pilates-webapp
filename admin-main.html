@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>필라테스 신청 관리 - 관리사무소</title>
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="admin-container">
+        <!-- Header -->
+        <header class="admin-header">
+            <h1><i class="fas fa-clipboard-list"></i> 필라테스 신청 관리</h1>
+            <p>마스터플랜리소스 × 청주SK뷰자이</p>
+            <div class="nav-tabs">
+                <a href="admin-main.html" class="nav-tab active">
+                    <i class="fas fa-file-contract"></i> 신청 관리
+                </a>
+                <a href="admin-cancellation.html" class="nav-tab">
+                    <i class="fas fa-user-times"></i> 해지 관리
+                </a>
+                <a href="admin-inquiry.html" class="nav-tab">
+                    <i class="fas fa-comment-dots"></i> 문의 관리
+                </a>
+                <a href="admin-notices.html" class="nav-tab">
+                    <i class="fas fa-bullhorn"></i> 공지사항
+                </a>
+                <a href="admin-instructors.html" class="nav-tab">
+                    <i class="fas fa-user-tie"></i> 강사 관리
+                </a>
+                <a href="admin-programs.html" class="nav-tab">
+                    <i class="fas fa-clipboard-list"></i> 프로그램 관리
+                </a>
+                <a href="admin-complex.html" class="nav-tab">
+                    <i class="fas fa-building"></i> 단지 관리
+                </a>
+                <a href="index.html" class="nav-tab" target="_blank">
+                    <i class="fas fa-home"></i> 입주자 페이지
+                </a>
+            </div>
+        </header>
+
+        <!-- Stats Section -->
+        <section class="stats-section">
+            <div class="stat-card">
+                <div class="stat-icon pending">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="pendingCount">0</h3>
+                    <p>대기중</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon approved">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="approvedCount">0</h3>
+                    <p>승인</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon rejected">
+                    <i class="fas fa-times"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="rejectedCount">0</h3>
+                    <p>거부</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon total">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="totalCount">0</h3>
+                    <p>전체</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Filter Section -->
+        <section class="filter-section">
+            <div class="filter-group">
+                <label for="statusFilter">상태 필터:</label>
+                <select id="statusFilter" onchange="filterContracts()">
+                    <option value="all">전체</option>
+                    <option value="대기중">대기중</option>
+                    <option value="승인" selected>승인</option>
+                    <option value="거부">거부</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="programFilter">프로그램 필터:</label>
+                <select id="programFilter" onchange="filterContracts()">
+                    <option value="all">전체</option>
+                    <option value="화&목 6:1 그룹수업">화&목 6:1 그룹</option>
+                    <option value="수&금 6:1 그룹수업">수&금 6:1 그룹</option>
+                    <option value="2:1 듀엣레슨">2:1 듀엣</option>
+                    <option value="1:1 개인레슨">1:1 개인</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="searchInput">검색:</label>
+                <input type="text" id="searchInput" placeholder="이름, 동/호수 검색..." onkeyup="filterContracts()">
+            </div>
+            <button class="btn-refresh" onclick="loadContracts()">
+                <i class="fas fa-sync-alt"></i> 새로고침
+            </button>
+            <button class="btn-duplicate" onclick="showDuplicates()" title="이름과 전화번호가 중복된 신청 찾기">
+                <i class="fas fa-user-friends"></i> 중복 체크
+            </button>
+            <button class="btn-export" onclick="exportToCSV()">
+                <i class="fas fa-download"></i> CSV 다운로드
+            </button>
+        </section>
+        
+        <!-- Duplicate Modal -->
+        <div id="duplicateModal" class="modal" style="display: none;">
+            <div class="modal-content detail">
+                <div class="modal-header">
+                    <h2><i class="fas fa-user-friends"></i> 중복 신청 확인</h2>
+                    <button class="modal-close" onclick="closeDuplicateModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div id="duplicateContent"></div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeDuplicateModal()">닫기</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contracts List -->
+        <section class="contracts-section">
+            <div id="loadingSpinner" class="loading" style="display: none;">
+                <i class="fas fa-spinner fa-spin"></i> 불러오는 중...
+            </div>
+            <div id="emptyState" class="empty-state" style="display: none;">
+                <i class="fas fa-inbox"></i>
+                <p>신청 내역이 없습니다.</p>
+            </div>
+            <div id="contractsList" class="contracts-list">
+                <!-- Dynamically populated -->
+            </div>
+        </section>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="modal">
+        <div class="modal-content detail">
+            <div class="modal-header">
+                <h2><i class="fas fa-file-contract"></i> 신청서 상세정보</h2>
+                <button class="modal-close" onclick="closeDetailModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="detailContent">
+                <!-- Dynamically populated -->
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeDetailModal()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content detail">
+            <div class="modal-header">
+                <h2><i class="fas fa-edit"></i> 신청서 수정</h2>
+                <button class="modal-close" onclick="closeEditModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="editForm" onsubmit="return false;">
+                    <input type="hidden" id="editContractId">
+                    
+                    <div class="form-section">
+                        <h3><i class="fas fa-user"></i> 신청자 정보</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="editDong">동 <span class="required">*</span></label>
+                                <input type="text" id="editDong" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="editHo">호수 <span class="required">*</span></label>
+                                <input type="text" id="editHo" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="editName">이름 <span class="required">*</span></label>
+                                <input type="text" id="editName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="editPhone">전화번호 <span class="required">*</span></label>
+                                <input type="tel" id="editPhone" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-section">
+                        <h3><i class="fas fa-dumbbell"></i> 레슨 정보</h3>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="editLessonType">프로그램 종류 <span class="required">*</span></label>
+                                <select id="editLessonType" required onchange="toggleEditTimeInput()">
+                                    <option value="">선택하세요</option>
+                                    <option value="화&목 6:1 그룹수업">화&목 6:1 그룹수업 (오전 09시~11시, 저녁 19시~21시)</option>
+                                    <option value="수&금 6:1 그룹수업">수&금 6:1 그룹수업 (오전 09시~11시, 저녁 19시~21시)</option>
+                                    <option value="2:1 듀엣레슨">2:1 듀엣레슨 (오후 13시~17시, 상담 필요)</option>
+                                    <option value="1:1 개인레슨">1:1 개인레슨 (오후 13시~17시, 상담 필요)</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="editTimeSelectGroup">
+                                <label for="editPreferredTime">희망 시간대 <span class="required">*</span></label>
+                                <select id="editPreferredTime">
+                                    <option value="오전 09시">오전 09시</option>
+                                    <option value="오전 10시">오전 10시</option>
+                                    <option value="오전 11시">오전 11시</option>
+                                    <option value="저녁 19시">저녁 19시</option>
+                                    <option value="저녁 20시">저녁 20시</option>
+                                    <option value="저녁 21시">저녁 21시</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="editTimeTextGroup" style="display: none; grid-column: 1 / -1;">
+                                <div style="max-width: 500px; margin: 20px auto; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+                                    <textarea 
+                                        id="editPreferredTimeText" 
+                                        rows="5" 
+                                        placeholder="희망하시는 요일과 시간을 입력해주세요.&#10;&#10;예시:&#10;• 월수금 오후 2시&#10;• 화목 오후 3시&#10;• 주말 오후 4시" 
+                                        style="width: 100%; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; resize: vertical;"></textarea>
+                                    <small style="color: #64748b; text-align: center; line-height: 1.6;">
+                                        희망 요일 및 시간 <span class="required">*</span><br>
+                                        (예: 월수금 오후 2시, 화목 오후 3시)
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="editStatus">처리 상태 <span class="required">*</span></label>
+                                <select id="editStatus" required>
+                                    <option value="대기중">대기중</option>
+                                    <option value="승인">승인</option>
+                                    <option value="거부">거부</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveEditedContract()">
+                    <i class="fas fa-save"></i> 저장
+                </button>
+                <button class="btn btn-secondary" onclick="closeEditModal()">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/admin.js"></script>
+    
+    <style>
+        .form-section {
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .form-section:last-child {
+            border-bottom: none;
+        }
+        
+        .form-section h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #1e293b;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #475569;
+            margin-bottom: 6px;
+        }
+        
+        .required {
+            color: #ef4444;
+        }
+        
+        .form-group input,
+        .form-group select {
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+    </style>
+</body>
+</html>

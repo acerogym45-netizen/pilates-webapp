@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>필라테스 신청 데이터 이관 도구</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1 i {
+            color: #667eea;
+        }
+
+        .subtitle {
+            color: #6c757d;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 24px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .section h2 {
+            color: #2c3e50;
+            font-size: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="file"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .log {
+            margin-top: 20px;
+            padding: 16px;
+            background: #212529;
+            color: #00ff00;
+            border-radius: 8px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .log .success {
+            color: #00ff00;
+        }
+
+        .log .error {
+            color: #ff4444;
+        }
+
+        .log .info {
+            color: #00aaff;
+        }
+
+        .log .warning {
+            color: #ffaa00;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 35px;
+            background: #e9ecef;
+            border-radius: 18px;
+            overflow: hidden;
+            margin: 20px 0;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .alert {
+            padding: 18px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            line-height: 1.6;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid #17a2b8;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            text-align: center;
+        }
+
+        .stat-card .number {
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .stat-card .label {
+            font-size: 14px;
+            color: #6c757d;
+            font-weight: 500;
+        }
+
+        .file-info {
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 12px;
+            display: none;
+        }
+
+        .file-info.show {
+            display: block;
+        }
+
+        .file-info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .file-info-row:last-child {
+            border-bottom: none;
+        }
+
+        .file-info-label {
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .file-info-value {
+            color: #667eea;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-file-import"></i> 필라테스 신청 데이터 이관 도구</h1>
+        <p class="subtitle">CSV 파일을 업로드하면 자동으로 변환하여 새 시스템으로 이관합니다</p>
+
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle" style="font-size: 20px; margin-top: 2px;"></i>
+            <div>
+                <strong>📌 지원 형식:</strong><br>
+                • 기존 필라테스 신청 CSV (필라테스신청_YYYY-MM-DD.csv)<br>
+                • 필수 컬럼: 신청일시, 상태, 동, 호수, 이름, 전화번호, 프로그램종류, 희망시간대, 서명자명, 서명일자<br>
+                • 인코딩: UTF-8 (Excel에서 저장 시 "CSV UTF-8" 선택)
+            </div>
+        </div>
+
+        <!-- 기본 설정 -->
+        <div class="section">
+            <h2><i class="fas fa-cog"></i> 기본 설정</h2>
+            
+            <div class="form-group">
+                <label for="complexId">
+                    <i class="fas fa-building"></i> 단지 코드 (complex_id)
+                </label>
+                <input type="text" id="complexId" value="cheongju-sk" placeholder="예: cheongju-sk">
+                <small style="color: #6c757d; display: block; margin-top: 6px;">
+                    모든 데이터에 이 단지 코드가 자동으로 추가됩니다
+                </small>
+            </div>
+        </div>
+
+        <!-- 파일 업로드 -->
+        <div class="section">
+            <h2><i class="fas fa-upload"></i> CSV 파일 업로드</h2>
+            
+            <div class="form-group">
+                <label for="csvFile">
+                    <i class="fas fa-file-csv"></i> CSV 파일 선택
+                </label>
+                <input type="file" id="csvFile" accept=".csv" onchange="handleFileSelect(event)">
+            </div>
+
+            <div class="file-info" id="fileInfo">
+                <div class="file-info-row">
+                    <span class="file-info-label">파일명:</span>
+                    <span class="file-info-value" id="fileName">-</span>
+                </div>
+                <div class="file-info-row">
+                    <span class="file-info-label">파일 크기:</span>
+                    <span class="file-info-value" id="fileSize">-</span>
+                </div>
+                <div class="file-info-row">
+                    <span class="file-info-label">레코드 수:</span>
+                    <span class="file-info-value" id="recordCount">-</span>
+                </div>
+            </div>
+
+            <div class="stats" id="stats" style="display: none;">
+                <div class="stat-card">
+                    <div class="number" id="totalCount">0</div>
+                    <div class="label">전체 데이터</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="approvedCount">0</div>
+                    <div class="label">승인</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="rejectedCount">0</div>
+                    <div class="label">거부</div>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-success" id="previewBtn" onclick="previewData()" disabled>
+                    <i class="fas fa-eye"></i> 데이터 미리보기
+                </button>
+                <button class="btn btn-primary" id="uploadBtn" onclick="startUpload()" disabled>
+                    <i class="fas fa-cloud-upload-alt"></i> 업로드 시작
+                </button>
+                <button class="btn btn-secondary" onclick="clearLog()">
+                    <i class="fas fa-eraser"></i> 로그 지우기
+                </button>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+
+            <!-- Log -->
+            <div class="log" id="log"></div>
+        </div>
+
+        <div class="alert alert-success" style="display: none;" id="successAlert">
+            <i class="fas fa-check-circle" style="font-size: 20px; margin-top: 2px;"></i>
+            <div>
+                <strong>✅ 업로드 완료!</strong><br>
+                관리자 페이지(<a href="admin-main.html" target="_blank">admin-main.html</a>)에서 데이터를 확인하세요.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'tables';
+        let csvData = null;
+        let uploadCount = 0;
+        let errorCount = 0;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString('ko-KR');
+            const className = type;
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('successAlert').style.display = 'none';
+            uploadCount = 0;
+            errorCount = 0;
+        }
+
+        function updateProgress(current, total) {
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            progressBar.style.display = 'block';
+            
+            const percent = Math.round((current / total) * 100);
+            progressFill.style.width = percent + '%';
+            progressFill.textContent = `${current} / ${total} (${percent}%)`;
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(line => line.trim());
+            if (lines.length < 2) return [];
+
+            const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i];
+                const values = [];
+                let current = '';
+                let inQuotes = false;
+
+                for (let j = 0; j < line.length; j++) {
+                    const char = line[j];
+                    
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        values.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                values.push(current.trim());
+
+                if (values.length === headers.length) {
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index].replace(/^"|"$/g, '');
+                    });
+                    data.push(row);
+                }
+            }
+
+            return data;
+        }
+
+        function convertStatus(status) {
+            const statusMap = {
+                '승인': 'approved',
+                '대기': 'pending',
+                '거부': 'rejected',
+                '거절': 'rejected'
+            };
+            return statusMap[status] || 'pending';
+        }
+
+        function parseDateTime(dateTimeStr) {
+            // "2026. 3. 20. 오후 12:07:34" → timestamp
+            try {
+                const cleaned = dateTimeStr.replace(/\./g, '-').replace(/오전|오후/g, '');
+                const date = new Date(cleaned);
+                return date.getTime();
+            } catch (e) {
+                return Date.now();
+            }
+        }
+
+        function convertToSystemFormat(csvRow, complexId) {
+            return {
+                complex_id: complexId,
+                dong: csvRow['동'] || '',
+                ho: csvRow['호수'] || csvRow['호'] || '',
+                name: csvRow['이름'] || '',
+                phone: csvRow['전화번호'] || '',
+                lesson_type: csvRow['프로그램종류'] || csvRow['프로그램'] || '',
+                preferred_time: csvRow['희망시간대'] || csvRow['희망시간'] || '',
+                agreement: true,
+                terms_agreement: true,
+                signature: csvRow['서명자명'] || csvRow['이름'] || '',
+                signature_date: csvRow['서명일자'] || csvRow['신청일시']?.split(' ')[0] || '',
+                status: convertStatus(csvRow['상태'] || '대기'),
+                created_at: parseDateTime(csvRow['신청일시'] || '')
+            };
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                csvData = parseCSV(text);
+
+                // 파일 정보 표시
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('fileSize').textContent = formatFileSize(file.size);
+                document.getElementById('recordCount').textContent = csvData.length + '개';
+                document.getElementById('fileInfo').classList.add('show');
+
+                // 통계 계산
+                const stats = {
+                    total: csvData.length,
+                    approved: csvData.filter(row => row['상태'] === '승인').length,
+                    rejected: csvData.filter(row => row['상태'] === '거부' || row['상태'] === '거절').length
+                };
+
+                document.getElementById('totalCount').textContent = stats.total;
+                document.getElementById('approvedCount').textContent = stats.approved;
+                document.getElementById('rejectedCount').textContent = stats.rejected;
+                document.getElementById('stats').style.display = 'grid';
+
+                // 버튼 활성화
+                document.getElementById('previewBtn').disabled = false;
+                document.getElementById('uploadBtn').disabled = false;
+
+                log(`✅ CSV 파일 로드 성공: ${csvData.length}개 레코드`, 'success');
+                log(`📊 통계: 승인 ${stats.approved}개, 거부 ${stats.rejected}개`, 'info');
+            };
+
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        function previewData() {
+            if (!csvData || csvData.length === 0) {
+                log('❌ 먼저 CSV 파일을 업로드하세요', 'error');
+                return;
+            }
+
+            clearLog();
+            const complexId = document.getElementById('complexId').value.trim();
+
+            log('📋 데이터 미리보기 (처음 3개)', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+            const preview = csvData.slice(0, 3);
+            preview.forEach((row, index) => {
+                const converted = convertToSystemFormat(row, complexId);
+                log(`\n[${index + 1}] ${converted.name} (${converted.dong} ${converted.ho})`, 'info');
+                log(`  프로그램: ${converted.lesson_type}`, 'info');
+                log(`  희망시간: ${converted.preferred_time}`, 'info');
+                log(`  상태: ${converted.status}`, 'info');
+                log(`  전화번호: ${converted.phone}`, 'info');
+            });
+
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log(`\n✅ 총 ${csvData.length}개 데이터 준비 완료`, 'success');
+            log('💡 "업로드 시작" 버튼을 클릭하세요', 'warning');
+        }
+
+        async function startUpload() {
+            if (!csvData || csvData.length === 0) {
+                log('❌ 먼저 CSV 파일을 업로드하세요', 'error');
+                return;
+            }
+
+            const complexId = document.getElementById('complexId').value.trim();
+            if (!complexId) {
+                log('❌ 단지 코드를 입력하세요', 'error');
+                return;
+            }
+
+            const confirmed = confirm(`${csvData.length}개의 데이터를 업로드하시겠습니까?\n\n⚠️ 이 작업은 취소할 수 없습니다.`);
+            if (!confirmed) {
+                log('❌ 업로드가 취소되었습니다', 'warning');
+                return;
+            }
+
+            clearLog();
+            log(`🚀 업로드 시작: ${csvData.length}개 레코드`, 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+            // 버튼 비활성화
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('previewBtn').disabled = true;
+
+            uploadCount = 0;
+            errorCount = 0;
+
+            for (let i = 0; i < csvData.length; i++) {
+                const row = csvData[i];
+                const converted = convertToSystemFormat(row, complexId);
+
+                try {
+                    const response = await fetch(`${API_BASE}/pilates_contracts`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(converted)
+                    });
+
+                    if (response.ok) {
+                        uploadCount++;
+                        log(`✅ ${i+1}/${csvData.length}: ${converted.name} (${converted.dong} ${converted.ho}) - ${converted.status}`, 'success');
+                    } else {
+                        errorCount++;
+                        const errorText = await response.text();
+                        log(`❌ ${i+1}/${csvData.length}: ${converted.name} 실패 - ${errorText}`, 'error');
+                    }
+
+                } catch (error) {
+                    errorCount++;
+                    log(`❌ ${i+1}/${csvData.length}: ${converted.name} 네트워크 오류`, 'error');
+                }
+
+                updateProgress(i + 1, csvData.length);
+
+                // 서버 부하 방지 (500ms 대기)
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            log('', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log(`🎉 업로드 완료!`, 'success');
+            log(`✅ 성공: ${uploadCount}개`, 'success');
+            if (errorCount > 0) {
+                log(`❌ 실패: ${errorCount}개`, 'error');
+            }
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+            // 성공 알림 표시
+            document.getElementById('successAlert').style.display = 'flex';
+
+            // 버튼 다시 활성화
+            document.getElementById('uploadBtn').disabled = false;
+            document.getElementById('previewBtn').disabled = false;
+        }
+
+        // 페이지 로드 시
+        window.addEventListener('load', () => {
+            log('👋 필라테스 신청 데이터 이관 도구', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+            log('📝 1. 단지 코드를 확인하세요', 'info');
+            log('📝 2. CSV 파일을 업로드하세요', 'info');
+            log('📝 3. "데이터 미리보기"로 확인하세요', 'info');
+            log('📝 4. "업로드 시작"을 클릭하세요', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        });
+    </script>
+</body>
+</html>

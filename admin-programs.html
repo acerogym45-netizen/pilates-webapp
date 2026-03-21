@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프로그램 관리 - 관리사무소</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="css/program-cards.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="admin-header">
+            <h1><i class="fas fa-dumbbell"></i> 필라테스 관리자</h1>
+            <p>마스터플랜리소스 × 프로그램 관리</p>
+            <div class="nav-tabs">
+                <a href="admin-main.html" class="nav-tab">
+                    <i class="fas fa-file-contract"></i> 신청 관리
+                </a>
+                <a href="admin-cancellation.html" class="nav-tab">
+                    <i class="fas fa-user-times"></i> 해지 관리
+                </a>
+                <a href="admin-inquiry.html" class="nav-tab">
+                    <i class="fas fa-comment-dots"></i> 문의 관리
+                </a>
+                <a href="admin-notices.html" class="nav-tab">
+                    <i class="fas fa-bullhorn"></i> 공지사항
+                </a>
+                <a href="admin-instructors.html" class="nav-tab">
+                    <i class="fas fa-user-tie"></i> 강사 관리
+                </a>
+                <a href="admin-programs.html" class="nav-tab active">
+                    <i class="fas fa-clipboard-list"></i> 프로그램 관리
+                </a>
+                <a href="admin-complex.html" class="nav-tab">
+                    <i class="fas fa-building"></i> 단지 관리
+                </a>
+                <a href="index.html" class="nav-tab" target="_blank">
+                    <i class="fas fa-home"></i> 입주자 페이지
+                </a>
+            </div>
+        </header>
+
+        <!-- Stats Section -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon approved">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="activeCount">0</h3>
+                    <p>활성화</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon pending">
+                    <i class="fas fa-eye-slash"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="inactiveCount">0</h3>
+                    <p>비활성화</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon total">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="totalCount">0</h3>
+                    <p>전체</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions Section -->
+        <section class="filter-section">
+            <button class="btn-refresh" onclick="loadPrograms()">
+                <i class="fas fa-sync-alt"></i> 새로고침
+            </button>
+            <button class="btn-primary" onclick="openAddModal()">
+                <i class="fas fa-plus"></i> 프로그램 추가
+            </button>
+        </section>
+
+        <!-- Programs List -->
+        <section class="contracts-section">
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>데이터 로딩 중...</p>
+            </div>
+            
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <i class="fas fa-inbox"></i>
+                <p>등록된 프로그램이 없습니다</p>
+            </div>
+            
+            <div class="contracts-list" id="programsList" style="display: none;"></div>
+        </section>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="programModal" class="modal">
+        <div class="modal-content detail">
+            <div class="modal-header">
+                <h2 id="modalTitle">
+                    <i class="fas fa-clipboard-list"></i> 프로그램 추가
+                </h2>
+                <button class="close-btn" onclick="closeModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <form id="programForm" onsubmit="saveProgram(event)">
+                <input type="hidden" id="programId">
+                <input type="hidden" id="complexId">
+                
+                <!-- 기본 정보 -->
+                <div class="form-section">
+                    <h3><i class="fas fa-info-circle"></i> 기본 정보</h3>
+                    
+                    <div class="form-group">
+                        <label for="programName">
+                            프로그램명 <span class="required">*</span>
+                        </label>
+                        <input type="text" id="programName" required 
+                               placeholder="예: 화&목 6:1 그룹수업">
+                        <small>입주자 페이지에 표시되는 프로그램 이름입니다</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="programType">
+                            프로그램 유형 <span class="required">*</span>
+                        </label>
+                        <select id="programType" required>
+                            <option value="">선택하세요</option>
+                            <option value="그룹">그룹 수업</option>
+                            <option value="듀엣">듀엣 레슨</option>
+                            <option value="개인">개인 레슨</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="scheduleDays">
+                            운영 요일 <span class="required">*</span>
+                        </label>
+                        <input type="text" id="scheduleDays" required 
+                               placeholder="예: 화, 목 또는 월~금">
+                        <small>수업이 진행되는 요일을 입력하세요</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="scheduleTimes">
+                            운영 시간 <span class="required">*</span>
+                        </label>
+                        <input type="text" id="scheduleTimes" required 
+                               placeholder="예: 오전 09시~11시, 저녁 19시~21시">
+                        <small>수업 시간대를 입력하세요</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="availableTimeSlots">
+                            사용 가능한 시간대 <span class="required">*</span>
+                            <i class="fas fa-info-circle" title="입주자가 선택할 수 있는 구체적인 시간대를 선택하세요"></i>
+                        </label>
+                        <div id="timeSlotCheckboxes" class="checkbox-grid">
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="09:00"> 09시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="10:00"> 10시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="11:00"> 11시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="12:00"> 12시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="13:00"> 13시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="14:00"> 14시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="15:00"> 15시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="16:00"> 16시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="17:00"> 17시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="18:00"> 18시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="19:00"> 19시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="20:00"> 20시
+                            </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" name="timeSlot" value="21:00"> 21시
+                            </label>
+                        </div>
+                        <small>⚠️ 입주자는 여기서 선택한 시간대만 신청할 수 있습니다</small>
+                    </div>
+                </div>
+                
+                <!-- 정원 및 요금 -->
+                <div class="form-section">
+                    <h3><i class="fas fa-users"></i> 정원 및 요금</h3>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="maxCapacity">
+                                최대 정원 <span class="required">*</span>
+                            </label>
+                            <input type="number" id="maxCapacity" required min="1" 
+                                   placeholder="예: 6">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="price">
+                                월 요금 (원) <span class="required">*</span>
+                            </label>
+                            <input type="number" id="price" required min="0" 
+                                   placeholder="예: 150000">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 프로그램 설명 -->
+                <div class="form-section">
+                    <h3><i class="fas fa-align-left"></i> 프로그램 설명</h3>
+                    
+                    <div class="form-group">
+                        <label for="description">프로그램 설명</label>
+                        <textarea id="description" rows="4" 
+                                  placeholder="프로그램에 대한 추가 설명을 입력하세요 (선택사항)"></textarea>
+                    </div>
+                </div>
+                
+                <!-- 표시 설정 -->
+                <div class="form-section">
+                    <h3><i class="fas fa-cog"></i> 표시 설정</h3>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="displayOrder">표시 순서</label>
+                            <input type="number" id="displayOrder" min="1" value="1">
+                            <small>낮은 숫자가 먼저 표시됩니다</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="isActive">활성화 여부</label>
+                            <select id="isActive">
+                                <option value="true">활성화</option>
+                                <option value="false">비활성화</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="displayOnInactive">
+                            <input type="checkbox" id="displayOnInactive" style="width: auto; margin-right: 8px;">
+                            비활성 상태에서도 입주자 페이지에 표시 (예고/공지용)
+                        </label>
+                        <small style="display: block; margin-top: 8px; color: #666;">
+                            <i class="fas fa-info-circle"></i> 
+                            체크하면 프로그램이 비활성화되어도 입주자가 볼 수 있습니다. 
+                            "3월부터 저녁반 오픈 예정!" 같은 예고에 유용합니다.
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" onclick="closeModal()">
+                        <i class="fas fa-times"></i> 취소
+                    </button>
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> 저장
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin-programs.js"></script>
+</body>
+</html>

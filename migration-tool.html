@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>데이터 마이그레이션 도구</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        h1 i {
+            color: #667eea;
+        }
+
+        .subtitle {
+            color: #6c757d;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 24px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .section h2 {
+            color: #2c3e50;
+            font-size: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            min-height: 200px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .log {
+            margin-top: 20px;
+            padding: 16px;
+            background: #212529;
+            color: #00ff00;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .log .success {
+            color: #00ff00;
+        }
+
+        .log .error {
+            color: #ff4444;
+        }
+
+        .log .info {
+            color: #00aaff;
+        }
+
+        .log .warning {
+            color: #ffaa00;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 16px 0;
+            display: none;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .alert {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid #17a2b8;
+        }
+
+        .alert-warning {
+            background: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .example {
+            background: #ffffff;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            border: 1px solid #dee2e6;
+        }
+
+        .example-title {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .example-code {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #495057;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-database"></i> 데이터 마이그레이션 도구</h1>
+        <p class="subtitle">기존 시스템의 데이터를 새 시스템으로 쉽게 이관하세요</p>
+
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle"></i>
+            <div>
+                <strong>사용 방법:</strong> 기존 데이터를 JSON 형식으로 입력하고 업로드 버튼을 클릭하세요.
+                엑셀 데이터는 온라인 변환 도구를 사용해 JSON으로 변환할 수 있습니다.
+            </div>
+        </div>
+
+        <!-- 기본 설정 -->
+        <div class="section">
+            <h2><i class="fas fa-cog"></i> 기본 설정</h2>
+            
+            <div class="form-group">
+                <label for="complexId">단지 코드 (complex_id)</label>
+                <input type="text" id="complexId" value="cheongju-sk" placeholder="예: cheongju-sk">
+                <small style="color: #6c757d; display: block; margin-top: 6px;">
+                    모든 데이터에 이 단지 코드가 자동으로 추가됩니다
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label for="tableSelect">테이블 선택</label>
+                <select id="tableSelect">
+                    <option value="pilates_contracts">신청 데이터 (pilates_contracts)</option>
+                    <option value="pilates_cancellations">해지 신청 (pilates_cancellations)</option>
+                    <option value="pilates_inquiries">문의사항 (pilates_inquiries)</option>
+                    <option value="instructors">강사 정보 (instructors)</option>
+                    <option value="notices">공지사항 (notices)</option>
+                    <option value="programs">프로그램 (programs)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 데이터 입력 -->
+        <div class="section">
+            <h2><i class="fas fa-file-import"></i> 데이터 입력</h2>
+            
+            <div class="form-group">
+                <label for="jsonData">JSON 배열 데이터</label>
+                <textarea id="jsonData" placeholder='[
+  {
+    "dong": "101",
+    "ho": "201",
+    "name": "홍길동",
+    "phone": "010-1234-5678",
+    ...
+  },
+  {
+    "dong": "102",
+    "ho": "301",
+    "name": "김철수",
+    ...
+  }
+]'></textarea>
+            </div>
+
+            <div class="example">
+                <div class="example-title">📝 예시 - 신청 데이터</div>
+                <div class="example-code">[
+  {
+    "dong": "101",
+    "ho": "201",
+    "name": "홍길동",
+    "phone": "010-1234-5678",
+    "lesson_type": "화&목 6:1 그룹수업",
+    "preferred_time": "09:00-11:00",
+    "status": "approved"
+  }
+]</div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-success" onclick="validateData()">
+                    <i class="fas fa-check-circle"></i> 데이터 검증
+                </button>
+                <button class="btn btn-primary" onclick="startUpload()">
+                    <i class="fas fa-upload"></i> 업로드 시작
+                </button>
+                <button class="btn btn-secondary" onclick="clearLog()">
+                    <i class="fas fa-eraser"></i> 로그 지우기
+                </button>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+
+            <!-- Log -->
+            <div class="log" id="log"></div>
+        </div>
+
+        <!-- 도움말 -->
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div>
+                <strong>주의:</strong> 업로드 전에 반드시 데이터를 검증하세요. 
+                잘못된 데이터는 시스템 오류를 일으킬 수 있습니다.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'tables';
+        let uploadCount = 0;
+        let errorCount = 0;
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString('ko-KR');
+            const className = type;
+            logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            uploadCount = 0;
+            errorCount = 0;
+        }
+
+        function updateProgress(current, total) {
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            progressBar.style.display = 'block';
+            
+            const percent = Math.round((current / total) * 100);
+            progressFill.style.width = percent + '%';
+            progressFill.textContent = `${current} / ${total} (${percent}%)`;
+        }
+
+        function validateData() {
+            try {
+                const jsonData = document.getElementById('jsonData').value.trim();
+                if (!jsonData) {
+                    log('❌ 데이터를 입력해주세요', 'error');
+                    return;
+                }
+
+                const data = JSON.parse(jsonData);
+                
+                if (!Array.isArray(data)) {
+                    log('❌ 데이터는 배열 형식이어야 합니다 (예: [...])', 'error');
+                    return;
+                }
+
+                if (data.length === 0) {
+                    log('❌ 빈 배열입니다. 최소 1개 이상의 데이터가 필요합니다', 'error');
+                    return;
+                }
+
+                log(`✅ 검증 성공: ${data.length}개의 레코드`, 'success');
+                log(`📋 첫 번째 레코드 미리보기:`, 'info');
+                log(JSON.stringify(data[0], null, 2), 'info');
+
+            } catch (error) {
+                log(`❌ JSON 형식 오류: ${error.message}`, 'error');
+                log('💡 힌트: JSON 형식이 올바른지 확인하세요 (쉼표, 따옴표, 대괄호 등)', 'warning');
+            }
+        }
+
+        async function startUpload() {
+            try {
+                const complexId = document.getElementById('complexId').value.trim();
+                const tableName = document.getElementById('tableSelect').value;
+                const jsonData = document.getElementById('jsonData').value.trim();
+
+                if (!complexId) {
+                    log('❌ 단지 코드를 입력해주세요', 'error');
+                    return;
+                }
+
+                if (!jsonData) {
+                    log('❌ 데이터를 입력해주세요', 'error');
+                    return;
+                }
+
+                const data = JSON.parse(jsonData);
+                
+                if (!Array.isArray(data) || data.length === 0) {
+                    log('❌ 올바른 데이터 배열을 입력해주세요', 'error');
+                    return;
+                }
+
+                const confirmed = confirm(`${data.length}개의 레코드를 ${tableName} 테이블에 업로드하시겠습니까?`);
+                if (!confirmed) {
+                    log('❌ 업로드가 취소되었습니다', 'warning');
+                    return;
+                }
+
+                log(`🚀 업로드 시작: ${tableName} (${data.length}개)`, 'info');
+                clearLog();
+                log(`🚀 업로드 시작: ${tableName} (${data.length}개)`, 'info');
+                
+                uploadCount = 0;
+                errorCount = 0;
+
+                for (let i = 0; i < data.length; i++) {
+                    const record = data[i];
+                    
+                    // complex_id 자동 추가
+                    record.complex_id = complexId;
+                    
+                    // created_at이 없으면 현재 시간 추가
+                    if (!record.created_at) {
+                        record.created_at = Date.now();
+                    }
+
+                    try {
+                        const response = await fetch(`${API_BASE}/${tableName}`, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(record)
+                        });
+
+                        if (response.ok) {
+                            uploadCount++;
+                            log(`✅ ${i+1}/${data.length}: ${record.name || record.title || 'Record'} 업로드 완료`, 'success');
+                        } else {
+                            errorCount++;
+                            const errorText = await response.text();
+                            log(`❌ ${i+1}/${data.length}: 실패 - ${errorText}`, 'error');
+                        }
+
+                    } catch (error) {
+                        errorCount++;
+                        log(`❌ ${i+1}/${data.length}: 네트워크 오류 - ${error.message}`, 'error');
+                    }
+
+                    updateProgress(i + 1, data.length);
+
+                    // 서버 부하 방지를 위해 1초 대기
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+
+                log('', 'info');
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+                log(`🎉 업로드 완료!`, 'success');
+                log(`✅ 성공: ${uploadCount}개`, 'success');
+                if (errorCount > 0) {
+                    log(`❌ 실패: ${errorCount}개`, 'error');
+                }
+                log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+
+            } catch (error) {
+                log(`❌ 오류: ${error.message}`, 'error');
+            }
+        }
+
+        // 페이지 로드 시 안내 메시지
+        window.addEventListener('load', () => {
+            log('👋 데이터 마이그레이션 도구에 오신 것을 환영합니다!', 'info');
+            log('📝 1. 단지 코드와 테이블을 선택하세요', 'info');
+            log('📝 2. JSON 형식으로 데이터를 입력하세요', 'info');
+            log('📝 3. "데이터 검증" 버튼으로 형식을 확인하세요', 'info');
+            log('📝 4. "업로드 시작" 버튼을 클릭하세요', 'info');
+            log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'info');
+        });
+    </script>
+</body>
+</html>

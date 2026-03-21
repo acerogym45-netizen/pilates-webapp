@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>공지사항 관리 - 청주SK뷰자이 필라테스</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="admin-header">
+            <h1><i class="fas fa-dumbbell"></i> 청주SK뷰자이 필라테스 관리자</h1>
+            <p>마스터플랜리소스 × 청주SK뷰자이</p>
+            <div class="nav-tabs">
+                <a href="admin-main.html" class="nav-tab">
+                    <i class="fas fa-file-contract"></i> 신청 관리
+                </a>
+                <a href="admin-cancellation.html" class="nav-tab">
+                    <i class="fas fa-user-times"></i> 해지 관리
+                </a>
+                <a href="admin-inquiry.html" class="nav-tab">
+                    <i class="fas fa-comment-dots"></i> 문의 관리
+                </a>
+                <a href="admin-notices.html" class="nav-tab active">
+                    <i class="fas fa-bullhorn"></i> 공지사항
+                </a>
+                <a href="admin-instructors.html" class="nav-tab">
+                    <i class="fas fa-user-tie"></i> 강사 관리
+                </a>
+                <a href="admin-programs.html" class="nav-tab">
+                    <i class="fas fa-clipboard-list"></i> 프로그램 관리
+                </a>
+                <a href="admin-complex.html" class="nav-tab">
+                    <i class="fas fa-building"></i> 단지 관리
+                </a>
+                <a href="index.html" class="nav-tab" target="_blank">
+                    <i class="fas fa-home"></i> 입주자 페이지
+                </a>
+            </div>
+        </header>
+
+        <!-- Stats Section -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon approved">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="activeCount">0</h3>
+                    <p>활성화</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon pending">
+                    <i class="fas fa-eye-slash"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="inactiveCount">0</h3>
+                    <p>비활성화</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon total">
+                    <i class="fas fa-list"></i>
+                </div>
+                <div class="stat-info">
+                    <h3 id="totalCount">0</h3>
+                    <p>전체</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions Section -->
+        <section class="filter-section">
+            <button class="btn-refresh" onclick="loadNotices()">
+                <i class="fas fa-sync-alt"></i> 새로고침
+            </button>
+            <button class="btn-primary" onclick="openAddModal()">
+                <i class="fas fa-plus"></i> 공지 추가
+            </button>
+            <button class="btn-primary" onclick="openCurriculumManager()" style="background: #f59e0b; margin-left: 10px;">
+                <i class="fas fa-calendar-alt"></i> 커리큘럼 관리
+            </button>
+        </section>
+
+        <!-- Notices List -->
+        <section class="contracts-section">
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>데이터 로딩 중...</p>
+            </div>
+            
+            <div class="empty-state" id="emptyState" style="display: none;">
+                <i class="fas fa-inbox"></i>
+                <p>등록된 공지사항이 없습니다</p>
+            </div>
+            
+            <div class="contracts-list" id="noticesList" style="display: none;"></div>
+        </section>
+    </div>
+
+    <!-- Add/Edit Modal -->
+    <div id="noticeModal" class="modal">
+        <div class="modal-content detail">
+            <div class="modal-header">
+                <h2 id="modalTitle"><i class="fas fa-bullhorn"></i> 공지 추가</h2>
+                <button class="modal-close" onclick="closeNoticeModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="noticeForm" onsubmit="return false;">
+                    <input type="hidden" id="noticeId">
+                    
+                    <div class="form-group">
+                        <label for="noticeTitle">제목 <span class="required">*</span></label>
+                        <input type="text" id="noticeTitle" required placeholder="공지 제목을 입력하세요">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="noticeContent">내용 <span class="required">*</span></label>
+                        <textarea id="noticeContent" rows="6" required placeholder="공지 내용을 입력하세요"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="noticeCategory">분류 <span class="required">*</span></label>
+                        <select id="noticeCategory" required>
+                            <option value="일반">일반</option>
+                            <option value="중요">중요</option>
+                            <option value="이벤트">이벤트</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="noticeOrder">표시 순서</label>
+                        <input type="number" id="noticeOrder" value="1" min="0">
+                        <small style="color: #666;">숫자가 작을수록 먼저 표시됩니다</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="noticeActive" checked>
+                            <span>활성화 (입주민 페이지에 표시)</span>
+                        </label>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveNotice()">
+                    <i class="fas fa-save"></i> 저장
+                </button>
+                <button class="btn btn-secondary" onclick="closeNoticeModal()">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🆕 Curriculum Manager Modal -->
+    <div id="curriculumManagerModal" class="modal">
+        <div class="modal-content detail" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2><i class="fas fa-calendar-alt"></i> 커리큘럼 관리</h2>
+                <button class="modal-close" onclick="closeCurriculumManager()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="curriculumForm" onsubmit="return false;">
+                    <input type="hidden" id="curriculumId">
+                    
+                    <div class="form-group">
+                        <label>연도/월 <span class="required">*</span></label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="number" id="curriculumYear" min="2020" max="2099" value="2026" style="flex: 1;" required>
+                            <select id="curriculumMonth" style="flex: 1;" required>
+                                <option value="1">1월</option>
+                                <option value="2">2월</option>
+                                <option value="3">3월</option>
+                                <option value="4">4월</option>
+                                <option value="5">5월</option>
+                                <option value="6">6월</option>
+                                <option value="7">7월</option>
+                                <option value="8">8월</option>
+                                <option value="9">9월</option>
+                                <option value="10">10월</option>
+                                <option value="11">11월</option>
+                                <option value="12">12월</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="curriculumTitle">제목 <span class="required">*</span></label>
+                        <input type="text" id="curriculumTitle" required placeholder="예: 3월 필라테스 커리큘럼">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="curriculumDescription">내용</label>
+                        <textarea id="curriculumDescription" rows="8" placeholder="커리큘럼 내용을 자세히 입력하세요 (선택사항)"></textarea>
+                        <small style="color: #666;">줄바꿈은 입력한 대로 표시됩니다</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="curriculumImageFile">이미지 업로드</label>
+                        <input type="file" id="curriculumImageFile" accept="image/*" onchange="handleCurriculumImageUpload(event)">
+                        <small style="color: #666;">이미지를 선택하면 자동으로 업로드됩니다</small>
+                        <div id="curriculumImagePreview" style="margin-top: 10px; display: none;">
+                            <img id="curriculumPreviewImg" src="" alt="Preview" style="max-width: 300px; border-radius: 8px;">
+                            <button type="button" onclick="removeCurriculumImage()" style="display: block; margin-top: 5px; padding: 5px 10px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                                <i class="fas fa-times"></i> 이미지 제거
+                            </button>
+                        </div>
+                        <input type="hidden" id="curriculumImageUrl">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="curriculumActive" checked>
+                            <span>활성화 (입주민 페이지에 표시)</span>
+                        </label>
+                    </div>
+                </form>
+                
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
+                
+                <h3 style="margin-bottom: 15px;"><i class="fas fa-list"></i> 등록된 커리큘럼 목록</h3>
+                <div id="curriculumList" style="max-height: 300px; overflow-y: auto;">
+                    <!-- Dynamically populated -->
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" onclick="saveCurriculum()">
+                    <i class="fas fa-save"></i> 저장
+                </button>
+                <button class="btn btn-secondary" onclick="closeCurriculumManager()">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/admin-notices.js"></script>
+</body>
+</html>
