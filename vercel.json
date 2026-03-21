@@ -1,3 +1,6 @@
 {
-  "version": 2
+  "buildCommand": "echo 'No build needed'",
+  "outputDirectory": ".",
+  "installCommand": "npm install",
+  "devCommand": "npm run dev"
 }
