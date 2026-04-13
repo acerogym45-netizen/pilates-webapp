@@ -200,6 +200,24 @@ function initializeSchema() {
         CREATE INDEX IF NOT EXISTS idx_cancellations_complex ON cancellations(complex_id);
     `);
 
+    // ─── 마이그레이션: applications 테이블에 잔여횟수/관리비 컬럼 추가 ──────
+    const appCols = database.prepare("PRAGMA table_info(applications)").all().map(c => c.name);
+    if (!appCols.includes('remaining_sessions')) {
+        database.exec(`ALTER TABLE applications ADD COLUMN remaining_sessions INTEGER DEFAULT NULL`);
+    }
+    if (!appCols.includes('total_sessions')) {
+        database.exec(`ALTER TABLE applications ADD COLUMN total_sessions INTEGER DEFAULT NULL`);
+    }
+    if (!appCols.includes('monthly_fee')) {
+        database.exec(`ALTER TABLE applications ADD COLUMN monthly_fee INTEGER DEFAULT NULL`);
+    }
+    if (!appCols.includes('transfer_memo')) {
+        database.exec(`ALTER TABLE applications ADD COLUMN transfer_memo TEXT DEFAULT NULL`);
+    }
+    if (!appCols.includes('transfer_date')) {
+        database.exec(`ALTER TABLE applications ADD COLUMN transfer_date TEXT DEFAULT NULL`);
+    }
+
     console.log('✅ Database schema initialized');
 }
 

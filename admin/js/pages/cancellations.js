@@ -86,7 +86,15 @@ const inquiries = {
         document.getElementById('pageContent').innerHTML = `
             <div class="page-header">
                 <h2><i class="fas fa-comments"></i> 문의 관리</h2>
-                <button class="btn-secondary btn-sm" onclick="inquiries.render()"><i class="fas fa-sync"></i></button>
+                <div class="header-actions">
+                    <button class="btn-secondary btn-sm" onclick="inquiries.showImportModal()">
+                        <i class="fas fa-upload"></i> 가져오기
+                    </button>
+                    <button class="btn-secondary btn-sm" onclick="inquiries.exportCSV()">
+                        <i class="fas fa-download"></i> 내보내기
+                    </button>
+                    <button class="btn-secondary btn-sm" onclick="inquiries.render()"><i class="fas fa-sync"></i></button>
+                </div>
             </div>
             <div id="inqList" class="data-list"><div class="loading-mini"><i class="fas fa-spinner fa-spin"></i></div></div>`;
         await this.load();
@@ -168,5 +176,66 @@ const inquiries = {
                 await this.load();
             } catch(e) { showToast('삭제 실패: ' + e.message, 'error'); }
         });
+    },
+
+    exportCSV() {
+        const headers = ['등록일', '이름', '동', '호수', '전화번호', '제목', '내용', '답변 여부', '답변'];
+        const rows = this.data.map(q => ({
+            '등록일': formatDate(q.created_at),
+            '이름': q.name, '동': q.dong || '', '호수': q.ho || '',
+            '전화번호': q.phone || '', '제목': q.title, '내용': q.content,
+            '답변 여부': q.is_answered ? '답변완료' : '미답변', '답변': q.answer || ''
+        }));
+        downloadCSV(`문의목록_${new Date().toLocaleDateString('ko')}.csv`, rows, headers);
+    },
+
+    showImportModal() {
+        const templateUrl = API.importCsv.templateUrl('inquiries');
+        const body = `
+            <div class="import-guide">
+                <div class="import-step">
+                    <span class="import-num">1</span>
+                    <div>
+                        <strong>CSV 템플릿 다운로드</strong>
+                        <a href="${templateUrl}" download class="btn-secondary btn-sm"
+                           style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;text-decoration:none">
+                            <i class="fas fa-file-csv"></i> 문의 템플릿 다운로드
+                        </a>
+                    </div>
+                </div>
+                <div class="import-step">
+                    <span class="import-num">2</span>
+                    <div>
+                        <strong>CSV 파일 선택</strong>
+                        <input type="file" id="importInqFile" accept=".csv" style="margin-top:8px;display:block">
+                    </div>
+                </div>
+                <div class="import-tip">
+                    <i class="fas fa-info-circle"></i>
+                    <span>답변 컬럼이 있으면 자동으로 답변완료 처리됩니다</span>
+                </div>
+            </div>`;
+        const footer = `
+            <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
+            <button class="btn-primary" onclick="inquiries.doImport()">
+                <i class="fas fa-upload"></i> 가져오기 실행
+            </button>`;
+        openGlobalModal('<i class="fas fa-upload"></i> 문의 데이터 가져오기', body, footer);
+    },
+
+    async doImport() {
+        const fileEl = document.getElementById('importInqFile');
+        if (!fileEl?.files?.length) { showToast('CSV 파일을 선택하세요', 'error'); return; }
+        const btnEl = document.querySelector('#globalModal .btn-primary');
+        if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...'; }
+        try {
+            const result = await API.importCsv.inquiries(Admin.complex.id, fileEl.files[0]);
+            closeGlobalModal();
+            showToast(result.message, 'success');
+            await this.load();
+        } catch (e) {
+            showToast('가져오기 실패: ' + e.message, 'error');
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-upload"></i> 가져오기 실행'; }
+        }
     }
 };

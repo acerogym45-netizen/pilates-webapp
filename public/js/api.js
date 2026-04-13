@@ -35,6 +35,7 @@ const API = {
         list: () => API.get('/complexes'),
         create: (data) => API.post('/complexes', data),
         update: (id, data) => API.put(`/complexes/${id}`, data),
+        selfUpdate: (id, data) => API.put(`/complexes/${id}/self`, data),
         delete: (id, masterPassword) => API.delete(`/complexes/${id}`, { masterPassword }),
     },
 
@@ -65,6 +66,8 @@ const API = {
         create: (data) => API.post('/applications', data),
         update: (id, data) => API.put(`/applications/${id}`, data),
         delete: (id) => API.delete(`/applications/${id}`),
+        transfer: (id, data) => API.post(`/applications/${id}/transfer`, data),
+        feeCalc: (data) => API.post('/applications/fee-calc', data),
     },
 
     // 공지사항
@@ -126,6 +129,28 @@ const API = {
             const q = new URLSearchParams(params).toString();
             return API.get(`/stats/dashboard${q ? '?' + q : ''}`);
         }
+    },
+
+    // CSV 가져오기
+    importCsv: {
+        applications: (complexId, file, overwrite = false) => {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('complex_id', complexId);
+            fd.append('overwrite', String(overwrite));
+            return fetch(`${API.baseUrl}/upload/csv/applications`, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(d => { if (!d.success) throw new Error(d.error); return d; });
+        },
+        inquiries: (complexId, file) => {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('complex_id', complexId);
+            return fetch(`${API.baseUrl}/upload/csv/inquiries`, { method: 'POST', body: fd })
+                .then(r => r.json())
+                .then(d => { if (!d.success) throw new Error(d.error); return d; });
+        },
+        templateUrl: (type) => `${API.baseUrl}/upload/csv/template/${type}`
     }
 };
 

@@ -109,26 +109,68 @@ router.delete('/:id', (req, res) => {
 router.post('/verify-password', (req, res) => {
     try {
         const { complexCode, password } = req.body;
-        if (!complexCode || !password) {
-            return res.status(400).json({ success: false, error: '단지코드와 비밀번호 필요' });
+        if (!password) {
+            return res.status(400).json({ success: false, error: '비밀번호를 입력하세요' });
         }
         const db = getDb();
-        const complex = db.prepare('SELECT * FROM complexes WHERE code = ?').get(complexCode);
-        
-        // 마스터 비밀번호 처리
+
+        // 마스터 비밀번호 처리 (단지코드 없어도 OK)
         if (password === process.env.MASTER_PASSWORD) {
-            return res.json({ success: true, role: 'master', complex: complex || null });
+            const complex = complexCode
+                ? db.prepare('SELECT * FROM complexes WHERE code = ?').get(complexCode)
+                : null;
+            return res.json({
+                success: true,
+                role: 'master',
+                complex: complex || { code: 'master', name: '마스터 관리자' }
+            });
         }
-        
+
+        if (!complexCode) {
+            return res.status(400).json({ success: false, error: '단지코드를 입력하세요' });
+        }
+
+        const complex = db.prepare('SELECT * FROM complexes WHERE code = ?').get(complexCode);
         if (!complex) {
             return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
         }
-        
         if (complex.admin_password !== password) {
             return res.status(401).json({ success: false, error: '비밀번호가 올바르지 않습니다' });
         }
-        
+
         res.json({ success: true, role: 'admin', complex });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// 내 단지 설정 수정 (일반 관리자 - admin_password로 인증)
+router.put('/:id/self', (req, res) => {
+    try {
+        const db = getDb();
+        const existing = db.prepare('SELECT * FROM complexes WHERE id = ?').get(req.params.id);
+        if (!existing) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+
+        const { currentPassword, name, address, primary_color, new_password } = req.body;
+
+        // 현재 비밀번호 or 마스터 비밀번호로 인증
+        if (currentPassword !== existing.admin_password && currentPassword !== process.env.MASTER_PASSWORD) {
+            return res.status(403).json({ success: false, error: '현재 비밀번호가 올바르지 않습니다' });
+        }
+
+        const updatedName    = name    || existing.name;
+        const updatedAddr    = address !== undefined ? address : existing.address;
+        const updatedColor   = primary_color || existing.primary_color;
+        const updatedPw      = new_password || existing.admin_password;
+
+        db.prepare(`
+            UPDATE complexes
+            SET name=?, address=?, primary_color=?, admin_password=?, updated_at=datetime('now','localtime')
+            WHERE id=?
+        `).run(updatedName, updatedAddr, updatedColor, updatedPw, req.params.id);
+
+        const updated = db.prepare('SELECT * FROM complexes WHERE id = ?').get(req.params.id);
+        res.json({ success: true, data: updated });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }

@@ -229,8 +229,54 @@ textarea { resize:vertical; min-height:80px; }
 .alert-box { border-radius:10px; padding:14px 16px; margin-bottom:16px; font-size:.88rem; }
 .alert-warning { background:#fff8e1; border:1px solid #ffcc02; }
 .alert-warning strong { color:#e67e22; display:block; margin-bottom:6px; }
+.alert-danger { background:#fff0f0; border:1px solid #ff6b6b; }
+.alert-danger strong { color:#c0392b; display:block; margin-bottom:6px; }
+.alert-success { background:#f0fff4; border:1px solid #52c41a; }
+.alert-success strong { color:#27ae60; display:block; margin-bottom:6px; }
 .alert-box ul { margin:0; padding-left:18px; }
 .alert-box li { margin-bottom:4px; }
+
+/* ── 환불 정책 2단 레이아웃 ── */
+.policy-quick { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:10px; }
+.policy-no, .policy-yes { border-radius:8px; padding:10px 12px; font-size:.82rem; }
+.policy-no { background:#fff0f0; border:1px solid #ffb3b3; }
+.policy-yes { background:#f0fff4; border:1px solid #b7eb8f; }
+.policy-badge { display:inline-block; border-radius:20px; padding:2px 10px; font-size:.78rem; font-weight:700; margin-bottom:6px; }
+.badge-no { background:#ff4d4f; color:#fff; }
+.badge-yes { background:#52c41a; color:#fff; }
+.policy-no ul, .policy-yes ul { margin:0; padding-left:14px; }
+.policy-no li, .policy-yes li { margin-bottom:3px; line-height:1.5; }
+@media(max-width:480px){ .policy-quick { grid-template-columns:1fr; } }
+
+/* ── 노쇼 정책 테이블 ── */
+.policy-table-wrap { overflow-x:auto; margin:8px 0; }
+.policy-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+.policy-table th { background:#f0f0f0; padding:7px 10px; text-align:left; border:1px solid #ddd; font-weight:600; }
+.policy-table td { padding:7px 10px; border:1px solid #ddd; vertical-align:top; }
+.policy-table-warning td { background:#fff3cd; font-weight:600; }
+.terms-note { font-size:.78rem; color:#888; margin:4px 0 0; }
+.terms-subtitle { font-size:.85rem; font-weight:700; margin:10px 0 4px; color:#444; }
+
+/* ── 환불 계산 박스 ── */
+.refund-calc-box { background:#f5f0ff; border:1px solid #b794f4; border-radius:10px; padding:14px; margin-top:10px; }
+.refund-calc-title { font-weight:700; color:#6b46c1; margin-bottom:8px; font-size:.88rem; }
+.refund-formula { font-weight:700; font-size:.9rem; color:#333; background:#ede9fe; padding:8px 12px; border-radius:6px; margin-bottom:8px; }
+.refund-example { background:#fff; border-radius:6px; padding:8px 12px; font-size:.82rem; line-height:1.6; }
+.badge-required { display:inline-block; background:#c0392b; color:#fff; font-size:.72rem; padding:1px 7px; border-radius:20px; margin-left:6px; vertical-align:middle; }
+.list-no li::marker { content:"✗ "; color:#c0392b; }
+
+/* ── 해지 신청 모달 내 정보 테이블 ── */
+.modal-content-lg { max-width:560px; max-height:90vh; }
+.cancel-info-box { background:#f8f9fa; border-radius:10px; padding:14px; margin-bottom:14px; }
+.cancel-info-title { font-weight:700; font-size:.9rem; color:#333; margin-bottom:8px; }
+.cancel-info-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+.cancel-info-table tr { border-bottom:1px solid #e8e8e8; }
+.cancel-info-table tr:last-child { border-bottom:none; }
+.cancel-info-table td { padding:6px 4px; vertical-align:top; }
+.ci-label { color:#888; font-weight:600; white-space:nowrap; padding-right:10px; width:80px; }
+.cancel-no-list, .cancel-yes-list { margin:4px 0; padding-left:16px; }
+.cancel-no-list li { margin-bottom:2px; }
+.cancel-yes-list li { margin-bottom:4px; line-height:1.5; }
 
 /* ── 계약서 요약 ── */
 .contract-summary {
@@ -246,13 +292,14 @@ textarea { resize:vertical; min-height:80px; }
 
 /* ── 약관 박스 ── */
 .terms-box {
-    height:220px; overflow-y:auto; border:1.5px solid var(--color-border);
+    height:320px; overflow-y:auto; border:1.5px solid var(--color-border);
     border-radius:8px; padding:14px; font-size:.82rem; margin-bottom:14px;
     background:#fafbfc; line-height:1.7;
 }
-.terms-section { margin-bottom:12px; }
-.terms-section strong { display:block; margin-bottom:4px; color:var(--color-text); }
-.terms-section ul { padding-left:16px; }
+.terms-section { margin-bottom:16px; }
+.terms-section strong { display:block; margin-bottom:6px; color:var(--color-text); font-size:.88rem; }
+.terms-section ul { padding-left:16px; margin:4px 0; }
+.terms-section li { margin-bottom:3px; line-height:1.6; }
 
 /* ── 서명 ── */
 .signature-section { margin:16px 0; }
@@ -267,6 +314,13 @@ textarea { resize:vertical; min-height:80px; }
     background:rgba(255,255,255,.9); border:1px solid var(--color-border);
     border-radius:6px; padding:4px 10px; font-size:.78rem; cursor:pointer;
 }
+.signature-date-display {
+    display:flex; align-items:center; gap:10px;
+    background:#f0f4ff; border:1px solid #c5d0ff; border-radius:8px;
+    padding:10px 14px; margin-top:12px; font-size:.86rem;
+}
+.sig-date-label { color:#5865c8; font-weight:700; white-space:nowrap; }
+.sig-date-value { color:#333; font-weight:600; }
 
 /* ── 공지사항 ── */
 .notice-item {
@@ -383,16 +437,33 @@ textarea { resize:vertical; min-height:80px; }
 .toast-error   { background:var(--color-danger); }
 @keyframes toastIn { from { opacity:0; transform:translate(-50%,8px); } to { opacity:1; transform:translate(-50%,0); } }
 
-/* ── FAB 해지 버튼 ── */
-.fab-cancel {
-    position:fixed; bottom:20px; right:20px; z-index:900;
-    width:52px; height:52px; border-radius:50%; border:none;
-    background:var(--color-danger); color:#fff; font-size:1.1rem;
-    cursor:pointer; box-shadow:0 4px 16px rgba(231,76,60,.4);
-    display:flex; align-items:center; justify-content:center;
-    transition: transform .2s;
+/* ── 해지 신청 배너 ── */
+.cancel-banner {
+    display:flex; align-items:center; gap:14px;
+    margin:0 12px 0; padding:14px 18px;
+    background:linear-gradient(135deg,#fff5f5,#fff);
+    border:1.5px solid #fcc; border-radius:var(--radius);
+    cursor:pointer; transition: all .2s;
+    box-shadow: 0 2px 8px rgba(231,76,60,.08);
 }
-.fab-cancel:hover { transform:scale(1.1); }
+.cancel-banner:hover {
+    border-color:var(--color-danger);
+    box-shadow:0 4px 16px rgba(231,76,60,.15);
+    transform:translateY(-1px);
+}
+.cancel-banner-icon {
+    width:40px; height:40px; border-radius:50%;
+    background:var(--color-danger); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.1rem; flex-shrink:0;
+}
+.cancel-banner-text { flex:1; }
+.cancel-banner-text strong { display:block; font-size:.95rem; color:var(--color-danger); margin-bottom:2px; }
+.cancel-banner-text span { font-size:.78rem; color:var(--color-text-muted); }
+.cancel-banner-arrow { color:#ccc; font-size:.85rem; }
+
+/* ── FAB 해지 버튼 (숨김 - 배너로 대체) ── */
+.fab-cancel { display:none; }
 
 /* ── 유틸 ── */
 .loading-mini {

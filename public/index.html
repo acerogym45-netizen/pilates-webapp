@@ -58,6 +58,16 @@
                 </button>
             </div>
 
+            <!-- 해지 신청 배너 -->
+            <div class="cancel-banner" onclick="openModal('cancellationModal')">
+                <div class="cancel-banner-icon"><i class="fas fa-times-circle"></i></div>
+                <div class="cancel-banner-text">
+                    <strong>해지 신청</strong>
+                    <span>수강 해지는 여기서 신청하세요 (매월 3~10일 접수)</span>
+                </div>
+                <i class="fas fa-chevron-right cancel-banner-arrow"></i>
+            </div>
+
             <!-- 공지사항 -->
             <section id="noticesSection" class="card-section" style="display:none">
                 <div class="section-header">
@@ -138,16 +148,32 @@
                     <span class="step-badge">Step 2 / 2</span>
                 </div>
 
-                <!-- 환불 경고 -->
+                <!-- 환불 경고 요약 배너 -->
                 <div class="alert-box alert-warning">
-                    <strong><i class="fas fa-exclamation-triangle"></i> 환불 규정 필독 (계약 전 필수 확인)</strong>
-                    <ul>
-                        <li>🚫 취업·이직·출장·야근 등 업무 사유 → 환불 불가</li>
-                        <li>🚫 "일이 바빠서", "시간이 없어서" → 환불 불가</li>
-                        <li>🚫 국내·해외 여행(6개월 미만) → 환불 불가</li>
-                        <li>✅ 6개월 이상 운동 불가 질병·부상 (진단서 필수)</li>
-                        <li>✅ 6개월 이상 해외 이주 (비자 등 증빙 필수)</li>
-                    </ul>
+                    <strong><i class="fas fa-exclamation-triangle"></i> 환불 규정 필독 — 계약 전 반드시 확인하세요</strong>
+                    <div class="policy-quick">
+                        <div class="policy-no">
+                            <div class="policy-badge badge-no">환불 불가 ✗</div>
+                            <ul>
+                                <li>취업·이직·출장·야근 등 업무 사유</li>
+                                <li>"바빠서", "시간 없어서" 등 개인 사정</li>
+                                <li>국내·해외 단기 여행 (6개월 미만)</li>
+                                <li>개인 변심, 육아, 학업</li>
+                                <li>서울·경기·수도권 내 이사</li>
+                                <li>정상 임신</li>
+                                <li>서비스 불만족</li>
+                            </ul>
+                        </div>
+                        <div class="policy-yes">
+                            <div class="policy-badge badge-yes">환불 가능 ✓ <small>(서류 필수)</small></div>
+                            <ul>
+                                <li>6개월 이상 운동 불가 질병·부상<br><small>(의사 진단서 — 운동 불가 기간 명시)</small></li>
+                                <li>6개월 이상 해외 이주<br><small>(비자·근로계약서 등 공식 서류)</small></li>
+                                <li>본인·직계가족 사망<br><small>(사망진단서·가족관계증명서)</small></li>
+                                <li>시설 귀책사유<br><small>(강사 장기 부재, 시설 폐쇄 등)</small></li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 신청 정보 확인 -->
@@ -159,36 +185,103 @@
                     <div class="summary-row"><span>희망 시간</span><strong id="displayTime">-</strong></div>
                 </div>
 
-                <!-- 이용약관 -->
+                <!-- 이용약관 전문 -->
                 <div class="terms-box" id="termsContent">
                     <h4>필라테스 레슨 이용약관</h4>
+
                     <div class="terms-section">
                         <strong>① 수강료 및 결제</strong>
-                        <p>수강료는 매월 말일 또는 다음 달 초에 청구됩니다. 첫 수강 시작일은 접수 승인 후 익월 1일부터입니다.</p>
+                        <p>수강료는 매월 <strong>관리비 청구에 포함</strong>되어 청구되며, 카드 결제·계좌 이체 및 영수증 발행은 불가능합니다.</p>
+                        <p>수강 시작일은 접수 승인 후 각 프로그램별로 해당하는 <strong>매월 첫 번째 요일(공휴일 제외)</strong>입니다.</p>
                     </div>
+
                     <div class="terms-section">
                         <strong>② 수업 운영</strong>
-                        <p>강사 부재 또는 시설 사정으로 수업이 취소될 경우 보강 수업으로 대체됩니다. 개인 사정으로 인한 결석은 보강되지 않습니다.</p>
-                    </div>
-                    <div class="terms-section">
-                        <strong>③ 환불 정책</strong>
-                        <p><strong>환불 가능 사유 (증빙 서류 필수):</strong></p>
                         <ul>
-                            <li>6개월 이상 운동 불가 부상·질병 (의료기관 진단서)</li>
-                            <li>6개월 이상 해외 이주 (비자, 근로계약서 등)</li>
-                            <li>본인·직계가족 사망</li>
-                            <li>시설 측 귀책사유</li>
+                            <li>수업은 지정된 요일·시간에만 진행됩니다. 공휴일은 수업을 진행하지 않습니다.</li>
+                            <li>개인 사정으로 인한 결석은 보강되지 않으며 <strong>횟수가 차감</strong>됩니다.</li>
+                            <li>횟수는 이월되지 않으며, 당월 개설된 수업 횟수에 따라 관리비가 부과됩니다.<br>
+                                <small>※ 당월 공휴일 또는 일수 부족으로 개설일이 부족한 경우 <strong>3회 또는 7회</strong>로 단축 운영됩니다.</small></li>
+                            <li>그룹 수업 참여 인원이 <strong>4명 미만으로 1개월 이상</strong> 지속될 경우, 새 그룹이 구성될 때까지 해당 수업은 일시 중단될 수 있습니다.</li>
                         </ul>
-                        <p><strong>환불 불가 사유:</strong> 취업·이직·출장·야근, 여행, 개인 변심, 임신(정상), 이사(서울·경기권 내) 등</p>
-                        <p><strong>환불 금액 = 총 수강료 - (1개월 수강료 × 경과 개월) - 위약금(20%)</strong></p>
                     </div>
+
                     <div class="terms-section">
-                        <strong>④ 양도·양수</strong>
-                        <p>관리사무소 동의 하에 제3자에게 잔여 수강권 양도가 가능합니다.</p>
+                        <strong>③ 노쇼(무단 결석) 규정</strong>
+                        <div class="policy-table-wrap">
+                            <table class="policy-table">
+                                <thead>
+                                    <tr><th>상황</th><th>처리 방식</th></tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>수업 참여 (정상 출석)</td>
+                                        <td>관리비에서 <strong>15,000원</strong> 차감</td>
+                                    </tr>
+                                    <tr>
+                                        <td>무단 결석 (노쇼)</td>
+                                        <td>수업 미진행 + 관리비에서 <strong>15,000원</strong> 동일 차감</td>
+                                    </tr>
+                                    <tr class="policy-table-warning">
+                                        <td>월 3회 이상 노쇼 누적</td>
+                                        <td>익월부터 <strong>수강 자동 해지</strong> 처리</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="terms-note">※ 노쇼는 강사 또는 문의처에 <strong>수강 24시간 이전 사전 고지 없이</strong> 수업 시간 내 미출석한 경우에 해당합니다.</p>
                     </div>
+
+                    <div class="terms-section">
+                        <strong>④ 환불 정책</strong>
+
+                        <p class="terms-subtitle">▶ 환불 가능 사유 <span class="badge-required">증빙 서류 원본 제출 필수</span></p>
+                        <ul>
+                            <li><strong>질병·부상</strong> — 의료기관 진단서 (6개월 이상 운동 불가 명시)</li>
+                            <li><strong>해외 이주</strong> — 비자, 근로계약서 등 공식 서류 (6개월 이상 체류)</li>
+                            <li><strong>사망</strong> — 본인 또는 직계가족 사망진단서 + 가족관계증명서</li>
+                            <li><strong>시설 귀책사유</strong> — 강사 장기 부재, 시설 폐쇄 등 운영 측 사유</li>
+                        </ul>
+
+                        <p class="terms-subtitle">▶ 환불 불가 사유</p>
+                        <ul class="list-no">
+                            <li>취업, 이직, 전직, 출장, 야근, 업무 과다</li>
+                            <li>개인 변심, "바빠서", "시간이 없어서"</li>
+                            <li>육아, 학업, 단기 국내외 여행 (6개월 미만)</li>
+                            <li>서울·경기·수도권 내 이사, 정상 임신</li>
+                            <li>서비스·강사 불만족 (시설 귀책 아닌 경우)</li>
+                            <li>허위 서류 제출 시 — 환불 불가 및 법적 조치 가능</li>
+                        </ul>
+
+                        <div class="refund-calc-box">
+                            <p class="refund-calc-title"><i class="fas fa-calculator"></i> 환불 금액 계산 방식</p>
+                            <p class="refund-formula">환불액 = 총 수강료 − (수강 횟수 × 20,000원) − 위약금(총 수강료 × 10%)</p>
+                            <div class="refund-example">
+                                <strong>예시</strong> — 12회 수강료 360,000원, 3회 수강 후 환불 신청 시<br>
+                                360,000 − (3 × 20,000) − (360,000 × 10%) = <strong>360,000 − 60,000 − 36,000 = 264,000원</strong>
+                            </div>
+                            <p class="terms-note">※ 증빙 서류는 사본이 아닌 <strong>원본</strong>만 인정됩니다. 허위 서류 제출 시 법적 책임을 질 수 있습니다.</p>
+                        </div>
+                    </div>
+
                     <div class="terms-section">
                         <strong>⑤ 해지 신청</strong>
-                        <p>해지는 매월 3일~10일에만 접수되며, 다음 달부터 적용됩니다. 당월 수강료는 환불되지 않습니다.</p>
+                        <ul>
+                            <li>해지 신청 접수 기간: <strong>매월 3일 ~ 10일</strong></li>
+                            <li>해지 효력 발생: <strong>다음 달 1일부터</strong> 적용 (당월 수강료 환불 불가)</li>
+                            <li>해지 신청 후 자동 접수되며, <strong>신청 취소 불가</strong>합니다.</li>
+                            <li>해지 후 재등록 시 대기 순번에 따라 배정됩니다.</li>
+                        </ul>
+                    </div>
+
+                    <div class="terms-section">
+                        <strong>⑥ 양도·양수</strong>
+                        <p>잔여 수강권은 <strong>입주민</strong>에게 양도·재판매할 수 있습니다. 단, 사적 거래로 인한 분쟁에 대해 <strong>운영 측은 책임지지 않습니다.</strong></p>
+                    </div>
+
+                    <div class="terms-section">
+                        <strong>⑦ 부상 및 안전 사고</strong>
+                        <p>회원 본인의 부주의, 건강 상태 미고지, 지병 등 개인 귀책사유로 인한 부상·사고에 대해 <strong>운영 측은 배상 책임을 지지 않습니다.</strong> 운동 전 건강 이상이 있는 경우 반드시 강사에게 알려주세요.</p>
                     </div>
                 </div>
 
@@ -211,9 +304,10 @@
                             <i class="fas fa-undo"></i> 지우기
                         </button>
                     </div>
-                    <div class="form-group">
-                        <label>서명 날짜</label>
-                        <input type="date" id="signatureDate">
+                    <div class="signature-date-display">
+                        <span class="sig-date-label"><i class="fas fa-calendar-check"></i> 서명 날짜</span>
+                        <span class="sig-date-value" id="signatureDateDisplay">-</span>
+                        <input type="hidden" id="signatureDate">
                     </div>
                 </div>
 
@@ -361,7 +455,7 @@
 
     <!-- 해지 신청 모달 -->
     <div id="cancellationModal" class="modal-overlay" onclick="closeModal('cancellationModal')">
-        <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-content modal-content-lg" onclick="event.stopPropagation()">
             <div class="modal-header">
                 <h3><i class="fas fa-times-circle"></i> 해지 신청</h3>
                 <button class="modal-close" onclick="closeModal('cancellationModal')">
@@ -369,22 +463,68 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div class="alert-box alert-warning" style="margin-bottom:16px">
-                    <strong>⚠️ 해지 신청 전 필독</strong>
-                    <ul>
-                        <li>접수 기간: 매월 3일 ~ 10일</li>
-                        <li>적용 시점: 다음 달부터 해지 (당월 수강료 환불 불가)</li>
-                        <li>취업, 출장, 개인 사정 등은 환불 불가</li>
+                <!-- 해지 안내 -->
+                <div class="cancel-info-box">
+                    <div class="cancel-info-title"><i class="fas fa-calendar-alt"></i> 해지 신청 안내</div>
+                    <table class="cancel-info-table">
+                        <tr>
+                            <td class="ci-label">접수 기간</td>
+                            <td><strong>매월 3일 ~ 10일</strong> (이 기간 외 신청 불가)</td>
+                        </tr>
+                        <tr>
+                            <td class="ci-label">효력 발생</td>
+                            <td><strong>다음 달 1일부터</strong> 해지 처리</td>
+                        </tr>
+                        <tr>
+                            <td class="ci-label">당월 수강료</td>
+                            <td>환불되지 않습니다</td>
+                        </tr>
+                        <tr>
+                            <td class="ci-label">신청 취소</td>
+                            <td>접수 후 <strong>취소 불가</strong> — 신중히 결정하세요</td>
+                        </tr>
+                        <tr>
+                            <td class="ci-label">환불 산정</td>
+                            <td>총 수강료 − (수강 횟수 × 20,000원) − 위약금(총액 × 10%)</td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- 환불 불가 사유 -->
+                <div class="alert-box alert-danger" style="margin:12px 0">
+                    <strong>🚫 환불 불가 사유 (이 경우 수강료 환급 없음)</strong>
+                    <ul class="cancel-no-list">
+                        <li>취업·이직·전직·출장·야근·업무 과다</li>
+                        <li>개인 변심 / "바빠서" / "시간 없어서"</li>
+                        <li>육아, 학업, 단기 여행 (6개월 미만)</li>
+                        <li>수도권 내 이사, 정상 임신</li>
+                        <li>서비스·강사 불만족 (시설 귀책 아닌 경우)</li>
                     </ul>
                 </div>
+
+                <!-- 환불 가능 사유 -->
+                <div class="alert-box alert-success" style="margin:12px 0">
+                    <strong>✅ 환불 가능 사유 (증빙 원본 제출 시)</strong>
+                    <ul class="cancel-yes-list">
+                        <li>6개월 이상 운동 불가 질병·부상 → <em>의사 진단서 (기간 명시)</em></li>
+                        <li>6개월 이상 해외 이주 → <em>비자·근로계약서 등</em></li>
+                        <li>본인·직계가족 사망 → <em>사망진단서 + 가족관계증명서</em></li>
+                        <li>시설 귀책사유 → <em>강사 장기 부재·시설 폐쇄 등</em></li>
+                    </ul>
+                    <p style="margin:6px 0 0;font-size:0.8rem;color:#555">※ 사본 불인정 — 원본 서류만 접수 가능. 허위 서류 제출 시 법적 책임이 발생할 수 있습니다.</p>
+                </div>
+
+                <hr style="margin:16px 0;border-color:#eee">
+
+                <!-- 신청 폼 -->
                 <div class="form-group"><label>동 <span class="required">*</span></label><input type="text" id="cancelDong" placeholder="101동"></div>
                 <div class="form-group"><label>호수 <span class="required">*</span></label><input type="text" id="cancelHo" placeholder="1001호"></div>
                 <div class="form-group"><label>이름 <span class="required">*</span></label><input type="text" id="cancelName"></div>
                 <div class="form-group"><label>전화번호 <span class="required">*</span></label><input type="tel" id="cancelPhone" placeholder="010-0000-0000"></div>
-                <div class="form-group"><label>프로그램명</label><input type="text" id="cancelProgram" placeholder="화&목 6:1 그룹수업"></div>
-                <div class="form-group"><label>해지 사유</label><textarea id="cancelReason" rows="3" placeholder="해지 사유를 입력하세요"></textarea></div>
+                <div class="form-group"><label>프로그램명</label><input type="text" id="cancelProgram" placeholder="화&amp;목 6:1 그룹수업"></div>
+                <div class="form-group"><label>해지 사유 <span class="required">*</span></label><textarea id="cancelReason" rows="3" placeholder="해지 사유를 상세히 입력하세요 (환불 해당 사유인 경우 서류 제출 안내를 드립니다)"></textarea></div>
                 <button class="btn-danger btn-full" onclick="submitCancellation()">
-                    <i class="fas fa-times-circle"></i> 해지 신청
+                    <i class="fas fa-times-circle"></i> 해지 신청하기
                 </button>
             </div>
         </div>
