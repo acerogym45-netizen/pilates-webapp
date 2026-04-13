@@ -1,33 +1,23 @@
 {
-  "name": "webapp",
-  "version": "12.2.6",
+  "name": "apartment-qr-system",
+  "version": "1.0.0",
+  "description": "아파트 단지 QR코드 무인 응대 시스템",
+  "main": "server/index.js",
   "scripts": {
-    "dev": "tsx src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "start:prod": "NODE_ENV=production node dist/server.js",
-    "db:init": "node -e \"const Database = require('better-sqlite3'); const fs = require('fs'); const db = new Database('database.sqlite'); const sql = fs.readFileSync('migrations/0001_initial_schema.sql', 'utf8'); sql.split(';').filter(s => s.trim()).forEach(stmt => { if(stmt.trim()) db.exec(stmt); }); console.log('Database initialized'); db.close();\"",
-    "clean-port": "fuser -k 3000/tcp 2>/dev/null || true",
-    "test": "curl http://localhost:3000/api/health"
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
   },
   "dependencies": {
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@vercel/postgres": "^0.10.0",
-    "better-sqlite3": "^12.8.0",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
-    "hono": "^4.6.14",
-    "pg": "^8.20.0"
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.3",
+    "multer": "^1.4.5-lts.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "uuid": "^9.0.0",
+    "express-rate-limit": "^7.2.0",
+    "helmet": "^7.1.0"
   },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^4.20250705.0",
-    "@hono/vite-cloudflare-pages": "^0.4.2",
-    "@types/node": "^25.5.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3",
-    "vite": "^5.4.11",
-    "wrangler": "^3.90.0"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

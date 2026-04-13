@@ -3,122 +3,144 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>필라테스 신청 관리 - 관리사무소</title>
-    <link rel="stylesheet" href="./css/admin.css">
+    <title>관리자 대시보드</title>
+    <link rel="stylesheet" href="/admin/css/admin.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
 </head>
 <body>
-    <div class="admin-container">
-        <!-- Header -->
-        <header class="admin-header">
-            <h1><i class="fas fa-clipboard-list"></i> 필라테스 신청 관리</h1>
-            <p>마스터플랜리소스 × 청주SK뷰자이</p>
-            <div class="nav-tabs">
-                <a href="./" class="nav-tab active">
-                    <i class="fas fa-file-contract"></i> 신청 관리
-                </a>
-                <a href="./inquiry.html" class="nav-tab">
-                    <i class="fas fa-comment-dots"></i> 문의 관리
-                </a>
+    <div id="adminApp">
+        <!-- 로그인 화면 -->
+        <div id="loginScreen" class="login-screen">
+            <div class="login-card">
+                <div class="login-logo"><i class="fas fa-building"></i></div>
+                <h2>관리자 로그인</h2>
+                <p>단지 코드와 비밀번호를 입력하세요</p>
+                <div class="form-group">
+                    <label>단지 코드</label>
+                    <input type="text" id="loginComplexCode" placeholder="예: apt-demo" value="">
+                </div>
+                <div class="form-group">
+                    <label>비밀번호</label>
+                    <input type="password" id="loginPassword" placeholder="관리자 비밀번호"
+                           onkeydown="if(event.key==='Enter') doLogin()">
+                </div>
+                <div id="loginError" class="error-msg" style="display:none"></div>
+                <button class="btn-primary btn-full" onclick="doLogin()">
+                    <i class="fas fa-sign-in-alt"></i> 로그인
+                </button>
+                <div class="login-hint">
+                    <small>기본 단지 코드: <code>apt-demo</code> | 기본 비밀번호: <code>admin1234</code></small>
+                </div>
             </div>
-        </header>
+        </div>
 
-        <!-- Stats Section -->
-        <section class="stats-section">
-            <div class="stat-card">
-                <div class="stat-icon pending">
-                    <i class="fas fa-clock"></i>
+        <!-- 메인 레이아웃 -->
+        <div id="mainLayout" style="display:none">
+            
+            <!-- 사이드바 -->
+            <aside id="sidebar" class="sidebar">
+                <div class="sidebar-logo">
+                    <i class="fas fa-building"></i>
+                    <span id="sidebarComplexName">단지명</span>
                 </div>
-                <div class="stat-info">
-                    <h3 id="pendingCount">0</h3>
-                    <p>대기중</p>
+                <nav class="sidebar-nav">
+                    <a href="#" class="nav-item active" data-page="dashboard" onclick="navigate('dashboard')">
+                        <i class="fas fa-chart-pie"></i> <span>대시보드</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="applications" onclick="navigate('applications')">
+                        <i class="fas fa-file-alt"></i> <span>신청 관리</span>
+                        <span class="nav-badge" id="navBadgeApp" style="display:none">0</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="cancellations" onclick="navigate('cancellations')">
+                        <i class="fas fa-times-circle"></i> <span>해지 관리</span>
+                        <span class="nav-badge" id="navBadgeCancel" style="display:none">0</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="inquiries" onclick="navigate('inquiries')">
+                        <i class="fas fa-comments"></i> <span>문의 관리</span>
+                        <span class="nav-badge" id="navBadgeInquiry" style="display:none">0</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="notices" onclick="navigate('notices')">
+                        <i class="fas fa-bullhorn"></i> <span>공지사항</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="programs" onclick="navigate('programs')">
+                        <i class="fas fa-dumbbell"></i> <span>프로그램 관리</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="instructors" onclick="navigate('instructors')">
+                        <i class="fas fa-user-tie"></i> <span>강사 관리</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="curricula" onclick="navigate('curricula')">
+                        <i class="fas fa-calendar-alt"></i> <span>커리큘럼</span>
+                    </a>
+                    <hr class="nav-divider">
+                    <a href="#" class="nav-item" data-page="complexes" onclick="navigate('complexes')" id="masterMenu" style="display:none">
+                        <i class="fas fa-city"></i> <span>단지 관리</span>
+                    </a>
+                    <a href="#" class="nav-item nav-resident" onclick="goToResidentPage()">
+                        <i class="fas fa-mobile-alt"></i> <span>입주민 페이지</span>
+                    </a>
+                </nav>
+                <div class="sidebar-footer">
+                    <button class="btn-logout" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> 로그아웃</button>
                 </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon approved">
-                    <i class="fas fa-check"></i>
-                </div>
-                <div class="stat-info">
-                    <h3 id="approvedCount">0</h3>
-                    <p>승인</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon rejected">
-                    <i class="fas fa-times"></i>
-                </div>
-                <div class="stat-info">
-                    <h3 id="rejectedCount">0</h3>
-                    <p>거부</p>
-                </div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon total">
-                    <i class="fas fa-list"></i>
-                </div>
-                <div class="stat-info">
-                    <h3 id="totalCount">0</h3>
-                    <p>전체</p>
-                </div>
-            </div>
-        </section>
+            </aside>
 
-        <!-- Filter Section -->
-        <section class="filter-section">
-            <div class="filter-group">
-                <label for="statusFilter">상태 필터:</label>
-                <select id="statusFilter" onchange="filterContracts()">
-                    <option value="all">전체</option>
-                    <option value="대기중" selected>대기중</option>
-                    <option value="승인">승인</option>
-                    <option value="거부">거부</option>
-                </select>
-            </div>
-            <div class="filter-group">
-                <label for="searchInput">검색:</label>
-                <input type="text" id="searchInput" placeholder="이름, 동/호수 검색..." onkeyup="filterContracts()">
-            </div>
-            <button class="btn-refresh" onclick="loadContracts()">
-                <i class="fas fa-sync-alt"></i> 새로고침
+            <!-- 모바일 사이드바 토글 -->
+            <button class="sidebar-toggle" onclick="toggleSidebar()">
+                <i class="fas fa-bars"></i>
             </button>
-            <button class="btn-export" onclick="exportToCSV()">
-                <i class="fas fa-download"></i> CSV 다운로드
-            </button>
-        </section>
 
-        <!-- Contracts List -->
-        <section class="contracts-section">
-            <div id="loadingSpinner" class="loading" style="display: none;">
-                <i class="fas fa-spinner fa-spin"></i> 불러오는 중...
-            </div>
-            <div id="emptyState" class="empty-state" style="display: none;">
-                <i class="fas fa-inbox"></i>
-                <p>신청 내역이 없습니다.</p>
-            </div>
-            <div id="contractsList" class="contracts-list">
-                <!-- Dynamically populated -->
-            </div>
-        </section>
+            <!-- 메인 콘텐츠 -->
+            <main class="main-content">
+                <div id="pageContent">
+                    <!-- 각 페이지가 여기에 렌더링됨 -->
+                </div>
+            </main>
+        </div>
     </div>
 
-    <!-- Detail Modal -->
-    <div id="detailModal" class="modal">
-        <div class="modal-content detail">
+    <!-- 범용 모달 -->
+    <div id="globalModal" class="modal-overlay" onclick="closeGlobalModal()">
+        <div class="modal-content modal-lg" onclick="event.stopPropagation()">
             <div class="modal-header">
-                <h2><i class="fas fa-file-contract"></i> 신청서 상세정보</h2>
-                <button class="modal-close" onclick="closeDetailModal()">
+                <h3 id="globalModalTitle">모달</h3>
+                <button class="modal-close" onclick="closeGlobalModal()">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div class="modal-body" id="detailContent">
-                <!-- Dynamically populated -->
+            <div class="modal-body" id="globalModalBody"></div>
+            <div class="modal-footer" id="globalModalFooter"></div>
+        </div>
+    </div>
+
+    <!-- 확인 모달 -->
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-content modal-sm" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="confirmTitle">확인</h3>
             </div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" onclick="closeDetailModal()">닫기</button>
+            <div class="modal-body">
+                <p id="confirmMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeConfirmModal()">취소</button>
+                <button class="btn-danger" id="confirmOkBtn">확인</button>
             </div>
         </div>
     </div>
 
-    <script src="./js/admin.js"></script>
+    <!-- Toast -->
+    <div id="adminToast" class="toast" style="display:none"></div>
+
+    <script src="/js/api.js"></script>
+    <script src="/admin/js/admin-app.js"></script>
+    <script src="/admin/js/pages/dashboard.js"></script>
+    <script src="/admin/js/pages/applications.js"></script>
+    <script src="/admin/js/pages/cancellations.js"></script>
+    <script src="/admin/js/pages/inquiries.js"></script>
+    <script src="/admin/js/pages/notices.js"></script>
+    <script src="/admin/js/pages/programs.js"></script>
+    <script src="/admin/js/pages/instructors.js"></script>
+    <script src="/admin/js/pages/curricula.js"></script>
+    <script src="/admin/js/pages/complexes.js"></script>
 </body>
 </html>
