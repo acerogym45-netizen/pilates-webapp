@@ -20,10 +20,12 @@ const dashboard = {
                     <div class="panel-header"><h4><i class="fas fa-exclamation-circle"></i> 미답변 문의</h4></div>
                     <div id="unansweredInq" class="panel-body"></div>
                 </div>
-            </div>`;
+            </div>
+            <div id="complexLinksPanel"></div>`;
         
         await this.loadStats();
         await this.loadRecent();
+        await this.loadComplexLinks();
     },
 
     async loadStats() {
@@ -92,5 +94,63 @@ const dashboard = {
                     </div>`).join('')
                 : '<p class="empty-hint">미답변 문의 없음</p>';
         } catch (e) {}
+    },
+
+    async loadComplexLinks() {
+        const panel = document.getElementById('complexLinksPanel');
+        if (!panel) return;
+        try {
+            // 마스터 관리자: 전체 단지 목록, 일반 관리자: 본인 단지만
+            let complexList = [];
+            if (Admin.role === 'master') {
+                const res = await API.complexes.list();
+                complexList = res.data || [];
+            } else if (Admin.complex?.id) {
+                complexList = [Admin.complex];
+            }
+            if (!complexList.length) { panel.innerHTML = ''; return; }
+
+            const origin = window.location.origin;
+            const cards = complexList.map(cx => {
+                const url = `${origin}/?complex=${cx.code}`;
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(url)}`;
+                return `
+                    <div class="complex-link-card">
+                        <img src="${qrUrl}" alt="QR" class="complex-link-qr">
+                        <div class="complex-link-info">
+                            <div class="complex-link-name">${escHtml(cx.name)}</div>
+                            <div class="complex-link-code">코드: ${escHtml(cx.code)}</div>
+                            <div class="complex-link-url">
+                                <a href="${url}" target="_blank" class="complex-link-a">${url}</a>
+                            </div>
+                        </div>
+                        <div class="complex-link-actions">
+                            <button class="btn-ghost btn-sm" onclick="navigator.clipboard.writeText('${url}').then(()=>showToast('URL 복사됨'))">
+                                <i class="fas fa-copy"></i> URL 복사
+                            </button>
+                            <a href="${url}" target="_blank" class="btn-ghost btn-sm" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+                                <i class="fas fa-external-link-alt"></i> 열기
+                            </a>
+                            <a href="https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(url)}"
+                               download="qr-${cx.code}.png" class="btn-ghost btn-sm"
+                               style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+                                <i class="fas fa-qrcode"></i> QR 저장
+                            </a>
+                        </div>
+                    </div>`;
+            }).join('');
+
+            panel.innerHTML = `
+                <div class="dash-panel" style="margin-top:16px">
+                    <div class="panel-header">
+                        <h4><i class="fas fa-link"></i> 입주민 페이지 바로가기
+                            <span class="panel-badge">${complexList.length}개 단지</span>
+                        </h4>
+                    </div>
+                    <div class="complex-links-grid">${cards}</div>
+                </div>`;
+        } catch (e) {
+            panel.innerHTML = '';
+        }
     }
 };

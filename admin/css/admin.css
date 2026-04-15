@@ -54,7 +54,17 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sa
     white-space:nowrap; overflow:hidden;
 }
 .sidebar-logo i { font-size:1.3rem; color:var(--color-primary); flex-shrink:0; }
-.sidebar-nav { flex:1; overflow-y:auto; padding:12px 0; }
+.sidebar-logo > div { display:flex; flex-direction:column; overflow:hidden; }
+.sidebar-role-badge {
+    font-size:.65rem; font-weight:700; padding:1px 6px; border-radius:10px;
+    background:rgba(102,126,234,.3); color:#a5b4fc; margin-top:2px;
+    display:none; width:fit-content;
+}
+.sidebar-nav { flex:1; overflow-y:auto; padding:8px 0; }
+.nav-group-label {
+    font-size:.65rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+    color:rgba(255,255,255,.3); padding:12px 16px 4px;
+}
 .nav-item {
     display:flex; align-items:center; gap:10px; padding:11px 16px;
     text-decoration:none; color:rgba(255,255,255,.7); font-size:.88rem; font-weight:500;
@@ -69,7 +79,13 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sa
     font-size:.68rem; font-weight:700; min-width:18px; height:18px;
     border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
 }
-.nav-divider { border:none; border-top:1px solid rgba(255,255,255,.1); margin:8px 16px; }
+.master-badge {
+    margin-left:auto; background:#f39c12; color:#fff;
+    font-size:.6rem; font-weight:800; padding:1px 6px; border-radius:4px; letter-spacing:.04em;
+}
+.nav-master { color:#fbbf24 !important; }
+.nav-master:hover { background:rgba(251,191,36,.15) !important; }
+.nav-master.active { background:#d97706 !important; }
 .nav-resident { color:rgba(255,255,255,.5); font-size:.82rem; }
 .sidebar-footer { padding:16px; border-top:1px solid rgba(255,255,255,.1); }
 .btn-logout {
@@ -321,4 +337,83 @@ code { background:#f0f2f8; padding:1px 5px; border-radius:4px; font-size:.85em; 
 @media(max-width:480px) {
     .stats-grid { grid-template-columns:1fr 1fr; }
     .page-header { flex-direction:column; align-items:flex-start; }
+}
+
+/* ── 로그인 - 마스터 로그인 영역 ── */
+.login-master-hint { text-align:center; margin-top:16px; }
+.btn-link-sm {
+    background:none; border:none; color:var(--color-muted); font-size:.82rem;
+    cursor:pointer; text-decoration:underline; padding:4px 8px;
+    transition:color .15s;
+}
+.btn-link-sm:hover { color:var(--color-primary); }
+.btn-link-sm i { margin-right:4px; }
+
+/* ── 내 단지 설정 ── */
+.settings-card {
+    background:var(--color-card); border-radius:var(--radius);
+    box-shadow:var(--shadow); margin-bottom:20px; overflow:hidden;
+}
+.settings-card-header {
+    padding:16px 20px; background:#fafbfc;
+    border-bottom:1px solid var(--color-border);
+    font-size:.95rem; font-weight:700; color:var(--color-text);
+}
+.settings-card-header i { margin-right:8px; color:var(--color-primary); }
+.settings-card-body { padding:20px; }
+.info-row {
+    display:flex; align-items:flex-start; gap:16px;
+    padding:10px 0; border-bottom:1px solid var(--color-border);
+}
+.info-row:last-child { border-bottom:none; }
+.info-row label { width:110px; flex-shrink:0; font-size:.85rem; font-weight:600; color:var(--color-muted); padding-top:2px; }
+.info-value { flex:1; font-size:.9rem; word-break:break-all; }
+.info-value a { color:var(--color-primary); text-decoration:none; }
+.info-value a:hover { text-decoration:underline; }
+.url-wrap { font-size:.8rem; }
+.req { color:var(--color-danger); }
+
+/* ── CSV 가져오기 모달 ─────────────────────────────────── */
+.import-guide { display:flex; flex-direction:column; gap:16px; }
+.import-step { display:flex; gap:14px; align-items:flex-start; }
+.import-num {
+    min-width:28px; height:28px; border-radius:50%;
+    background:var(--color-primary); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:.85rem; flex-shrink:0;
+}
+.import-step > div { flex:1; }
+.import-step strong { display:block; margin-bottom:4px; font-size:.9rem; }
+.import-step p { font-size:.82rem; color:var(--color-muted); margin:2px 0 0; }
+.import-tip {
+    background:#f0f4ff; border:1px solid #c5d0ff; border-radius:8px;
+    padding:10px 14px; font-size:.82rem; color:#5865c8;
+    display:flex; align-items:center; gap:8px;
+}
+
+/* ── 대시보드 단지 링크 패널 ─────────────────────────── */
+.panel-badge {
+    display:inline-block; background:var(--color-primary); color:#fff;
+    border-radius:20px; padding:1px 8px; font-size:.72rem;
+    font-weight:600; margin-left:8px; vertical-align:middle;
+}
+.complex-links-grid { padding:12px 16px; display:flex; flex-direction:column; gap:12px; }
+.complex-link-card {
+    display:flex; align-items:center; gap:14px;
+    background:#f8f9fb; border:1px solid var(--color-border);
+    border-radius:10px; padding:12px 14px;
+    transition:box-shadow .15s;
+}
+.complex-link-card:hover { box-shadow:0 2px 8px rgba(0,0,0,.08); }
+.complex-link-qr { width:64px; height:64px; border-radius:6px; border:1px solid #ddd; flex-shrink:0; }
+.complex-link-info { flex:1; min-width:0; }
+.complex-link-name { font-weight:700; font-size:.95rem; margin-bottom:2px; }
+.complex-link-code { font-size:.78rem; color:var(--color-muted); margin-bottom:3px; }
+.complex-link-url { font-size:.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.complex-link-a { color:var(--color-primary); text-decoration:none; }
+.complex-link-a:hover { text-decoration:underline; }
+.complex-link-actions { display:flex; flex-direction:column; gap:5px; flex-shrink:0; }
+@media(max-width:600px){
+    .complex-link-card { flex-wrap:wrap; }
+    .complex-link-actions { flex-direction:row; flex-wrap:wrap; width:100%; }
 }

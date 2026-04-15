@@ -13,7 +13,7 @@ router.get('/notices', (req, res) => {
     try {
         const db = getDb();
         const { complexCode, complexId } = req.query;
-        let q = 'SELECT n.* FROM notices n JOIN complexes c ON n.complex_id = c.id WHERE n.is_active = 1';
+        let q = 'SELECT n.*, c.code as complex_code, c.name as complex_name FROM notices n JOIN complexes c ON n.complex_id = c.id WHERE n.is_active = 1';
         const p = [];
         if (complexCode) { q += ' AND c.code = ?'; p.push(complexCode); }
         if (complexId)   { q += ' AND n.complex_id = ?'; p.push(complexId); }

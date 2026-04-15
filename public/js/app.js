@@ -192,9 +192,17 @@ function formatPhone(e) {
 }
 
 function setTodayDate() {
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm   = String(now.getMonth() + 1).padStart(2, '0');
+    const dd   = String(now.getDate()).padStart(2, '0');
+    const today = `${yyyy}-${mm}-${dd}`;
+    // hidden input (서버 전송용)
     const el = document.getElementById('signatureDate');
     if (el) el.value = today;
+    // 표시용 텍스트
+    const display = document.getElementById('signatureDateDisplay');
+    if (display) display.textContent = `${yyyy}년 ${mm}월 ${dd}일`;
 }
 
 // ── Step 1: 폼 제출 → Step 2 이동 ────────────────────────────────────────────

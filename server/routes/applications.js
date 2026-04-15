@@ -161,7 +161,8 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
     try {
         const db = getDb();
-        const { dong, ho, name, phone, program_name, preferred_time, status, notes, assigned_time } = req.body;
+        const { dong, ho, name, phone, program_name, preferred_time, status, notes, assigned_time,
+                remaining_sessions, total_sessions, monthly_fee, transfer_memo, transfer_date } = req.body;
         
         const current = db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id);
         if (!current) return res.status(404).json({ success: false, error: '신청을 찾을 수 없습니다' });
@@ -169,11 +170,17 @@ router.put('/:id', (req, res) => {
         db.prepare(`
             UPDATE applications 
             SET dong=?, ho=?, name=?, phone=?, program_name=?, preferred_time=?, status=?, notes=?, assigned_time=?,
+                remaining_sessions=?, total_sessions=?, monthly_fee=?, transfer_memo=?, transfer_date=?,
                 updated_at=datetime('now','localtime')
             WHERE id=?
         `).run(dong ?? current.dong, ho ?? current.ho, name ?? current.name, phone ?? current.phone,
                program_name ?? current.program_name, preferred_time ?? current.preferred_time,
                status ?? current.status, notes ?? current.notes, assigned_time ?? current.assigned_time,
+               remaining_sessions !== undefined ? remaining_sessions : current.remaining_sessions,
+               total_sessions !== undefined ? total_sessions : current.total_sessions,
+               monthly_fee !== undefined ? monthly_fee : current.monthly_fee,
+               transfer_memo !== undefined ? transfer_memo : current.transfer_memo,
+               transfer_date !== undefined ? transfer_date : current.transfer_date,
                req.params.id);
         
         // 승인 상태로 변경 시 대기자 알림 처리 트리거 (옵션)
@@ -183,6 +190,128 @@ router.put('/:id', (req, res) => {
         
         const updated = db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id);
         res.json({ success: true, data: updated });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 양도/양수 처리 ────────────────────────────────────────────────────────────
+router.post('/:id/transfer', (req, res) => {
+    try {
+        const db = getDb();
+        const { new_dong, new_ho, new_name, new_phone, remaining_sessions, transfer_memo, transfer_date } = req.body;
+
+        const original = db.prepare('SELECT * FROM applications WHERE id = ?').get(req.params.id);
+        if (!original) return res.status(404).json({ success: false, error: '원본 신청을 찾을 수 없습니다' });
+        if (original.status !== 'approved') {
+            return res.status(400).json({ success: false, error: '승인된 신청만 양도할 수 있습니다' });
+        }
+        if (!new_dong || !new_ho || !new_name || !new_phone) {
+            return res.status(400).json({ success: false, error: '양수자 정보(동·호수·이름·전화번호) 필수' });
+        }
+
+        const newId = uuidv4();
+        const today = transfer_date || new Date().toISOString().slice(0, 10);
+
+        // 트랜잭션으로 처리
+        const doTransfer = db.transaction(() => {
+            // 1) 원본 신청 → 양도 상태로 변경, 잔여횟수 기록
+            db.prepare(`
+                UPDATE applications
+                SET status='transferred', remaining_sessions=?, transfer_to=?, transfer_memo=?, transfer_date=?,
+                    updated_at=datetime('now','localtime')
+                WHERE id=?
+            `).run(remaining_sessions ?? null, newId, transfer_memo ?? '', today, original.id);
+
+            // 2) 양수자 신청 생성
+            db.prepare(`
+                INSERT INTO applications
+                (id, complex_id, dong, ho, name, phone, program_id, program_name, preferred_time,
+                 status, remaining_sessions, total_sessions, monthly_fee,
+                 transfer_from, transfer_memo, transfer_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'received', ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                newId,
+                original.complex_id,
+                new_dong, new_ho, new_name, new_phone,
+                original.program_id, original.program_name, original.preferred_time,
+                remaining_sessions ?? null,
+                original.total_sessions, original.monthly_fee,
+                original.id,
+                transfer_memo ?? '',
+                today,
+                `양도: ${original.dong} ${original.ho} ${original.name} → ${new_dong} ${new_ho} ${new_name} (잔여 ${remaining_sessions ?? '?'}회)`
+            );
+        });
+
+        doTransfer();
+
+        const transferred = db.prepare('SELECT * FROM applications WHERE id = ?').get(original.id);
+        const received    = db.prepare('SELECT * FROM applications WHERE id = ?').get(newId);
+        res.json({ success: true, transferred, received, message: '양도/양수 처리 완료' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 관리비 계산 ────────────────────────────────────────────────────────────────
+// 당월 실제 개설 횟수 기반으로 관리비를 계산해 반환
+router.post('/fee-calc', (req, res) => {
+    try {
+        const {
+            monthly_fee,       // 월 수강료 (원)
+            total_sessions,    // 당월 전체 개설 횟수
+            attended_sessions, // 실제 출석 횟수
+            absent_sessions,   // 노쇼(사전연락없이 결석) 횟수
+            is_transfer,       // 양도/양수 여부
+            remaining_sessions // 잔여 횟수 (양도 시)
+        } = req.body;
+
+        if (!monthly_fee || !total_sessions) {
+            return res.status(400).json({ success: false, error: 'monthly_fee, total_sessions 필수' });
+        }
+
+        const fee    = parseInt(monthly_fee);
+        const total  = parseInt(total_sessions);
+        const perSession = Math.round(fee / total);  // 회당 단가
+
+        // 기본 관리비 = 회당단가 × (출석 + 노쇼)
+        const attended = parseInt(attended_sessions) || 0;
+        const absent   = parseInt(absent_sessions)   || 0;
+        const baseFee  = perSession * (attended + absent);
+
+        // 노쇼 패널티: 각 노쇼 당 15,000원 추가
+        const noshoPenalty = absent * 15000;
+
+        // 양도 시: 잔여 횟수 기반 환불 계산
+        let transferRefund = 0;
+        let transferFee    = 0;
+        if (is_transfer) {
+            const remaining = parseInt(remaining_sessions) || 0;
+            // 양도자 환불액 = 잔여횟수 × 회당단가 - 총수강료의 10%
+            transferRefund = Math.max(0, remaining * perSession - Math.round(fee * 0.1));
+            // 양수자 납부액 = 잔여횟수 × 회당단가
+            transferFee = remaining * perSession;
+        }
+
+        res.json({
+            success: true,
+            data: {
+                monthly_fee:  fee,
+                total_sessions: total,
+                per_session_fee: perSession,
+                attended_sessions: attended,
+                absent_sessions: absent,
+                base_fee: baseFee,
+                nosho_penalty: noshoPenalty,
+                total_fee: baseFee + noshoPenalty,
+                transfer_refund: transferRefund,
+                transfer_fee: transferFee,
+                // 단축 운영 시 계산
+                short_3_sessions: Math.round(fee * 3 / total),
+                short_7_sessions: Math.round(fee * 7 / total)
+            }
+        });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }

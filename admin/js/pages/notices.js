@@ -14,7 +14,9 @@ const notices = {
     },
     async load() {
         try {
-            const res = await API.notices.list({ complexId: Admin.complex?.id });
+            const params = {};
+            if (Admin.complex?.id) params.complexId = Admin.complex.id;
+            const res = await API.notices.list(params);
             this.data = res.data || [];
             this.renderList();
         } catch(e) { document.getElementById('noticeList').innerHTML = `<p class="error-hint">${e.message}</p>`; }
@@ -30,7 +32,7 @@ const notices = {
                 </div>
                 <div class="item-main">
                     <strong>${n.title}</strong>
-                    <small>${formatDate(n.created_at)}</small>
+                    <small>${n.complex_code ? `[${n.complex_code}] ` : ''}${formatDate(n.created_at)}</small>
                 </div>
                 <div class="item-actions">
                     <button class="btn-ghost dark btn-sm" onclick="notices.showForm('${n.id}')"><i class="fas fa-edit"></i></button>
@@ -40,7 +42,20 @@ const notices = {
     },
     showForm(id) {
         const n = id ? this.data.find(x => x.id === id) : null;
+        if (!id && !Admin.complex?.id) {
+            // 마스터 관리자: 먼저 단지 선택
+            pickComplexForCreate((complexId, complexName) => {
+                notices._openNoticeForm(null, complexId, complexName);
+            });
+            return;
+        }
+        notices._openNoticeForm(n, Admin.complex?.id);
+    },
+    _openNoticeForm(n, complexId, complexName) {
+        const title = complexName ? `새 공지 작성 — ${complexName}` : (n ? '공지 수정' : '새 공지 작성');
         const body = `
+            ${complexName ? `<p style="font-size:.85rem;color:#888;margin-bottom:8px"><i class="fas fa-building"></i> ${escHtml(complexName)}</p>` : ''}
+            <input type="hidden" id="noticeComplexId" value="${complexId || ''}">
             <div class="form-group"><label>제목</label><input type="text" id="noticeTitle" value="${n ? escHtml(n.title) : ''}"></div>
             <div class="form-group"><label>내용</label><textarea id="noticeContent" rows="6">${n ? escHtml(n.content) : ''}</textarea></div>
             <div class="form-group">
@@ -52,8 +67,8 @@ const notices = {
             ${n ? `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="noticeActive" ${n.is_active ? 'checked' : ''}><span>활성화</span></label></div>` : ''}`;
         const footer = `
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
-            <button class="btn-primary" onclick="notices.save('${id || ''}')"><i class="fas fa-save"></i> 저장</button>`;
-        openGlobalModal(n ? '공지 수정' : '새 공지 작성', body, footer);
+            <button class="btn-primary" onclick="notices.save('${n?.id || ''}')"><i class="fas fa-save"></i> 저장</button>`;
+        openGlobalModal(title, body, footer);
     },
     async save(id) {
         const title   = document.getElementById('noticeTitle').value;
@@ -66,7 +81,10 @@ const notices = {
                 if (activeEl) data.is_active = activeEl.checked;
                 await API.notices.update(id, data);
             } else {
-                data.complex_id = Admin.complex?.id;
+                // 단지 ID: hidden input 우선, 없으면 Admin.complex.id
+                const cxIdEl = document.getElementById('noticeComplexId');
+                data.complex_id = (cxIdEl?.value) || Admin.complex?.id;
+                if (!data.complex_id) { showToast('단지를 선택하세요', 'error'); return; }
                 await API.notices.create(data);
             }
             closeGlobalModal();

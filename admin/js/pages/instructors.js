@@ -89,11 +89,23 @@ const instructors = {
                 photo_url: photoUrl,
                 display_order: parseInt(document.getElementById('iOrder').value)||0
             };
-            if (id) await API.instructors.update(id, data);
-            else { data.complex_id = Admin.complex?.id; await API.instructors.create(data); }
-            closeGlobalModal();
-            showToast('저장되었습니다');
-            await this.load();
+            if (id) {
+                await API.instructors.update(id, data);
+                closeGlobalModal();
+                showToast('저장되었습니다');
+                await this.load();
+            } else {
+                if (!Admin.complex?.id) {
+                    pickComplexForCreate(async (complexId) => {
+                        data.complex_id = complexId;
+                        try { await API.instructors.create(data); showToast('저장되었습니다'); await instructors.load(); }
+                        catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+                    });
+                    return;
+                }
+                data.complex_id = Admin.complex.id;
+                await API.instructors.create(data);
+            }
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
     },
     deleteItem(id) {
@@ -176,8 +188,27 @@ const curricula = {
             } catch(e) { showToast('이미지 업로드 실패', 'error'); return; }
         }
         try {
+            const complexId = Admin.complex?.id;
+            if (!complexId) {
+                pickComplexForCreate(async (cxId) => {
+                    try {
+                        await API.curricula.create({
+                            complex_id: cxId,
+                            year: parseInt(document.getElementById('cuYear').value),
+                            month: parseInt(document.getElementById('cuMonth').value),
+                            title: document.getElementById('cuTitle').value,
+                            content: document.getElementById('cuContent').value,
+                            image_url: imageUrl
+                        });
+                        closeGlobalModal();
+                        showToast('저장되었습니다');
+                        await curricula.load();
+                    } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+                });
+                return;
+            }
             await API.curricula.create({
-                complex_id: Admin.complex?.id,
+                complex_id: complexId,
                 year: parseInt(document.getElementById('cuYear').value),
                 month: parseInt(document.getElementById('cuMonth').value),
                 title: document.getElementById('cuTitle').value,

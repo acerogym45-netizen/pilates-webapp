@@ -14,7 +14,9 @@ const programs = {
     },
     async load() {
         try {
-            const res = await API.programs.list({ complexId: Admin.complex?.id });
+            const params = {};
+            if (Admin.complex?.id) params.complexId = Admin.complex.id;
+            const res = await API.programs.list(params);
             this.data = res.data || [];
             this.renderList();
         } catch(e) { document.getElementById('programList').innerHTML = `<p class="error-hint">${e.message}</p>`; }
@@ -31,7 +33,7 @@ const programs = {
                 <div class="item-main">
                     <strong>${p.name}</strong>
                     <p>${p.days || '-'} | ₩${(p.price||0).toLocaleString()}/월 | 정원 ${p.capacity}명</p>
-                    <small>시간대: ${Array.isArray(p.time_slots) && p.time_slots.length ? p.time_slots.join(', ') : '자유'}</small>
+                    <small>${p.complex_code ? `[${p.complex_code}] ` : ''}시간대: ${Array.isArray(p.time_slots) && p.time_slots.length ? p.time_slots.join(', ') : '자유'}</small>
                 </div>
                 <div class="item-actions">
                     <button class="btn-ghost dark btn-sm" onclick="programs.showCapacity('${p.id}')"><i class="fas fa-chart-bar"></i></button>
@@ -42,8 +44,21 @@ const programs = {
     },
     showForm(id) {
         const p = id ? this.data.find(x => x.id === id) : null;
+        if (!id && !Admin.complex?.id) {
+            // 마스터 관리자: 먼저 단지 선택
+            pickComplexForCreate((complexId, complexName) => {
+                programs._openProgramForm(null, complexId, complexName);
+            });
+            return;
+        }
+        programs._openProgramForm(p, Admin.complex?.id);
+    },
+    _openProgramForm(p, complexId, complexName) {
         const slots = p && Array.isArray(p.time_slots) ? p.time_slots : [];
+        const titleStr = complexName ? `프로그램 추가 — ${complexName}` : (p ? '프로그램 수정' : '프로그램 추가');
         const body = `
+            ${complexName ? `<p style="font-size:.85rem;color:#888;margin-bottom:8px"><i class="fas fa-building"></i> ${escHtml(complexName)}</p>` : ''}
+            <input type="hidden" id="programComplexId" value="${complexId || ''}">
             <div class="form-group"><label>프로그램명 *</label><input type="text" id="pName" value="${p ? escHtml(p.name) : ''}"></div>
             <div class="form-group">
                 <label>유형 *</label>
@@ -68,8 +83,8 @@ const programs = {
             ${p ? `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="pActive" ${p.is_active?'checked':''}><span>활성화</span></label></div>` : ''}`;
         const footer = `
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
-            <button class="btn-primary" onclick="programs.save('${id||''}')"><i class="fas fa-save"></i> 저장</button>`;
-        openGlobalModal(p ? '프로그램 수정' : '프로그램 추가', body, footer);
+            <button class="btn-primary" onclick="programs.save('${p?.id||''}')"><i class="fas fa-save"></i> 저장</button>`;
+        openGlobalModal(titleStr, body, footer);
     },
     async save(id) {
         const name = document.getElementById('pName').value.trim();
@@ -90,7 +105,10 @@ const programs = {
                 if (activeEl) data.is_active = activeEl.checked;
                 await API.programs.update(id, data);
             } else {
-                data.complex_id = Admin.complex?.id;
+                // 단지 ID: hidden input 우선, 없으면 Admin.complex.id
+                const cxIdEl = document.getElementById('programComplexId');
+                data.complex_id = (cxIdEl?.value) || Admin.complex?.id;
+                if (!data.complex_id) { showToast('단지를 선택하세요', 'error'); return; }
                 await API.programs.create(data);
             }
             closeGlobalModal();
