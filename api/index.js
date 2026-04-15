@@ -28,21 +28,39 @@ const uploadRouter       = require('../server/routes/upload');
 const app = express();
 
 // ── 정적파일 루트 경로 ─────────────────────────────────────────────────────────
-// Vercel 서버리스 환경:
-//   - __dirname = /var/task  (api/index.js 가 /var/task에 위치)
-//   - 프로젝트 파일들도 /var/task/ 에 있음 (index.html, js/, css/, admin/ 등)
-// 로컬 개발 환경:
-//   - __dirname = /home/user/webapp/api
-//   - 프로젝트 루트 = /home/user/webapp
+// Vercel: __dirname = /var/task (프로젝트 루트)
+// 로컬:   __dirname = /home/user/webapp/api → 루트 = ../
 const ROOT_DIR = fs.existsSync(path.join(__dirname, 'index.html'))
-    ? __dirname                    // Vercel: __dirname = /var/task = 프로젝트루트
-    : path.join(__dirname, '..');  // 로컬: __dirname/.. = 프로젝트루트
+    ? __dirname
+    : path.join(__dirname, '..');
 
 // ── 미들웨어 ──────────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// ── 디버그: js 폴더 내용 확인 ──────────────────────────────────────────────────
+app.get('/api/debug-files', (req, res) => {
+    const jsDir = path.join(ROOT_DIR, 'js');
+    const cssDir = path.join(ROOT_DIR, 'css');
+    const adminJsDir = path.join(ROOT_DIR, 'admin', 'js');
+    const safeRead = (dir) => {
+        try { return fs.readdirSync(dir); } catch(e) { return `ERROR: ${e.message}`; }
+    };
+    res.json({
+        ROOT_DIR,
+        __dirname,
+        cwd: process.cwd(),
+        jsDirExists: fs.existsSync(jsDir),
+        jsFiles: safeRead(jsDir),
+        cssDirExists: fs.existsSync(cssDir),
+        cssFiles: safeRead(cssDir),
+        adminJsDirExists: fs.existsSync(adminJsDir),
+        adminJsFiles: safeRead(adminJsDir),
+        mainJsExists: fs.existsSync(path.join(jsDir, 'main.js')),
+    });
+});
 
 // ── 헬스체크 ─────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -51,12 +69,9 @@ app.get('/api/health', (req, res) => {
         success: true,
         status: 'ok',
         timestamp: new Date().toISOString(),
-        version: '3.3.0',
+        version: '3.3.1',
         database: hasSupabase ? 'supabase' : 'not-configured',
         platform: 'vercel',
-        ROOT_DIR,
-        indexExists: fs.existsSync(path.join(ROOT_DIR, 'index.html')),
-        cssExists:   fs.existsSync(path.join(ROOT_DIR, 'css', 'style.css')),
     });
 });
 
@@ -68,9 +83,8 @@ app.use('/api',              miscRouter);
 app.use('/api/upload',       uploadRouter);
 
 // ── 정적 파일 서빙 ───────────────────────────────────────────────────────────
-// express.static으로 js/, css/, admin/ 등 서빙
 app.use(express.static(ROOT_DIR, {
-    index: false,   // SPA fallback에서 처리
+    index: false,
     dotfiles: 'ignore',
 }));
 
