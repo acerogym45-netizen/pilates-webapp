@@ -1,10 +1,5 @@
 /**
- * Vercel 서버리스 함수 엔트리포인트 - Supabase 버전 v3.3
- *
- * 환경변수 설정 (Vercel Dashboard → Settings → Environment Variables):
- *   SUPABASE_URL  = https://xxxx.supabase.co
- *   SUPABASE_KEY  = your-anon-or-service-role-key
- *   MASTER_PASSWORD = master2026
+ * Vercel 서버리스 함수 엔트리포인트 - Supabase 버전 v3.4
  */
 require('dotenv').config();
 
@@ -28,11 +23,9 @@ const uploadRouter       = require('../server/routes/upload');
 const app = express();
 
 // ── 정적파일 루트 경로 ─────────────────────────────────────────────────────────
-// Vercel: __dirname = /var/task (프로젝트 루트)
-// 로컬:   __dirname = /home/user/webapp/api → 루트 = ../
-const ROOT_DIR = fs.existsSync(path.join(__dirname, 'index.html'))
-    ? __dirname
-    : path.join(__dirname, '..');
+// Vercel: __dirname = /var/task/api → 루트 = /var/task
+// 로컬:   __dirname = /webapp/api   → 루트 = /webapp
+const ROOT_DIR = path.resolve(__dirname, '..');
 
 // ── 미들웨어 ──────────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -40,24 +33,68 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// ── 디버그: js 폴더 내용 확인 ──────────────────────────────────────────────────
+// ── 정적 파일 서빙 (API보다 먼저 - js/css 파일 우선) ──────────────────────────
+// js/, css/ 파일을 직접 명시해서 서빙
+app.get('/js/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'js', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/css/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'css', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'text/css; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/admin/js/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'admin', 'js', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/admin/js/pages/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'admin', 'js', 'pages', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/admin/css/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'admin', 'css', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'text/css; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+// ── 디버그 ────────────────────────────────────────────────────────────────────
 app.get('/api/debug-files', (req, res) => {
     const jsDir = path.join(ROOT_DIR, 'js');
-    const cssDir = path.join(ROOT_DIR, 'css');
-    const adminJsDir = path.join(ROOT_DIR, 'admin', 'js');
     const safeRead = (dir) => {
         try { return fs.readdirSync(dir); } catch(e) { return `ERROR: ${e.message}`; }
     };
     res.json({
-        ROOT_DIR,
-        __dirname,
-        cwd: process.cwd(),
+        ROOT_DIR, __dirname,
         jsDirExists: fs.existsSync(jsDir),
         jsFiles: safeRead(jsDir),
-        cssDirExists: fs.existsSync(cssDir),
-        cssFiles: safeRead(cssDir),
-        adminJsDirExists: fs.existsSync(adminJsDir),
-        adminJsFiles: safeRead(adminJsDir),
         mainJsExists: fs.existsSync(path.join(jsDir, 'main.js')),
     });
 });
@@ -66,10 +103,9 @@ app.get('/api/debug-files', (req, res) => {
 app.get('/api/health', (req, res) => {
     const hasSupabase = !!(process.env.SUPABASE_URL && process.env.SUPABASE_KEY);
     res.json({
-        success: true,
-        status: 'ok',
+        success: true, status: 'ok',
         timestamp: new Date().toISOString(),
-        version: '3.3.1',
+        version: '3.4.0',
         database: hasSupabase ? 'supabase' : 'not-configured',
         platform: 'vercel',
     });
@@ -82,33 +118,18 @@ app.use('/api/applications', applicationsRouter);
 app.use('/api',              miscRouter);
 app.use('/api/upload',       uploadRouter);
 
-// ── 정적 파일 서빙 ───────────────────────────────────────────────────────────
-app.use(express.static(ROOT_DIR, {
-    index: false,
-    dotfiles: 'ignore',
-}));
+// ── 나머지 정적파일 (express.static) ─────────────────────────────────────────
+app.use(express.static(ROOT_DIR, { index: false, dotfiles: 'ignore' }));
 
 // ── SPA 라우팅 ────────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));
 });
-
 app.get('/admin/*', (req, res) => {
-    const filePath = path.join(ROOT_DIR, req.path);
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        res.sendFile(filePath);
-    } else {
-        res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));
-    }
+    res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));
 });
-
 app.get('*', (req, res) => {
-    const filePath = path.join(ROOT_DIR, req.path);
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-        res.sendFile(filePath);
-    } else {
-        res.sendFile(path.join(ROOT_DIR, 'index.html'));
-    }
+    res.sendFile(path.join(ROOT_DIR, 'index.html'));
 });
 
 // ── 에러 핸들러 ───────────────────────────────────────────────────────────────
