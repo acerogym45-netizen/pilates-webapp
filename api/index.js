@@ -1,5 +1,5 @@
 /**
- * Vercel 서버리스 함수 엔트리포인트 - Supabase 버전 v3.2
+ * Vercel 서버리스 함수 엔트리포인트 - Supabase 버전 v3.3
  *
  * 환경변수 설정 (Vercel Dashboard → Settings → Environment Variables):
  *   SUPABASE_URL  = https://xxxx.supabase.co
@@ -8,7 +8,6 @@
  */
 require('dotenv').config();
 
-// 환경변수 기본값
 if (!process.env.MASTER_PASSWORD) {
     process.env.MASTER_PASSWORD = 'master2026';
 }
@@ -28,27 +27,16 @@ const uploadRouter       = require('../server/routes/upload');
 
 const app = express();
 
-// ── 정적파일 루트 경로 찾기 ────────────────────────────────────────────────────
-// Vercel 서버리스: __dirname = /var/task (api 폴더가 아닌 루트)
-// process.cwd() = /var/task
-// 실제 파일은 /var/task/index.html 에 있음
-function findRootDir() {
-    const candidates = [
-        __dirname,                          // /var/task
-        path.join(__dirname, '..'),         // /var/task/.. = /
-        process.cwd(),                      // /var/task
-        path.join(process.cwd(), '..'),     // /var/task/..
-        '/var/task',
-    ];
-    for (const dir of candidates) {
-        if (fs.existsSync(path.join(dir, 'index.html'))) {
-            return dir;
-        }
-    }
-    return __dirname; // fallback
-}
-
-const ROOT_DIR = findRootDir();
+// ── 정적파일 루트 경로 ─────────────────────────────────────────────────────────
+// Vercel 서버리스 환경:
+//   - __dirname = /var/task  (api/index.js 가 /var/task에 위치)
+//   - 프로젝트 파일들도 /var/task/ 에 있음 (index.html, js/, css/, admin/ 등)
+// 로컬 개발 환경:
+//   - __dirname = /home/user/webapp/api
+//   - 프로젝트 루트 = /home/user/webapp
+const ROOT_DIR = fs.existsSync(path.join(__dirname, 'index.html'))
+    ? __dirname                    // Vercel: __dirname = /var/task = 프로젝트루트
+    : path.join(__dirname, '..');  // 로컬: __dirname/.. = 프로젝트루트
 
 // ── 미들웨어 ──────────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -59,20 +47,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // ── 헬스체크 ─────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
     const hasSupabase = !!(process.env.SUPABASE_URL && process.env.SUPABASE_KEY);
-    const indexExists = fs.existsSync(path.join(ROOT_DIR, 'index.html'));
-    const cssExists   = fs.existsSync(path.join(ROOT_DIR, 'css', 'style.css'));
     res.json({
         success: true,
         status: 'ok',
         timestamp: new Date().toISOString(),
-        version: '3.2.0',
+        version: '3.3.0',
         database: hasSupabase ? 'supabase' : 'not-configured',
         platform: 'vercel',
-        __dirname,
-        cwd: process.cwd(),
         ROOT_DIR,
-        indexExists,
-        cssExists,
+        indexExists: fs.existsSync(path.join(ROOT_DIR, 'index.html')),
+        cssExists:   fs.existsSync(path.join(ROOT_DIR, 'css', 'style.css')),
     });
 });
 
@@ -84,8 +68,9 @@ app.use('/api',              miscRouter);
 app.use('/api/upload',       uploadRouter);
 
 // ── 정적 파일 서빙 ───────────────────────────────────────────────────────────
+// express.static으로 js/, css/, admin/ 등 서빙
 app.use(express.static(ROOT_DIR, {
-    index: false,
+    index: false,   // SPA fallback에서 처리
     dotfiles: 'ignore',
 }));
 
@@ -93,6 +78,7 @@ app.use(express.static(ROOT_DIR, {
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));
 });
+
 app.get('/admin/*', (req, res) => {
     const filePath = path.join(ROOT_DIR, req.path);
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
@@ -101,6 +87,7 @@ app.get('/admin/*', (req, res) => {
         res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));
     }
 });
+
 app.get('*', (req, res) => {
     const filePath = path.join(ROOT_DIR, req.path);
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
