@@ -23,8 +23,5 @@
       "src": "/(.*)",
       "dest": "/$1"
     }
-  ],
-  "env": {
-    "MASTER_PASSWORD": "@master_password"
-  }
+  ]
 }
