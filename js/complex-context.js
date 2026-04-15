@@ -11,7 +11,7 @@ class ComplexContext {
     // URL에서 complex 파라미터 읽기
     getComplexCodeFromURL() {
         const params = new URLSearchParams(window.location.search);
-        return params.get('complex') || 'cheongju-sk'; // 기본값: 청주SK뷰자이
+        return params.get('complex') || 'apt-demo'; // 기본값: apt-demo
     }
     
     // 단지 설정 로드
@@ -20,44 +20,45 @@ class ComplexContext {
         console.log('🏢 Loading complex:', complexCode);
         
         try {
-            const response = await fetch(`tables/complex_settings?limit=100`);
-            const result = await response.json();
+            // 신규 /api/complexes 엔드포인트 사용
+            const response = await fetch(`/api/complexes/by-code/${complexCode}`);
             
-            if (!result.data || result.data.length === 0) {
-                throw new Error('No complex settings found');
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.data) {
+                    this.currentComplex = result.data;
+                    this.complexSettings = result.data;
+                    this.initialized = true;
+                    console.log('✅ Complex loaded:', this.currentComplex.name || this.currentComplex.code);
+                    this.applyBranding();
+                    return this.currentComplex;
+                }
             }
             
-            // complex_code로 찾기
-            this.currentComplex = result.data.find(c => c.complex_code === complexCode);
+            // 코드로 못 찾으면 전체 목록에서 첫 번째 사용
+            console.warn(`⚠️ Complex '${complexCode}' not found, fetching list...`);
+            const listResponse = await fetch('/api/complexes');
+            const listResult = await listResponse.json();
             
-            // 못 찾으면 첫 번째 활성화된 단지 사용
-            if (!this.currentComplex) {
-                console.warn(`⚠️ Complex '${complexCode}' not found, using first active complex`);
-                this.currentComplex = result.data.find(c => c.is_active);
+            if (listResult.success && listResult.data && listResult.data.length > 0) {
+                // is_active 기준 필터
+                this.currentComplex = listResult.data.find(c => c.is_active) || listResult.data[0];
+                this.complexSettings = this.currentComplex;
+                this.initialized = true;
+                console.log('✅ Using first available complex:', this.currentComplex.name || this.currentComplex.code);
+                this.applyBranding();
+                return this.currentComplex;
             }
             
-            // 그래도 없으면 첫 번째 단지
-            if (!this.currentComplex) {
-                this.currentComplex = result.data[0];
-            }
-            
-            this.complexSettings = this.currentComplex;
-            this.initialized = true;
-            
-            console.log('✅ Complex loaded:', this.currentComplex);
-            
-            // 브랜딩 적용
-            this.applyBranding();
-            
-            return this.currentComplex;
+            throw new Error('No complexes found');
             
         } catch (error) {
             console.error('❌ Error loading complex settings:', error);
             // 기본 설정 사용
             this.currentComplex = {
                 id: 'default',
-                complex_name: '필라테스 센터',
-                complex_code: 'default',
+                name: '필라테스 센터',
+                code: complexCode,
                 is_active: true,
                 primary_color: '#667eea'
             };
@@ -73,7 +74,7 @@ class ComplexContext {
     
     // 현재 단지 코드 가져오기 (프로그램 필터링 용)
     getComplexCode() {
-        return this.currentComplex ? this.currentComplex.complex_code : null;
+        return this.currentComplex ? this.currentComplex.code : null;
     }
     
     // 현재 단지 정보 가져오기
@@ -85,31 +86,29 @@ class ComplexContext {
     applyBranding() {
         if (!this.currentComplex) return;
         
-        const { complex_name, primary_color, logo_url } = this.currentComplex;
+        const { name, primary_color, logo_url } = this.currentComplex;
+        const displayName = name || this.currentComplex.complex_name || '필라테스 센터';
         
         // 페이지 타이틀 변경
-        document.title = `${complex_name} - 필라테스 레슨 신청`;
+        document.title = `${displayName} - 필라테스 레슨 신청`;
         
         // 헤더 h1 태그 찾아서 텍스트 변경
         const headerH1 = document.querySelector('.header h1');
         if (headerH1) {
-            headerH1.textContent = complex_name;
-        }
-        
-        // 로고 이미지가 있으면 적용
-        if (logo_url) {
-            const headerH1 = document.querySelector('.header h1');
-            if (headerH1) {
-                headerH1.innerHTML = `<img src="${logo_url}" alt="${complex_name}" style="max-height: 60px; margin-right: 10px;">`;
+            if (logo_url) {
+                headerH1.innerHTML = `<img src="${logo_url}" alt="${displayName}" style="max-height: 60px; margin-right: 10px;">`;
+            } else {
+                headerH1.textContent = displayName;
             }
         }
         
         // 주요 색상 적용 (CSS 변수 사용)
-        if (primary_color) {
-            document.documentElement.style.setProperty('--primary-color', primary_color);
+        const color = primary_color || this.currentComplex.primaryColor;
+        if (color) {
+            document.documentElement.style.setProperty('--primary-color', color);
         }
         
-        console.log('🎨 Branding applied:', complex_name);
+        console.log('🎨 Branding applied:', displayName);
     }
     
     // API 호출 시 사용할 필터 파라미터

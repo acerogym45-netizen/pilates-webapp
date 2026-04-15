@@ -243,78 +243,55 @@ async function submitContract() {
         const isDuplicate = await checkDuplicateApplication(contractData);
         
         if (isDuplicate) {
-            // 중복 신청인 경우 모달 표시
             showDuplicateWarningModal(contractData);
             console.log('❌ Duplicate application detected - submission cancelled');
-            return; // 제출 중단
+            return;
         }
         
         console.log('✅ No duplicate found - proceeding with submission');
         
-        // === B. 정원 체크 및 대기열 로직 ===
-        const capacityCheck = await checkProgramCapacity(contractData);
+        // 신규 /api/applications 엔드포인트로 POST
+        const submitPayload = {
+            complex_id: complexContext.getComplexId(),
+            dong: contractData.dong,
+            ho: contractData.ho,
+            name: contractData.name,
+            phone: contractData.phone,
+            program_name: contractData.lesson_type,
+            preferred_time: contractData.preferred_time,
+            signature_name: contractData.signature,        // 서버 필드명
+            signature_data: contractData.signature_image,  // 서버 필드명
+            signature_date: contractData.signature_date,
+            terms_agreement: contractData.terms_agreement,
+            agreement: contractData.terms_agreement
+        };
         
-        if (capacityCheck.isFull) {
-            console.log('⚠️ Program full - adding to waiting list');
-            
-            // 대기열에 추가
-            contractData.status = 'waiting';
-            contractData.waiting_order = capacityCheck.nextWaitingOrder;
-            contractData.auto_approved = false;
-            
-            console.log(`📋 Waiting list order: ${contractData.waiting_order}`);
-            
-            const response = await fetch('tables/pilates_contracts', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(contractData)
-            });
-            
-            if (response.ok) {
-                const result = await response.json();
-                console.log('✅ Added to waiting list:', result);
-                showWaitingListModal(contractData);
-            } else {
-                throw new Error(`Failed to add to waiting list: ${response.status}`);
-            }
-            
-            return;
-        }
+        console.log('🚀 Sending POST request to: /api/applications');
         
-        // 정원 여유 있음 - 자동 승인
-        console.log('✅ Capacity available - auto-approving');
-        contractData.status = 'approved';
-        contractData.auto_approved = true;
-        contractData.waiting_order = null;
-        
-        console.log('🚀 Sending POST request to: tables/pilates_contracts');
-        
-        const response = await fetch('tables/pilates_contracts', {
+        const response = await fetch('/api/applications', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(contractData)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(submitPayload)
         });
         
         console.log('📡 Response status:', response.status, response.statusText);
         
-        if (response.ok) {
-            const result = await response.json();
-            console.log('✅ Contract submitted and auto-approved successfully:', result);
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            console.log('✅ Application submitted:', result);
+            contractData.status = result.data?.status || 'approved';
+            contractData.waiting_order = result.data?.waiting_order;
             
-            // 🆕 자동 승인 안내 모달
-            showSuccessNotificationModal(contractData);
+            if (contractData.status === 'waiting') {
+                showWaitingListModal(contractData);
+            } else {
+                showSuccessNotificationModal(contractData);
+            }
         } else {
-            const errorText = await response.text();
-            console.error('❌ Submit failed:', {
-                status: response.status,
-                statusText: response.statusText,
-                errorText: errorText
-            });
-            throw new Error(`Failed to submit contract: ${response.status} ${response.statusText}`);
+            const errorMsg = result.error || `Failed: ${response.status} ${response.statusText}`;
+            console.error('❌ Submit failed:', errorMsg);
+            throw new Error(errorMsg);
         }
     } catch (error) {
         console.error('💥 Error submitting contract:', error);
@@ -331,7 +308,7 @@ async function submitContract() {
 // 🆕 중복 신청 검사 함수
 async function checkDuplicateApplication(contractData) {
     try {
-        const complexCode = contractData.complex_id;
+        const complexCode = complexContext.getComplexCode();
         const dong = contractData.dong;
         const ho = contractData.ho;
         const name = contractData.name;
@@ -339,28 +316,19 @@ async function checkDuplicateApplication(contractData) {
         
         console.log(`🔍 Checking duplicates for: ${dong}동 ${ho}호 ${name} - ${lessonType}`);
         
-        // 모든 계약 조회
-        const response = await fetch('tables/pilates_contracts?limit=1000');
+        // /api/applications 엔드포인트로 조회
+        const params = new URLSearchParams({ complexCode, dong, ho, status: 'approved', limit: 50 });
+        const response = await fetch(`/api/applications?${params}`);
         const result = await response.json();
         const contracts = result.data || [];
         
-        // 동일 단지 + 동일인(동/호/이름) + 동일 프로그램 + 승인 상태인 계약 찾기
-        const duplicates = contracts.filter(contract => 
-            contract.complex_id === complexCode &&
-            contract.dong === dong &&
-            contract.ho === ho &&
-            contract.name === name &&
-            contract.lesson_type === lessonType &&
-            contract.status === 'approved'  // 승인된 신청만 중복으로 간주 (영문)
+        const duplicates = contracts.filter(c =>
+            c.name === name &&
+            (c.program_name === lessonType || c.lesson_type === lessonType)
         );
         
         if (duplicates.length > 0) {
-            console.log(`⚠️ Found ${duplicates.length} duplicate(s):`, duplicates.map(d => ({
-                id: d.id.substring(0, 8),
-                created_at: new Date(d.created_at).toLocaleString(),
-                lesson_type: d.lesson_type,
-                status: d.status
-            })));
+            console.log(`⚠️ Found ${duplicates.length} duplicate(s)`);
             return true;
         }
         
@@ -369,82 +337,13 @@ async function checkDuplicateApplication(contractData) {
         
     } catch (error) {
         console.error('❌ Error checking duplicates:', error);
-        // 에러 발생 시 안전하게 false 반환 (중복 체크 실패 시 신청 허용)
         return false;
     }
 }
 
-// 🆕 B. 정원 체크 함수
+// 🆕 B. 정원 체크 (서버에서 자동 처리됨)
 async function checkProgramCapacity(contractData) {
-    try {
-        const complexCode = contractData.complex_id;
-        const lessonType = contractData.lesson_type;
-        
-        console.log(`📊 Checking capacity for: ${lessonType}`);
-        
-        // 1. 프로그램 정보 조회 (최대 정원)
-        const programsResponse = await fetch('tables/programs?limit=100');
-        const programsResult = await programsResponse.json();
-        const programs = programsResult.data || [];
-        
-        // 프로그램명 유연한 매칭
-        const targetProgram = programs.find(p => 
-            p.complex_id === complexCode && 
-            p.is_active && 
-            (p.program_name === lessonType || p.program_name.includes(lessonType) || lessonType.includes(p.program_name))
-        );
-        
-        if (!targetProgram) {
-            console.warn('⚠️ Program not found - allowing submission');
-            return { isFull: false, currentCount: 0, maxCapacity: 999, nextWaitingOrder: 1 };
-        }
-        
-        const maxCapacity = targetProgram.max_capacity || 6;
-        console.log(`📋 Program max capacity: ${maxCapacity}`);
-        
-        // 2. 현재 승인된 신청 수 조회
-        const contractsResponse = await fetch('tables/pilates_contracts?limit=1000');
-        const contractsResult = await contractsResponse.json();
-        const allContracts = contractsResult.data || [];
-        
-        // 동일 단지 + 동일 프로그램 + 승인 상태
-        const approvedContracts = allContracts.filter(c => 
-            c.complex_id === complexCode &&
-            c.status === 'approved' &&
-            (c.lesson_type === lessonType || c.lesson_type.includes(lessonType) || lessonType.includes(c.lesson_type))
-        );
-        
-        const currentCount = approvedContracts.length;
-        console.log(`✅ Current approved contracts: ${currentCount}/${maxCapacity}`);
-        
-        // 3. 대기열 순번 계산
-        const waitingContracts = allContracts.filter(c =>
-            c.complex_id === complexCode &&
-            c.status === 'waiting' &&
-            (c.lesson_type === lessonType || c.lesson_type.includes(lessonType) || lessonType.includes(c.lesson_type))
-        );
-        
-        const nextWaitingOrder = waitingContracts.length > 0 
-            ? Math.max(...waitingContracts.map(c => c.waiting_order || 0)) + 1 
-            : 1;
-        
-        console.log(`📝 Next waiting order: ${nextWaitingOrder}`);
-        
-        // 4. 정원 초과 여부
-        const isFull = currentCount >= maxCapacity;
-        
-        return {
-            isFull,
-            currentCount,
-            maxCapacity,
-            nextWaitingOrder
-        };
-        
-    } catch (error) {
-        console.error('❌ Error checking capacity:', error);
-        // 에러 시 안전하게 허용
-        return { isFull: false, currentCount: 0, maxCapacity: 999, nextWaitingOrder: 1 };
-    }
+    return { isFull: false, currentCount: 0, maxCapacity: 999, nextWaitingOrder: 1 };
 }
 
 // Initialize signature pad
@@ -487,16 +386,18 @@ async function loadTimeSlotStatus() {
         }
         
         // Load programs to get group lesson programs
-        const programsResponse = await fetch('tables/programs?limit=100&sort=display_order');
+        const programsResponse = await fetch(`/api/programs?complexCode=${complexCode}&activeOnly=true`);
         const programsResult = await programsResponse.json();
         const programs = (programsResult.data || [])
-            .filter(p => p.is_active && p.complex_id === complexCode)
-            .filter(p => !p.program_name.includes('1:1') && !p.program_name.includes('2:1')); // Only group lessons
+            .filter(p => {
+                const n = p.name || p.program_name || '';
+                return !n.includes('1:1') && !n.includes('2:1');
+            }); // Only group lessons
         
-        // Load contracts
-        const response = await fetch('tables/pilates_contracts?limit=1000');
+        // Load approved applications
+        const response = await fetch(`/api/applications?complexCode=${complexCode}&status=approved&limit=1000`);
         const result = await response.json();
-        const contracts = (result.data || []).filter(c => c.complex_id === complexCode);
+        const contracts = result.data || [];
         
         console.log('📊 Loading time slot status...');
         console.log('Total contracts for complex:', contracts.length);
@@ -542,15 +443,16 @@ async function loadTimeSlotStatus() {
                 timeSlotCounts['저녁 21시'] = 0;
             }
             
-            programTimeSlots[program.program_name] = timeSlotCounts;
-            console.log(`🔧 Initialized time slots for "${program.program_name}":`, Object.keys(timeSlotCounts));
+            const pKey = program.name || program.program_name;
+            programTimeSlots[pKey] = timeSlotCounts;
+            console.log(`🔧 Initialized time slots for "${pKey}":`, Object.keys(timeSlotCounts));
         });
         
         // Count approved contracts only (status === 'approved')
         contracts.forEach(contract => {
             if (contract.status === 'approved') {
                 let time = contract.preferred_time;
-                let program = contract.lesson_type;
+                let program = contract.program_name || contract.lesson_type;
                 
                 console.log(`🔍 Processing contract: ${contract.name}, program: "${program}", time: "${time}"`);
                 
@@ -812,12 +714,21 @@ async function submitInquiry(e) {
     };
     
     try {
-        const response = await fetch('tables/pilates_inquiries', {
+        const response = await fetch('/api/inquiries', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(inquiryData)
+            body: JSON.stringify({
+                complex_id: inquiryData.complex_id,
+                dong: inquiryData.dong,
+                ho: inquiryData.ho,
+                name: inquiryData.name,
+                phone: inquiryData.phone,
+                title: inquiryData.title,
+                content: inquiryData.content,
+                is_public: inquiryData.is_public
+            })
         });
         
         if (response.ok) {
@@ -922,14 +833,14 @@ async function loadPublicInquiries() {
             return;
         }
         
-        const response = await fetch('tables/pilates_inquiries?limit=100&sort=-created_at');
+        const params = new URLSearchParams({ complexId, limit: 100 });
+        const response = await fetch(`/api/inquiries?${params}`);
         const result = await response.json();
         const inquiries = result.data || [];
         
-        // Filter: public + same complex + not hidden + not deleted
+        // Filter: public + not hidden + not deleted
         const publicInquiries = inquiries.filter(inq => 
             inq.is_public && 
-            inq.complex_id === complexId &&
             !inq.is_hidden &&
             !inq.is_deleted
         );
@@ -1072,15 +983,12 @@ async function populateCancellationPrograms() {
         
         console.log('📋 Loading programs for cancellation modal...');
         
-        // Fetch active programs
-        const response = await fetch('tables/programs?limit=100&sort=display_order');
+        // Fetch active programs via /api/programs
+        const response = await fetch(`/api/programs?complexCode=${complexCode}&activeOnly=true`);
         const result = await response.json();
         const programs = result.data || [];
         
-        // Filter by complex and active status
-        const complexPrograms = programs.filter(p => 
-            p.complex_id === complexCode && p.is_active
-        );
+        const complexPrograms = programs.filter(p => p.is_active !== false);
         
         console.log(`✅ Found ${complexPrograms.length} active programs for cancellation`);
         
@@ -1091,9 +999,10 @@ async function populateCancellationPrograms() {
         
         // Add program options
         complexPrograms.forEach(program => {
+            const pName = program.name || program.program_name;
             const option = document.createElement('option');
-            option.value = program.program_name;
-            option.textContent = program.program_name;
+            option.value = pName;
+            option.textContent = pName;
             selectElement.appendChild(option);
         });
         
@@ -1157,19 +1066,18 @@ async function submitCancellation(e) {
         ho: document.getElementById('cancelHo').value,
         name: document.getElementById('cancelName').value,
         phone: document.getElementById('cancelPhone').value,
-        lesson_type: document.getElementById('cancelLessonType').value,
+        program_name: document.getElementById('cancelLessonType').value,  // 서버 필드명
         reason: document.getElementById('cancelReason').value,
         reason_detail: document.getElementById('cancelReasonDetail').value || '',
-        status: 'approved',  // ✅ 자동 승인
-        admin_note: `자동 승인 (${currentMonth}월 ${currentDay}일 접수)`,
-        created_at: new Date().toISOString(),
-        approved_at: new Date().toISOString()
+        status: 'pending',  // 서버에서 pending으로 처리
+        created_at: new Date().toISOString()
     };
     
     console.log('📝 Submitting cancellation (auto-approved):', cancellationData);
     
     try {
-        const response = await fetch('tables/pilates_cancellations', {
+        cancellationData.complex_id = complexContext.getComplexId();
+        const response = await fetch('/api/cancellations', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1181,7 +1089,7 @@ async function submitCancellation(e) {
         
         if (response.ok) {
             console.log('✅ Cancellation auto-approved successfully');
-            alert(`✅ 해지 신청이 자동 승인되었습니다.\n\n프로그램: ${cancellationData.lesson_type}\n접수일: ${currentMonth}월 ${currentDay}일\n\n궁금하신 사항은 문의처에 접수해주세요.\n감사합니다! 😊`);
+            alert(`✅ 해지 신청이 접수되었습니다.\n\n프로그램: ${cancellationData.program_name}\n접수일: ${currentMonth}월 ${currentDay}일\n\n궁금하신 사항은 문의처에 접수해주세요.\n감사합니다! 😊`);
             closeCancellationModal();
         } else {
             const errorText = await response.text();
@@ -1206,11 +1114,12 @@ async function loadNotices() {
             return;
         }
         
-        const response = await fetch('tables/notices?limit=100');
+        const noticeParams = new URLSearchParams({ complexCode, limit: 100 });
+        const response = await fetch(`/api/notices?${noticeParams}`);
         const result = await response.json();
         
         const notices = (result.data || [])
-            .filter(n => n.is_active && n.complex_id === complexCode)  // Filter by complex_code
+            .filter(n => n.is_active)
             .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
         
         console.log(`📢 Loaded ${notices.length} active notices for complex ${complexCode}`);
@@ -1275,37 +1184,33 @@ async function loadPrograms() {
             return;
         }
         
-        // Fetch programs
-        const response = await fetch('tables/programs?limit=100&sort=display_order');
+        // /api/programs 엔드포인트로 단지별 프로그램 조회
+        const response = await fetch(`/api/programs?complexCode=${complexCode}`);
         const result = await response.json();
         
-        // Fetch approved contracts to calculate current count
-        const contractsResponse = await fetch('tables/pilates_contracts?limit=1000');
+        // 승인된 신청 수 조회
+        const contractsResponse = await fetch(`/api/applications?complexCode=${complexCode}&status=approved&limit=1000`);
         const contractsResult = await contractsResponse.json();
-        const approvedContracts = (contractsResult.data || []).filter(c => 
-            c.status === 'approved' && c.complex_id === complexCode
-        );
+        const approvedContracts = contractsResult.data || [];
         
         console.log(`📊 Found ${approvedContracts.length} approved contracts for complex ${complexCode}`);
         
         // Filter programs: active OR (inactive but display_on_inactive=true)
         const programs = (result.data || [])
-            .filter(p => {
-                if (p.complex_id !== complexCode) return false;
-                // Show if active, or if inactive but display_on_inactive is true
-                return p.is_active || p.display_on_inactive;
-            })
+            .filter(p => p.is_active || p.display_on_inactive)
             .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
         
         console.log(`✅ Filtered programs: ${programs.length} (active or display_on_inactive)`);
         
         // Calculate current count for each program based on approved contracts
         programs.forEach(program => {
+            const pName = program.name || program.program_name;
             const count = approvedContracts.filter(c => 
-                c.lesson_type === program.program_name
+                (c.program_name || c.lesson_type) === pName
             ).length;
             program.current_count = count;
-            console.log(`📌 Program "${program.program_name}": ${count}/${program.max_capacity} (승인된 신청자) - active: ${program.is_active}, display_on_inactive: ${program.display_on_inactive}`);
+            program._displayName = pName;
+            console.log(`📌 Program "${pName}": ${count}/${program.capacity || program.max_capacity} (승인된 신청자) - active: ${program.is_active}`);
         });
         
         console.log(`📋 Loaded ${programs.length} programs for complex ${complexCode}`);
@@ -1331,20 +1236,21 @@ function populateProgramOptions(programs) {
     lessonTypeSelect.innerHTML = '<option value="">선택하세요</option>';
     
     programs.forEach(program => {
+        const pName = program._displayName || program.name || program.program_name;
         const option = document.createElement('option');
-        option.value = program.program_name;
+        option.value = pName;
         
         const currentCount = program.current_count || 0;
-        const maxCapacity = program.max_capacity || 0;
+        const maxCapacity = program.capacity || program.max_capacity || 0;
         const isActive = program.is_active;
         
         // Check if it's 1:1 or 2:1 lesson
-        const isPersonalLesson = program.program_name.includes('1:1') || program.program_name.includes('2:1');
+        const isPersonalLesson = pName.includes('1:1') || pName.includes('2:1');
         
         // Build display text
-        let displayText = program.program_name;
-        if (program.schedule_times) {
-            displayText += ` (${program.schedule_times})`;
+        let displayText = pName;
+        if (program.days) {
+            displayText += ` (${program.days})`;
         }
         if (program.price) {
             displayText += ` - ${formatPrice(program.price)}원/월`;
@@ -1366,14 +1272,14 @@ function populateProgramOptions(programs) {
         
         // Store program data as data attributes
         option.dataset.programId = program.id;
-        option.dataset.programType = program.program_type;
+        option.dataset.programType = program.type || program.program_type;
         option.dataset.maxCapacity = maxCapacity;
         option.dataset.currentCount = currentCount;
         option.dataset.price = program.price;
-        option.dataset.scheduleDays = program.schedule_days;
-        option.dataset.scheduleTimes = program.schedule_times;
+        option.dataset.scheduleDays = program.days || program.schedule_days;
+        option.dataset.scheduleTimes = program.days || program.schedule_times;
         option.dataset.isPersonalLesson = isPersonalLesson;
-        option.dataset.availableTimeSlots = JSON.stringify(program.available_time_slots || []);
+        option.dataset.availableTimeSlots = JSON.stringify(program.time_slots || program.available_time_slots || []);
         option.dataset.isActive = isActive;
         
         lessonTypeSelect.appendChild(option);
@@ -1448,23 +1354,17 @@ async function checkAdminPassword() {
             return;
         }
         
-        // Load complex settings to get admin_password
-        const response = await fetch(`tables/complex_settings?limit=100`);
+        // /api/complexes/verify-password 로 검증
+        const complexCode = complexContext.getComplexCode();
+        const response = await fetch('/api/complexes/verify-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ complexCode, password })
+        });
         const result = await response.json();
         
-        const complex = (result.data || []).find(c => c.id === complexId);
-        
-        if (!complex) {
-            console.error('❌ Complex not found:', complexId);
-            errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i> 단지 정보를 찾을 수 없습니다';
-            errorMsg.style.display = 'block';
-            return;
-        }
-        
-        const correctPassword = complex.admin_password || 'admin1234'; // 기본 비밀번호
-        
-        if (password === correctPassword) {
-            console.log('✅ Password correct! Redirecting to admin page...');
+        if (result.success) {
+            console.log('✅ Password correct! Role:', result.role);
             closeAdminPasswordModal();
             
             // Visual feedback
@@ -1473,8 +1373,12 @@ async function checkAdminPassword() {
                 logoText.style.color = '#27ae60';
             }
             
+            // 관리자 세션 저장
+            sessionStorage.setItem('adminRole', result.role);
+            sessionStorage.setItem('adminComplex', JSON.stringify(result.complex || {}));
+            
             setTimeout(() => {
-                window.location.href = 'admin-main.html';
+                window.location.href = '/admin/';
             }, 200);
         } else {
             console.log('❌ Incorrect password');
@@ -1550,19 +1454,17 @@ async function loadCurriculum() {
         
         console.log(`📅 Loading curriculum for ${year}-${month}, complex: ${complexId}`);
         
-        // Fetch curriculums
-        const response = await fetch('tables/curriculums?limit=100');
+        // /api/curricula 엔드포인트로 조회
+        const currParams = new URLSearchParams({ complexCode: complexId, limit: 100 });
+        const response = await fetch(`/api/curricula?${currParams}`);
         const result = await response.json();
         const curriculums = result.data || [];
         
         console.log(`✅ Fetched ${curriculums.length} total curriculums`);
-        console.log('🔍 All curriculums:', curriculums);
         
-        // Filter by complex, year, month, and active status
+        // Filter by year, month, and active status
         const targetCurriculum = curriculums.find(c => {
-            console.log(`Checking curriculum: complex=${c.complex_id}, year=${c.year}, month=${c.month}, active=${c.is_active}`);
-            return c.complex_id === complexId &&
-                c.year === parseInt(year) &&
+            return c.year === parseInt(year) &&
                 c.month === parseInt(month) &&
                 c.is_active;
         });
