@@ -1,6 +1,13 @@
 node_modules
 .git
 database.sqlite
-old_files
+data/
 *.log
 .pm2
+pilates-webapp-github.tar.gz
+scripts/
+migrations/
+dist/
+src/
+*.md
+!README.md

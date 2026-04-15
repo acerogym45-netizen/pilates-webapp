@@ -12,16 +12,28 @@
       "dest": "/api/index.js"
     },
     {
-      "src": "/admin/(.*)",
+      "src": "/admin$",
+      "dest": "/admin/index.html"
+    },
+    {
+      "src": "/admin/index.html",
+      "dest": "/admin/index.html"
+    },
+    {
+      "src": "/admin/(.+\\.(js|css|html|png|jpg|ico|svg|woff|woff2|ttf))",
       "dest": "/admin/$1"
     },
     {
-      "src": "/uploads/(.*)",
-      "dest": "/api/index.js"
+      "src": "/admin/(.*)",
+      "dest": "/admin/index.html"
+    },
+    {
+      "src": "/(.*\\.(js|css|html|png|jpg|ico|svg|woff|woff2|ttf|json))",
+      "dest": "/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "/$1"
+      "dest": "/index.html"
     }
   ]
 }
