@@ -30,3 +30,12 @@ old_files/
 .DS_Store
 data/
 *.db
+
+# Large binary files
+database.sqlite
+*.sqlite
+*.tar.gz
+*.tar
+ecosystem.config.cjs
+push-to-github.sh
+test_api.sh
