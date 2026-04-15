@@ -1,124 +1,61 @@
 /**
- * 단지(Complex) API 라우터
+ * 단지(Complex) API 라우터 - Supabase 버전
  */
 const express = require('express');
 const router = express.Router();
-const { getDb } = require('../database');
-const { v4: uuidv4 } = require('uuid');
+const { getSupabase, sbErr } = require('../db-supabase');
 
-// 전체 단지 목록
-router.get('/', (req, res) => {
+// ── 전체 단지 목록 ────────────────────────────────────────────
+router.get('/', async (req, res) => {
     try {
-        const db = getDb();
-        const rows = db.prepare('SELECT * FROM complexes ORDER BY name').all();
-        res.json({ success: true, data: rows });
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('complexes')
+            .select('*')
+            .order('name');
+        if (error) throw sbErr(error, 'GET /complexes');
+        res.json({ success: true, data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 단지 코드로 조회
-router.get('/by-code/:code', (req, res) => {
+// ── 단지 코드로 조회 ──────────────────────────────────────────
+router.get('/by-code/:code', async (req, res) => {
     try {
-        const db = getDb();
-        const row = db.prepare('SELECT * FROM complexes WHERE code = ?').get(req.params.code);
-        if (!row) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
-        res.json({ success: true, data: row });
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('complexes')
+            .select('*')
+            .eq('code', req.params.code)
+            .single();
+        if (error) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+        res.json({ success: true, data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 단지 ID로 조회
-router.get('/:id', (req, res) => {
-    try {
-        const db = getDb();
-        const row = db.prepare('SELECT * FROM complexes WHERE id = ?').get(req.params.id);
-        if (!row) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
-        res.json({ success: true, data: row });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
-// 단지 생성
-router.post('/', (req, res) => {
-    try {
-        const { masterPassword } = req.body;
-        if (masterPassword !== process.env.MASTER_PASSWORD) {
-            return res.status(403).json({ success: false, error: '마스터 비밀번호가 올바르지 않습니다' });
-        }
-        const db = getDb();
-        const id = uuidv4();
-        const { code, name, address, primary_color, admin_password } = req.body;
-        if (!code || !name) return res.status(400).json({ success: false, error: 'code, name 필수' });
-
-        db.prepare(`
-            INSERT INTO complexes (id, code, name, address, primary_color, admin_password)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `).run(id, code, name, address || '', primary_color || '#667eea', admin_password || 'admin1234');
-
-        const created = db.prepare('SELECT * FROM complexes WHERE id = ?').get(id);
-        res.status(201).json({ success: true, data: created });
-    } catch (e) {
-        if (e.message.includes('UNIQUE')) {
-            return res.status(409).json({ success: false, error: '이미 존재하는 단지 코드입니다' });
-        }
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
-// 단지 수정
-router.put('/:id', (req, res) => {
-    try {
-        const { masterPassword } = req.body;
-        if (masterPassword !== process.env.MASTER_PASSWORD) {
-            return res.status(403).json({ success: false, error: '마스터 비밀번호가 올바르지 않습니다' });
-        }
-        const db = getDb();
-        const { name, address, primary_color, admin_password, is_active } = req.body;
-        db.prepare(`
-            UPDATE complexes 
-            SET name=?, address=?, primary_color=?, admin_password=?, is_active=?, updated_at=datetime('now','localtime')
-            WHERE id=?
-        `).run(name, address, primary_color, admin_password, is_active ? 1 : 0, req.params.id);
-
-        const updated = db.prepare('SELECT * FROM complexes WHERE id = ?').get(req.params.id);
-        res.json({ success: true, data: updated });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
-// 단지 삭제
-router.delete('/:id', (req, res) => {
-    try {
-        const { masterPassword } = req.body;
-        if (masterPassword !== process.env.MASTER_PASSWORD) {
-            return res.status(403).json({ success: false, error: '마스터 비밀번호가 올바르지 않습니다' });
-        }
-        const db = getDb();
-        db.prepare('DELETE FROM complexes WHERE id = ?').run(req.params.id);
-        res.json({ success: true, message: '삭제되었습니다' });
-    } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
-// 비밀번호 검증
-router.post('/verify-password', (req, res) => {
+// ── 비밀번호 검증 (마스터 / 일반 관리자) ──────────────────────
+router.post('/verify-password', async (req, res) => {
     try {
         const { complexCode, password } = req.body;
         if (!password) {
             return res.status(400).json({ success: false, error: '비밀번호를 입력하세요' });
         }
-        const db = getDb();
 
-        // 마스터 비밀번호 처리 (단지코드 없어도 OK)
+        // 마스터 비밀번호 처리
         if (password === process.env.MASTER_PASSWORD) {
-            const complex = complexCode
-                ? db.prepare('SELECT * FROM complexes WHERE code = ?').get(complexCode)
-                : null;
+            let complex = null;
+            if (complexCode) {
+                const sb = getSupabase();
+                const { data } = await sb
+                    .from('complexes')
+                    .select('*')
+                    .eq('code', complexCode)
+                    .single();
+                complex = data;
+            }
             return res.json({
                 success: true,
                 role: 'master',
@@ -130,8 +67,14 @@ router.post('/verify-password', (req, res) => {
             return res.status(400).json({ success: false, error: '단지코드를 입력하세요' });
         }
 
-        const complex = db.prepare('SELECT * FROM complexes WHERE code = ?').get(complexCode);
-        if (!complex) {
+        const sb = getSupabase();
+        const { data: complex, error } = await sb
+            .from('complexes')
+            .select('*')
+            .eq('code', complexCode)
+            .single();
+
+        if (error || !complex) {
             return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
         }
         if (complex.admin_password !== password) {
@@ -144,33 +87,132 @@ router.post('/verify-password', (req, res) => {
     }
 });
 
-// 내 단지 설정 수정 (일반 관리자 - admin_password로 인증)
-router.put('/:id/self', (req, res) => {
+// ── 단지 ID로 조회 ────────────────────────────────────────────
+router.get('/:id', async (req, res) => {
     try {
-        const db = getDb();
-        const existing = db.prepare('SELECT * FROM complexes WHERE id = ?').get(req.params.id);
-        if (!existing) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('complexes')
+            .select('*')
+            .eq('id', req.params.id)
+            .single();
+        if (error || !data) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+        res.json({ success: true, data });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
+// ── 단지 생성 ─────────────────────────────────────────────────
+router.post('/', async (req, res) => {
+    try {
+        const { masterPassword, code, name, address, primary_color, admin_password } = req.body;
+        if (masterPassword !== process.env.MASTER_PASSWORD) {
+            return res.status(403).json({ success: false, error: '마스터 비밀번호가 올바르지 않습니다' });
+        }
+        if (!code || !name) return res.status(400).json({ success: false, error: 'code, name 필수' });
+
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('complexes')
+            .insert({
+                code,
+                name,
+                address: address || '',
+                primary_color: primary_color || '#667eea',
+                admin_password: admin_password || 'admin1234'
+            })
+            .select()
+            .single();
+
+        if (error) {
+            if (error.message.includes('unique') || error.code === '23505') {
+                return res.status(409).json({ success: false, error: '이미 존재하는 단지 코드입니다' });
+            }
+            throw sbErr(error, 'POST /complexes');
+        }
+        res.status(201).json({ success: true, data });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 단지 수정 ─────────────────────────────────────────────────
+router.put('/:id', async (req, res) => {
+    try {
+        const { masterPassword, name, address, primary_color, admin_password, is_active } = req.body;
+        if (masterPassword !== process.env.MASTER_PASSWORD) {
+            return res.status(403).json({ success: false, error: '마스터 비밀번호가 올바르지 않습니다' });
+        }
+
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('complexes')
+            .update({ name, address, primary_color, admin_password, is_active: Boolean(is_active) })
+            .eq('id', req.params.id)
+            .select()
+            .single();
+
+        if (error) throw sbErr(error, 'PUT /complexes/:id');
+        res.json({ success: true, data });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 단지 삭제 ─────────────────────────────────────────────────
+router.delete('/:id', async (req, res) => {
+    try {
+        const { masterPassword } = req.body;
+        if (masterPassword !== process.env.MASTER_PASSWORD) {
+            return res.status(403).json({ success: false, error: '마스터 비밀번호가 올바르지 않습니다' });
+        }
+
+        const sb = getSupabase();
+        const { error } = await sb
+            .from('complexes')
+            .delete()
+            .eq('id', req.params.id);
+
+        if (error) throw sbErr(error, 'DELETE /complexes/:id');
+        res.json({ success: true, message: '삭제되었습니다' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 내 단지 설정 수정 (일반 관리자) ──────────────────────────
+router.put('/:id/self', async (req, res) => {
+    try {
         const { currentPassword, name, address, primary_color, new_password } = req.body;
+        const sb = getSupabase();
 
-        // 현재 비밀번호 or 마스터 비밀번호로 인증
+        const { data: existing, error: fetchErr } = await sb
+            .from('complexes')
+            .select('*')
+            .eq('id', req.params.id)
+            .single();
+
+        if (fetchErr || !existing) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+
         if (currentPassword !== existing.admin_password && currentPassword !== process.env.MASTER_PASSWORD) {
             return res.status(403).json({ success: false, error: '현재 비밀번호가 올바르지 않습니다' });
         }
 
-        const updatedName    = name    || existing.name;
-        const updatedAddr    = address !== undefined ? address : existing.address;
-        const updatedColor   = primary_color || existing.primary_color;
-        const updatedPw      = new_password || existing.admin_password;
+        const { data, error } = await sb
+            .from('complexes')
+            .update({
+                name: name || existing.name,
+                address: address !== undefined ? address : existing.address,
+                primary_color: primary_color || existing.primary_color,
+                admin_password: new_password || existing.admin_password
+            })
+            .eq('id', req.params.id)
+            .select()
+            .single();
 
-        db.prepare(`
-            UPDATE complexes
-            SET name=?, address=?, primary_color=?, admin_password=?, updated_at=datetime('now','localtime')
-            WHERE id=?
-        `).run(updatedName, updatedAddr, updatedColor, updatedPw, req.params.id);
-
-        const updated = db.prepare('SELECT * FROM complexes WHERE id = ?').get(req.params.id);
-        res.json({ success: true, data: updated });
+        if (error) throw sbErr(error, 'PUT /complexes/:id/self');
+        res.json({ success: true, data });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }

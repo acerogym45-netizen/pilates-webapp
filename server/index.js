@@ -1,7 +1,8 @@
 /**
- * 메인 서버 엔트리포인트
- * - 오류 발생 시 해당 라우터만 재시작 가능
- * - 각 모듈이 독립적으로 관리됨
+ * 메인 서버 엔트리포인트 - Supabase 버전 v3.0
+ * - SQLite → Supabase PostgreSQL 전환
+ * - 로컬 개발: .env의 SUPABASE_URL / SUPABASE_KEY 사용
+ * - 프로덕션(Vercel): 환경변수로 자동 연결
  */
 require('dotenv').config();
 const express = require('express');
@@ -9,8 +10,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
 const rateLimit = require('express-rate-limit');
-
-const { initializeSchema, seedDefaultData } = require('./database');
 
 // ── 라우터 import ─────────────────────────────────────────────────────────────
 const complexesRouter     = require('./routes/complexes');
@@ -20,19 +19,17 @@ const miscRouter          = require('./routes/misc');
 const uploadRouter        = require('./routes/upload');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // ── 미들웨어 ──────────────────────────────────────────────────────────────────
-app.use(helmet({
-    contentSecurityPolicy: false  // CSP를 별도로 관리하기 위해 비활성화
-}));
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Rate Limiting (API 보호)
+// Rate Limiting
 const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15분
+    windowMs: 15 * 60 * 1000,
     max: 500,
     standardHeaders: true,
     legacyHeaders: false,
@@ -41,7 +38,8 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 
 // ── 정적 파일 ─────────────────────────────────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../public/uploads');
+app.use('/uploads', express.static(uploadDir));
 app.use('/admin', express.static(path.join(__dirname, '../admin')));
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -54,15 +52,18 @@ app.use('/api/upload',       uploadRouter);
 
 // ── 헬스체크 ─────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        success: true, 
-        status: 'ok', 
+    const hasSupabase = !!(process.env.SUPABASE_URL && process.env.SUPABASE_KEY);
+    res.json({
+        success: true,
+        status: 'ok',
         timestamp: new Date().toISOString(),
-        version: '2.0.0'
+        version: '3.0.0',
+        database: hasSupabase ? 'supabase' : 'not-configured',
+        supabase_url: process.env.SUPABASE_URL ? process.env.SUPABASE_URL.replace(/https:\/\/([^.]+).*/, 'https://$1.supabase.co') : null
     });
 });
 
-// ── SPA 라우팅 (프론트엔드) ───────────────────────────────────────────────────
+// ── SPA 라우팅 ────────────────────────────────────────────────────────────────
 app.get('/admin/*', (req, res) => {
     res.sendFile(path.join(__dirname, '../admin/index.html'));
 });
@@ -79,38 +80,33 @@ app.use((err, req, res, next) => {
 
 // ── 서버 시작 ─────────────────────────────────────────────────────────────────
 async function startServer() {
-    try {
-        // DB 초기화 (서버 시작 시 1회)
-        initializeSchema();
-        seedDefaultData();
-        
-        app.listen(PORT, '0.0.0.0', () => {
-            console.log('');
-            console.log('🏢 ========================================');
-            console.log('   아파트 단지 QR 무인 응대 시스템 v2.0');
-            console.log('🏢 ========================================');
-            console.log(`✅ Server: http://localhost:${PORT}`);
-            console.log(`📱 입주민 페이지: http://localhost:${PORT}/`);
-            console.log(`🔧 관리자 페이지: http://localhost:${PORT}/admin/`);
-            console.log(`📡 API: http://localhost:${PORT}/api/`);
-            console.log('🏢 ========================================');
-            console.log('');
-        });
-    } catch (error) {
-        console.error('❌ Failed to start server:', error);
-        process.exit(1);
+    // Supabase 연결 확인
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+        console.warn('⚠️  SUPABASE_URL / SUPABASE_KEY 미설정');
+        console.warn('   .env 파일에 추가하거나 Vercel 환경변수를 설정하세요');
+        console.warn('   supabase-setup.sql을 Supabase SQL Editor에서 실행하세요');
+    } else {
+        console.log('✅ Supabase 연결 설정 확인됨:', supabaseUrl.replace(/https:\/\/([^.]+).*/, 'https://$1.supabase.co'));
     }
+
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log('');
+        console.log('🏢 ============================================');
+        console.log('   필라테스 단지 QR 관리 시스템 v3.0 (Supabase)');
+        console.log('🏢 ============================================');
+        console.log(`✅ Server: http://localhost:${PORT}`);
+        console.log(`📱 입주민 페이지: http://localhost:${PORT}/`);
+        console.log(`🔧 관리자 페이지: http://localhost:${PORT}/admin/`);
+        console.log(`📡 API: http://localhost:${PORT}/api/`);
+        console.log('🏢 ============================================');
+        console.log('');
+    });
 }
 
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-    console.log('📴 Shutting down gracefully...');
-    process.exit(0);
-});
-
-process.on('SIGINT', () => {
-    console.log('📴 Shutting down gracefully...');
-    process.exit(0);
-});
+process.on('SIGTERM', () => { console.log('📴 Shutting down...'); process.exit(0); });
+process.on('SIGINT',  () => { console.log('📴 Shutting down...'); process.exit(0); });
 
 startServer();
