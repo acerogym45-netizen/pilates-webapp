@@ -8,6 +8,12 @@
  *   UPLOAD_DIR    = /tmp/uploads
  */
 require('dotenv').config();
+
+// 환경변수 기본값 설정 (Vercel에서 설정 안 한 경우 fallback)
+if (!process.env.MASTER_PASSWORD) {
+    process.env.MASTER_PASSWORD = 'master2026';
+}
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

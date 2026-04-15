@@ -1,5 +1,5 @@
 /**
- * 파일 업로드 & CSV 가져오기 API
+ * 파일 업로드 & CSV 가져오기 API - Supabase 버전
  */
 const express = require('express');
 const router  = express.Router();
@@ -7,12 +7,17 @@ const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { getDb } = require('../database');
+const { getSupabase, sbErr } = require('../db-supabase');
 require('dotenv').config();
 
 /* ── 이미지 업로드 ─────────────────────────────────────────────────────── */
-const UPLOAD_DIR = process.env.UPLOAD_DIR || './public/uploads';
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+// Vercel 서버리스에서는 /tmp 디렉터리 사용
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/tmp/uploads';
+try {
+    if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+} catch (e) {
+    console.warn('UPLOAD_DIR 생성 실패 (무시):', e.message);
+}
 
 const imgStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, UPLOAD_DIR),
@@ -114,73 +119,68 @@ const STATUS_MAP = {
 /**
  * POST /api/upload/csv/applications
  * Body (multipart): file=<CSV>, complex_id=<uuid>, overwrite=<'true'|'false'>
- * overwrite=true 이면 동(dong)+호수(ho)+프로그램이 같은 기존 row를 업데이트
  */
-router.post('/csv/applications', uploadCsv.single('file'), (req, res) => {
+router.post('/csv/applications', uploadCsv.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, error: 'CSV 파일이 없습니다' });
         const { complex_id, overwrite } = req.body;
         if (!complex_id) return res.status(400).json({ success: false, error: 'complex_id 필수' });
 
-        const db = getDb();
-        const cx = db.prepare('SELECT id FROM complexes WHERE id = ?').get(complex_id);
-        if (!cx) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+        const sb = getSupabase();
+
+        // 단지 존재 확인
+        const { data: cx, error: cxErr } = await sb
+            .from('complexes').select('id').eq('id', complex_id).single();
+        if (cxErr || !cx) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
 
         const { rows } = parseCsv(req.file.buffer);
         if (!rows.length) return res.status(400).json({ success: false, error: 'CSV에 데이터가 없습니다' });
 
         let inserted = 0, updated = 0, skipped = 0;
 
-        const insertStmt = db.prepare(`
-            INSERT INTO applications
-              (id, complex_id, dong, ho, name, phone, program_name, preferred_time, status, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        const updateStmt = db.prepare(`
-            UPDATE applications
-            SET phone=?, preferred_time=?, status=?, notes=?, updated_at=datetime('now','localtime')
-            WHERE complex_id=? AND dong=? AND ho=? AND program_name=?
-        `);
-        const findStmt = db.prepare(`
-            SELECT id FROM applications
-            WHERE complex_id=? AND dong=? AND ho=? AND program_name=?
-            LIMIT 1
-        `);
-
-        const doImport = db.transaction(() => {
-            for (const row of rows) {
-                // 헤더 매핑
-                const mapped = {};
-                for (const [k, v] of Object.entries(row)) {
-                    const dbCol = APP_COL_MAP[k.trim()];
-                    if (dbCol) mapped[dbCol] = v;
-                }
-
-                const { dong, ho, name, phone, program_name,
-                        preferred_time = '', status = 'received', notes = '' } = mapped;
-
-                if (!dong || !ho || !name) { skipped++; continue; }
-
-                const normalStatus = STATUS_MAP[status] || 'received';
-                const existing = findStmt.get(complex_id, dong, ho, program_name || '');
-
-                if (existing) {
-                    if (overwrite === 'true') {
-                        updateStmt.run(phone, preferred_time, normalStatus, notes,
-                                       complex_id, dong, ho, program_name || '');
-                        updated++;
-                    } else {
-                        skipped++;
-                    }
-                } else {
-                    insertStmt.run(uuidv4(), complex_id, dong, ho, name, phone || '',
-                                   program_name || '', preferred_time, normalStatus, notes);
-                    inserted++;
-                }
+        for (const row of rows) {
+            const mapped = {};
+            for (const [k, v] of Object.entries(row)) {
+                const dbCol = APP_COL_MAP[k.trim()];
+                if (dbCol) mapped[dbCol] = v;
             }
-        });
 
-        doImport();
+            const { dong, ho, name, phone, program_name,
+                    preferred_time = '', status = 'received', notes = '' } = mapped;
+
+            if (!dong || !ho || !name) { skipped++; continue; }
+
+            const normalStatus = STATUS_MAP[status] || 'received';
+
+            // 기존 항목 확인
+            const { data: existing } = await sb
+                .from('applications')
+                .select('id')
+                .eq('complex_id', complex_id)
+                .eq('dong', dong)
+                .eq('ho', ho)
+                .eq('program_name', program_name || '')
+                .limit(1)
+                .single();
+
+            if (existing) {
+                if (overwrite === 'true') {
+                    await sb.from('applications')
+                        .update({ phone, preferred_time, status: normalStatus, notes, updated_at: new Date().toISOString() })
+                        .eq('id', existing.id);
+                    updated++;
+                } else {
+                    skipped++;
+                }
+            } else {
+                await sb.from('applications').insert({
+                    id: uuidv4(), complex_id, dong, ho, name,
+                    phone: phone || '', program_name: program_name || '',
+                    preferred_time, status: normalStatus, notes
+                });
+                inserted++;
+            }
+        }
 
         res.json({
             success: true,
@@ -198,15 +198,18 @@ router.post('/csv/applications', uploadCsv.single('file'), (req, res) => {
  * POST /api/upload/csv/inquiries
  * Body (multipart): file=<CSV>, complex_id=<uuid>
  */
-router.post('/csv/inquiries', uploadCsv.single('file'), (req, res) => {
+router.post('/csv/inquiries', uploadCsv.single('file'), async (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ success: false, error: 'CSV 파일이 없습니다' });
         const { complex_id } = req.body;
         if (!complex_id) return res.status(400).json({ success: false, error: 'complex_id 필수' });
 
-        const db = getDb();
-        const cx = db.prepare('SELECT id FROM complexes WHERE id = ?').get(complex_id);
-        if (!cx) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+        const sb = getSupabase();
+
+        // 단지 존재 확인
+        const { data: cx, error: cxErr } = await sb
+            .from('complexes').select('id').eq('id', complex_id).single();
+        if (cxErr || !cx) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
 
         const { rows } = parseCsv(req.file.buffer);
         if (!rows.length) return res.status(400).json({ success: false, error: 'CSV에 데이터가 없습니다' });
@@ -220,28 +223,22 @@ router.post('/csv/inquiries', uploadCsv.single('file'), (req, res) => {
 
         let inserted = 0, skipped = 0;
 
-        const insertStmt = db.prepare(`
-            INSERT INTO inquiries (id, complex_id, name, dong, ho, phone, title, content, answer, is_answered)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        const doImport = db.transaction(() => {
-            for (const row of rows) {
-                const mapped = {};
-                for (const [k, v] of Object.entries(row)) {
-                    const dbCol = INQ_COL_MAP[k.trim()];
-                    if (dbCol) mapped[dbCol] = v;
-                }
-                const { name, title, content, dong = '', ho = '',
-                        phone = '', answer = '' } = mapped;
-                if (!name || !title || !content) { skipped++; continue; }
-                insertStmt.run(uuidv4(), complex_id, name, dong, ho, phone,
-                               title, content, answer, answer ? 1 : 0);
-                inserted++;
+        for (const row of rows) {
+            const mapped = {};
+            for (const [k, v] of Object.entries(row)) {
+                const dbCol = INQ_COL_MAP[k.trim()];
+                if (dbCol) mapped[dbCol] = v;
             }
-        });
+            const { name, title, content, dong = '', ho = '',
+                    phone = '', answer = '' } = mapped;
+            if (!name || !title || !content) { skipped++; continue; }
 
-        doImport();
+            await sb.from('inquiries').insert({
+                id: uuidv4(), complex_id, name, dong, ho, phone,
+                title, content, answer, is_answered: answer ? true : false
+            });
+            inserted++;
+        }
 
         res.json({
             success: true,

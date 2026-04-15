@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.103.0",
-    "better-sqlite3": "^9.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
     "express": "^4.18.2",
