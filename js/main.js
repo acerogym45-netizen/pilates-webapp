@@ -1146,24 +1146,24 @@ function displayNotices(notices) {
     section.style.display = 'block';
     
     container.innerHTML = notices.map(notice => {
-        const categoryClass = notice.category === '중요' ? 'important' : 
-                             notice.category === '이벤트' ? 'event' : 'general';
+        const category = notice.category || (notice.is_pinned ? '중요' : '일반');
+        const categoryClass = category === '중요' ? 'important' : 
+                             category === '이벤트' ? 'event' : 'general';
         
         return `
             <div class="notice-item ${categoryClass}">
                 <div class="notice-header">
                     <div class="notice-title">
-                        ${notice.category === '중요' ? '<i class="fas fa-exclamation-circle"></i>' : 
-                          notice.category === '이벤트' ? '<i class="fas fa-gift"></i>' : 
+                        ${notice.is_pinned ? '<i class="fas fa-exclamation-circle"></i>' : 
                           '<i class="fas fa-info-circle"></i>'}
-                        ${escapeHtml(notice.title)}
+                        ${escapeHtml(notice.title || '')}
                     </div>
                     <span class="notice-category ${categoryClass.toLowerCase()}">
-                        ${escapeHtml(notice.category)}
+                        ${escapeHtml(category)}
                     </span>
                 </div>
                 <div class="notice-content">
-                    ${escapeHtml(notice.content)}
+                    ${escapeHtml(notice.content || '')}
                 </div>
                 <div class="notice-date">
                     <i class="fas fa-calendar"></i> ${new Date(notice.created_at).toLocaleDateString('ko-KR')}
