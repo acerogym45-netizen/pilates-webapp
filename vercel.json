@@ -13,7 +13,7 @@
     },
     {
       "src": "/admin/(.*)",
-      "dest": "/api/index.js"
+      "dest": "/admin/$1"
     },
     {
       "src": "/uploads/(.*)",
@@ -21,11 +21,10 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/api/index.js"
+      "dest": "/$1"
     }
   ],
   "env": {
-    "NODE_ENV": "production",
-    "MASTER_PASSWORD": "master2026"
+    "MASTER_PASSWORD": "@master_password"
   }
 }

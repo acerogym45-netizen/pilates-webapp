@@ -1,133 +1,163 @@
 /**
- * 프로그램 API 라우터
+ * 프로그램 API 라우터 - Supabase 버전
  */
 const express = require('express');
 const router = express.Router();
-const { getDb } = require('../database');
-const { v4: uuidv4 } = require('uuid');
+const { getSupabase, sbErr } = require('../db-supabase');
 
-// 단지별 프로그램 목록
-router.get('/', (req, res) => {
+// ── 단지별 프로그램 목록 ──────────────────────────────────────
+router.get('/', async (req, res) => {
     try {
-        const db = getDb();
         const { complexId, complexCode, activeOnly } = req.query;
-        
-        let query = 'SELECT p.*, c.code as complex_code FROM programs p JOIN complexes c ON p.complex_id = c.id WHERE 1=1';
-        const params = [];
-        
-        if (complexId) { query += ' AND p.complex_id = ?'; params.push(complexId); }
-        if (complexCode) { query += ' AND c.code = ?'; params.push(complexCode); }
-        if (activeOnly === 'true') { query += ' AND p.is_active = 1'; }
-        
-        query += ' ORDER BY p.display_order, p.name';
-        
-        const rows = db.prepare(query).all(...params);
-        // time_slots JSON 파싱
-        const data = rows.map(r => ({
+        const sb = getSupabase();
+
+        let query = sb.from('programs').select('*, complexes!inner(code)');
+
+        if (complexId)           query = query.eq('complex_id', complexId);
+        if (complexCode)         query = query.eq('complexes.code', complexCode);
+        if (activeOnly === 'true') query = query.eq('is_active', true);
+
+        query = query.order('display_order').order('name');
+
+        const { data, error } = await query;
+        if (error) throw sbErr(error, 'GET /programs');
+
+        const result = (data || []).map(r => ({
             ...r,
-            time_slots: r.time_slots ? JSON.parse(r.time_slots) : []
+            complex_code: r.complexes?.code,
+            time_slots: Array.isArray(r.time_slots) ? r.time_slots : (r.time_slots ? JSON.parse(r.time_slots) : [])
         }));
-        res.json({ success: true, data });
+
+        res.json({ success: true, data: result });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 프로그램 단일 조회
-router.get('/:id', (req, res) => {
+// ── 프로그램 단일 조회 ────────────────────────────────────────
+router.get('/:id', async (req, res) => {
     try {
-        const db = getDb();
-        const row = db.prepare('SELECT * FROM programs WHERE id = ?').get(req.params.id);
-        if (!row) return res.status(404).json({ success: false, error: '프로그램을 찾을 수 없습니다' });
-        res.json({ success: true, data: { ...row, time_slots: row.time_slots ? JSON.parse(row.time_slots) : [] } });
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('programs')
+            .select('*')
+            .eq('id', req.params.id)
+            .single();
+        if (error || !data) return res.status(404).json({ success: false, error: '프로그램을 찾을 수 없습니다' });
+        const result = { ...data, time_slots: Array.isArray(data.time_slots) ? data.time_slots : (data.time_slots ? JSON.parse(data.time_slots) : []) };
+        res.json({ success: true, data: result });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 프로그램 생성
-router.post('/', (req, res) => {
+// ── 프로그램 생성 ─────────────────────────────────────────────
+router.post('/', async (req, res) => {
     try {
-        const db = getDb();
-        const id = uuidv4();
         const { complex_id, name, type, description, days, time_slots, price, capacity, display_order } = req.body;
         if (!complex_id || !name || !type) return res.status(400).json({ success: false, error: 'complex_id, name, type 필수' });
-        
-        db.prepare(`
-            INSERT INTO programs (id, complex_id, name, type, description, days, time_slots, price, capacity, display_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, complex_id, name, type, description || '', days || '', 
-               JSON.stringify(Array.isArray(time_slots) ? time_slots : []), 
-               price || 0, capacity || 6, display_order || 0);
-        
-        const created = db.prepare('SELECT * FROM programs WHERE id = ?').get(id);
-        res.status(201).json({ success: true, data: { ...created, time_slots: JSON.parse(created.time_slots) } });
+
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('programs')
+            .insert({
+                complex_id, name, type,
+                description: description || '',
+                days: days || '',
+                time_slots: Array.isArray(time_slots) ? time_slots : [],
+                price: price || 0,
+                capacity: capacity || 6,
+                display_order: display_order || 0
+            })
+            .select()
+            .single();
+
+        if (error) throw sbErr(error, 'POST /programs');
+        const result = { ...data, time_slots: Array.isArray(data.time_slots) ? data.time_slots : [] };
+        res.status(201).json({ success: true, data: result });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 프로그램 수정
-router.put('/:id', (req, res) => {
+// ── 프로그램 수정 ─────────────────────────────────────────────
+router.put('/:id', async (req, res) => {
     try {
-        const db = getDb();
         const { name, type, description, days, time_slots, price, capacity, display_order, is_active } = req.body;
-        db.prepare(`
-            UPDATE programs SET name=?, type=?, description=?, days=?, time_slots=?, price=?, capacity=?, display_order=?, is_active=?, updated_at=datetime('now','localtime')
-            WHERE id=?
-        `).run(name, type, description, days, JSON.stringify(Array.isArray(time_slots) ? time_slots : []), 
-               price, capacity, display_order, is_active !== undefined ? (is_active ? 1 : 0) : 1, req.params.id);
-        
-        const updated = db.prepare('SELECT * FROM programs WHERE id = ?').get(req.params.id);
-        res.json({ success: true, data: { ...updated, time_slots: JSON.parse(updated.time_slots) } });
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('programs')
+            .update({
+                name, type, description, days,
+                time_slots: Array.isArray(time_slots) ? time_slots : [],
+                price, capacity, display_order,
+                is_active: is_active !== undefined ? Boolean(is_active) : true
+            })
+            .eq('id', req.params.id)
+            .select()
+            .single();
+
+        if (error) throw sbErr(error, 'PUT /programs/:id');
+        const result = { ...data, time_slots: Array.isArray(data.time_slots) ? data.time_slots : [] };
+        res.json({ success: true, data: result });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 프로그램 삭제
-router.delete('/:id', (req, res) => {
+// ── 프로그램 삭제 ─────────────────────────────────────────────
+router.delete('/:id', async (req, res) => {
     try {
-        const db = getDb();
-        db.prepare('DELETE FROM programs WHERE id = ?').run(req.params.id);
+        const sb = getSupabase();
+        const { error } = await sb.from('programs').delete().eq('id', req.params.id);
+        if (error) throw sbErr(error, 'DELETE /programs/:id');
         res.json({ success: true, message: '삭제되었습니다' });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
 
-// 시간대별 정원 현황 조회
-router.get('/:id/capacity', (req, res) => {
+// ── 시간대별 정원 현황 조회 ───────────────────────────────────
+router.get('/:id/capacity', async (req, res) => {
     try {
-        const db = getDb();
-        const program = db.prepare('SELECT * FROM programs WHERE id = ?').get(req.params.id);
-        if (!program) return res.status(404).json({ success: false, error: '프로그램 없음' });
-        
-        const timeSlots = program.time_slots ? JSON.parse(program.time_slots) : [];
+        const sb = getSupabase();
+        const { data: program, error: progErr } = await sb
+            .from('programs')
+            .select('*')
+            .eq('id', req.params.id)
+            .single();
+
+        if (progErr || !program) return res.status(404).json({ success: false, error: '프로그램 없음' });
+
+        const timeSlots = Array.isArray(program.time_slots) ? program.time_slots
+            : (program.time_slots ? JSON.parse(program.time_slots) : []);
         const capacity = program.capacity || 6;
-        
-        // 각 시간대별 승인된 신청 수 집계
-        const capacityData = timeSlots.map(slot => {
-            const count = db.prepare(`
-                SELECT COUNT(*) as cnt FROM applications 
-                WHERE program_id = ? AND preferred_time = ? AND status = 'approved'
-            `).get(req.params.id, slot);
-            
-            const waitingCount = db.prepare(`
-                SELECT COUNT(*) as cnt FROM applications
-                WHERE program_id = ? AND preferred_time = ? AND status = 'waiting'
-            `).get(req.params.id, slot);
-            
+
+        const capacityData = await Promise.all(timeSlots.map(async (slot) => {
+            const { count: approvedCnt } = await sb
+                .from('applications')
+                .select('*', { count: 'exact', head: true })
+                .eq('program_id', req.params.id)
+                .eq('preferred_time', slot)
+                .eq('status', 'approved');
+
+            const { count: waitingCnt } = await sb
+                .from('applications')
+                .select('*', { count: 'exact', head: true })
+                .eq('program_id', req.params.id)
+                .eq('preferred_time', slot)
+                .eq('status', 'waiting');
+
             return {
                 slot,
-                approved: count.cnt,
+                approved: approvedCnt || 0,
                 capacity,
-                available: Math.max(0, capacity - count.cnt),
-                isFull: count.cnt >= capacity,
-                waiting: waitingCount.cnt
+                available: Math.max(0, capacity - (approvedCnt || 0)),
+                isFull: (approvedCnt || 0) >= capacity,
+                waiting: waitingCnt || 0
             };
-        });
-        
+        }));
+
         res.json({ success: true, data: capacityData });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
