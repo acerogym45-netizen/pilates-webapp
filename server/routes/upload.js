@@ -54,11 +54,30 @@ const csvFilter   = (req, file, cb) => {
 const uploadCsv = multer({ storage: csvStorage, fileFilter: csvFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
 /**
- * CSV 파싱 헬퍼 - BOM 제거, 큰따옴표 처리
+ * CSV 파싱 헬퍼
+ * - UTF-8 BOM, UTF-8, EUC-KR(CP949) 자동 감지
+ * - 큰따옴표 처리
  */
+const iconv = require('iconv-lite');
+
 function parseCsv(buffer) {
-    let text = buffer.toString('utf-8');
-    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM 제거
+    let text;
+
+    // 1) UTF-8 BOM (EF BB BF) → UTF-8로 확정
+    if (buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+        text = buffer.slice(3).toString('utf-8');
+    }
+    // 2) EUC-KR BOM 없음: UTF-8 디코드 후 FFFD replacement 비율로 판단
+    else {
+        const asUtf8 = buffer.toString('utf-8');
+        const fffdCount = (asUtf8.match(/\uFFFD/g) || []).length;
+        // FFFD 비율이 2% 초과면 EUC-KR(CP949)로 재디코드
+        if (fffdCount / Math.max(asUtf8.length, 1) > 0.02) {
+            text = iconv.decode(buffer, 'cp949');
+        } else {
+            text = asUtf8;
+        }
+    }
 
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return { headers: [], rows: [] };

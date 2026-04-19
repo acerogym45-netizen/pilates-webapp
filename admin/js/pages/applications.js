@@ -575,7 +575,9 @@ const applications = {
                 </div>
                 <div class="import-tip">
                     <i class="fas fa-info-circle"></i>
-                    <span>상태값: 승인 / 대기 / 거부 / 해지 / 만료 / 이관 / 접수 / 양도 / 양수</span>
+                    <span>상태값: 승인 / 대기 / 거부 / 해지 / 만료 / 이관 / 접수 / 양도 / 양수<br>
+                    💡 엑셀 저장 시: <b>다른 이름으로 저장 → CSV UTF-8 (쉼표로 분리)</b><br>
+                    ※ EUC-KR(일반 CSV)도 자동 인식되어 업로드 가능합니다</span>
                 </div>
             </div>`;
         const footer = `
