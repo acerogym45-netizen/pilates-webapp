@@ -4,13 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>청주SK뷰자이 필라테스 레슨 신청</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <!-- Progress Indicator -->
+
+        <!-- ── Progress Indicator ─────────────────────── -->
         <div class="progress-indicator">
             <div class="progress-step active" data-step="1">
                 <div class="step-number">1</div>
@@ -23,30 +26,29 @@
             </div>
         </div>
 
-        <!-- Header -->
+        <!-- ── Header ─────────────────────────────────── -->
         <header class="header" id="mainHeader">
             <h1 id="logoText">청주SK뷰자이</h1>
             <h2 id="pageTitle">필라테스 레슨 신청서</h2>
             <p class="subtitle" id="pageSubtitle">커뮤니티 피트니스센터</p>
-            
-            <!-- Instructor Link -->
+
             <div class="instructor-link-wrapper">
                 <a href="instructors.html" class="instructor-link">
-                    <i class="fas fa-user-tie"></i> 강사 소개 보기
+                    <i class="fas fa-user-tie"></i> 강사 소개
                 </a>
-                <a href="#" onclick="showCurriculumModal(); return false;" class="instructor-link" style="margin-left: 10px;">
-                    <i class="fas fa-calendar-alt"></i> 월별 커리큘럼 보기
+                <a href="#" onclick="showCurriculumModal(); return false;" class="instructor-link">
+                    <i class="fas fa-calendar-alt"></i> 월별 커리큘럼
                 </a>
             </div>
         </header>
 
-        <!-- Notices Section -->
+        <!-- ── Notices Section ────────────────────────── -->
         <section class="notices-section" id="noticesSection" style="display: none;">
             <h3><i class="fas fa-bullhorn"></i> 공지사항</h3>
             <div id="noticesContainer" class="notices-list"></div>
         </section>
 
-        <!-- Page 1: Application Form -->
+        <!-- ── Page 1: Application Form ───────────────── -->
         <section class="form-section" id="page1">
             <div class="form-header">
                 <h3><i class="fas fa-edit"></i> 레슨 신청 정보</h3>
@@ -61,30 +63,22 @@
 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="dong">
-                            동 <span class="required">*</span>
-                        </label>
+                        <label for="dong">동 <span class="required">*</span></label>
                         <input type="text" id="dong" placeholder="예: 101동" required>
                     </div>
                     <div class="form-group">
-                        <label for="ho">
-                            호수 <span class="required">*</span>
-                        </label>
+                        <label for="ho">호수 <span class="required">*</span></label>
                         <input type="text" id="ho" placeholder="예: 1001호" required>
                     </div>
                 </div>
 
                 <div class="form-group">
-                    <label for="name">
-                        이름 <span class="required">*</span>
-                    </label>
+                    <label for="name">이름 <span class="required">*</span></label>
                     <input type="text" id="name" placeholder="이름을 입력하세요" required>
                 </div>
 
                 <div class="form-group">
-                    <label for="phone">
-                        전화번호 <span class="required">*</span>
-                    </label>
+                    <label for="phone">전화번호 <span class="required">*</span></label>
                     <input type="tel" id="phone" placeholder="010-0000-0000" required>
                 </div>
 
@@ -94,38 +88,30 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="lessonType">
-                        프로그램 종류 <span class="required">*</span>
-                    </label>
+                    <label for="lessonType">프로그램 종류 <span class="required">*</span></label>
                     <select id="lessonType" required>
                         <option value="">선택하세요</option>
-                        <!-- 프로그램은 데이터베이스에서 동적으로 로드됩니다 -->
                     </select>
                 </div>
 
                 <div class="form-group">
-                    <label for="preferredTime">
-                        희망 시간대 <span class="required">*</span>
-                    </label>
+                    <label for="preferredTime">희망 시간대 <span class="required">*</span></label>
                     <select id="preferredTime" required disabled>
                         <option value="">먼저 프로그램을 선택하세요</option>
                     </select>
                 </div>
-                
-                <!-- 개인/듀엣 레슨용 입력 필드 (초기 숨김) -->
-<div class="form-group" id="customTimeGroup" style="display: none;">
-    <div style="max-width: 500px; margin: 40px auto; display: flex; flex-direction: column; align-items: center; gap: 12px;">
-        <textarea 
-            id="customTime" 
-            placeholder="희망하시는 요일과 시간을 입력해주세요.&#10;&#10;예시:&#10;• 월수금 오후 2시&#10;• 화목 오후 3시&#10;• 주말 오후 4시" 
-            rows="5"
-            style="width: 100%; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.95rem; resize: vertical;"></textarea>
-        <small style="color: #64748b; text-align: center; line-height: 1.6;">
-            희망 요일 및 시간 <span class="required">*</span><br>
-            (예: 월수금 오후 2시, 화목 오후 3시)
-        </small>
-    </div>
-</div>
+
+                <!-- 개인/듀엣 레슨용 (초기 숨김) -->
+                <div class="form-group" id="customTimeGroup" style="display: none;">
+                    <label>희망 요일 및 시간 <span class="required">*</span></label>
+                    <textarea
+                        id="customTime"
+                        placeholder="희망하시는 요일과 시간을 입력해주세요.&#10;&#10;예시:&#10;• 월수금 오후 2시&#10;• 화목 오후 3시&#10;• 주말 오후 4시"
+                        rows="5"></textarea>
+                    <small style="color: var(--gray-500); font-size: 0.8rem;">
+                        (예: 월수금 오후 2시, 화목 오후 3시)
+                    </small>
+                </div>
 
                 <!-- 개인정보 동의 -->
                 <div class="agreement-section">
@@ -134,13 +120,10 @@
                         <div class="agreement-content">
                             <p><strong>1. 수집하는 개인정보 항목</strong></p>
                             <p>동/호수, 이름, 전화번호, 결제일자, 레슨 정보</p>
-                            
                             <p><strong>2. 개인정보의 수집 및 이용 목적</strong></p>
                             <p>필라테스 레슨 계약 및 관리, 관리사무소 업무 협조</p>
-                            
                             <p><strong>3. 개인정보의 보유 및 이용 기간</strong></p>
                             <p>계약 종료 후 1년간 보관 후 파기</p>
-                            
                             <p><strong>4. 동의를 거부할 권리 및 동의 거부에 따른 불이익</strong></p>
                             <p>동의를 거부할 수 있으나, 신청이 제한됩니다.</p>
                         </div>
@@ -151,7 +134,6 @@
                     </div>
                 </div>
 
-                <!-- Next Button -->
                 <button type="submit" class="btn-submit">
                     <i class="fas fa-arrow-right"></i> 다음 단계 (계약서 확인)
                 </button>
@@ -163,7 +145,7 @@
             </form>
         </section>
 
-        <!-- Page 2: Contract Agreement -->
+        <!-- ── Page 2: Contract Agreement ────────────── -->
         <section class="form-section" id="page2" style="display: none;">
             <div class="form-header">
                 <h3><i class="fas fa-file-signature"></i> 필라테스 레슨 이용계약서</h3>
@@ -175,23 +157,25 @@
                 <h4><i class="fas fa-user-check"></i> 신청자 정보</h4>
                 <div class="info-display">
                     <div class="info-row">
-                        <span class="info-label">주소:</span>
-                        <span class="info-value" id="displayDong"></span> <span class="info-value" id="displayHo"></span>
+                        <span class="info-label">주소</span>
+                        <span class="info-value">
+                            <span id="displayDong"></span>&nbsp;<span id="displayHo"></span>
+                        </span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">성명:</span>
+                        <span class="info-label">성명</span>
                         <span class="info-value" id="displayName"></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">연락처:</span>
+                        <span class="info-label">연락처</span>
                         <span class="info-value" id="displayPhone"></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">프로그램:</span>
+                        <span class="info-label">프로그램</span>
                         <span class="info-value" id="displayLesson"></span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">희망 시간:</span>
+                        <span class="info-label">희망 시간</span>
                         <span class="info-value" id="displayTime"></span>
                     </div>
                 </div>
@@ -206,21 +190,13 @@
                 <div class="terms-content">
                     <ol class="terms-list">
                         <li>본인 이외에 사용하실 수 없습니다.</li>
-                        
                         <li>지인에게 상품 재판매는 가능하며 이민, 6개월 이상 입원, 치명적인 장애 등 부득이하게 환불할 경우, 증빙서류와 매니저의 동의하에 총 결제금액의 10%를 위약금으로 제하고, 회당 20,000원으로 사용한 회당 이용요금을 제외한 후에 차액이 환급됩니다.</li>
-                        
                         <li>본인 부주의로 발생한 사고에 대해서는 일체 책임을 지지 않습니다.</li>
-                        
                         <li>수업은 횟수제입니다. 공휴일은 휴무이며 공휴일 기간에는 수업이 차감되지 않습니다.</li>
-                        
                         <li>수업은 지정요일 지정시간에만 수업이 가능하며, 못나올 경우 기간은 차감됩니다.</li>
-                        
                         <li>수업은 6:1 그룹수업 혹은 강사와의 협의에 따라 2:1 혹은 개인레슨으로 진행되며 4명 미만이 1개월 이상 지속될 시 기간은 정지되며, 다음 차순 그룹이 구성 될 경우 수업이 가능합니다.</li>
-                        
-                        <li>사전에 신체적 기능이나 문제가 있을 시 의사 또는 전문의와 반드시 상담하셔야 하며, 육체적 기능이 제한된 상태에서 운동 시 본인이 크게 무리가 없다고 판단하에 동의하고 운동하게 됨으로, 동작을 수행함에 있어 상태가 악화될경우 당사는 어떠한 책임도 지지않습니다.</li>
-                        
-                        <li>지인에게 상품 재판매 혹은 양도 시, 다음 회차에 바로 이어서 하지 않으시는 경우 횟수는 차감됩니다.
-                        <br>(개인간의 상품 재판매간의 발생하는 문제에 대해서는 당사는 일체의 책임을 지지 않습니다)</li>
+                        <li>사전에 신체적 기능이나 문제가 있을 시 의사 또는 전문의와 반드시 상담하셔야 하며, 육체적 기능이 제한된 상태에서 운동 시 본인이 크게 무리가 없다고 판단하에 동의하고 운동하게 됨으로, 동작을 수행함에 있어 상태가 악화될 경우 당사는 어떠한 책임도 지지 않습니다.</li>
+                        <li>지인에게 상품 재판매 혹은 양도 시, 다음 회차에 바로 이어서 하지 않으시는 경우 횟수는 차감됩니다.<br>(개인간의 상품 재판매간의 발생하는 문제에 대해서는 당사는 일체의 책임을 지지 않습니다)</li>
                     </ol>
                 </div>
             </div>
@@ -243,21 +219,15 @@
             <div class="signature-box">
                 <h4><i class="fas fa-signature"></i> 전자 서명</h4>
                 <p class="signature-guide">아래 서명란에 직접 서명해주세요</p>
-                
-                <!-- 성명 입력 -->
+
                 <div class="form-group">
-                    <label for="signatureName">
-                        성명 입력 <span class="required">*</span>
-                    </label>
+                    <label for="signatureName">성명 입력 <span class="required">*</span></label>
                     <input type="text" id="signatureName" placeholder="홍길동" required>
                     <p class="signature-note">※ 서명과 동일한 성명을 입력해주세요.</p>
                 </div>
-                
-                <!-- 서명 캔버스 -->
+
                 <div class="form-group">
-                    <label>
-                        수기 서명 <span class="required">*</span>
-                    </label>
+                    <label>수기 서명 <span class="required">*</span></label>
                     <div class="signature-pad-container">
                         <canvas id="signaturePad" class="signature-canvas"></canvas>
                         <div class="signature-actions">
@@ -268,11 +238,9 @@
                     </div>
                     <p class="signature-note">※ 손가락이나 마우스로 위 칸에 서명해주세요.</p>
                 </div>
-                
+
                 <div class="form-group">
-                    <label for="signatureDate">
-                        서명 일자 <span class="required">*</span>
-                    </label>
+                    <label for="signatureDate">서명 일자 <span class="required">*</span></label>
                     <input type="date" id="signatureDate" required readonly>
                 </div>
             </div>
@@ -293,32 +261,40 @@
             </p>
         </section>
 
-        <!-- Cancellation Section -->
+        <!-- ── Cancellation Section ───────────────────── -->
         <section class="cancellation-section">
             <div class="section-header">
-                <h3><i class="fas fa-user-times"></i> 레슨 해지 신청 <span style="color: #e74c3c; font-size: 0.9rem; font-weight: normal;">(매월 3~10일 접수 가능)</span></h3>
-                <p class="section-description">수강 중인 레슨을 해지하고자 하실 경우 아래 버튼을 클릭해주세요</p>
+                <h3>
+                    <i class="fas fa-user-times"></i> 레슨 해지 신청
+                    <span style="color: var(--danger); font-size: 0.82rem; font-weight: 500;">(매월 3~10일 접수)</span>
+                </h3>
             </div>
+            <p class="section-description">수강 중인 레슨을 해지하고자 하실 경우 아래 버튼을 클릭해주세요</p>
             <button onclick="showCancellationForm()" class="btn-cancellation">
                 <i class="fas fa-file-times"></i> 해지 신청하기
             </button>
         </section>
 
-        <!-- Footer / Inquiry Section -->
+        <!-- ── Footer / Inquiry Section ──────────────── -->
         <footer class="footer">
             <h3><i class="fas fa-comment-dots"></i> 청주SK뷰자이 필라테스 문의</h3>
             <p class="inquiry-guide">궁금하신 사항이나 기타 문의사항을 남겨주세요</p>
             <button onclick="showInquiryForm()" class="btn-inquiry">
                 <i class="fas fa-pen"></i> 문의 작성하기
             </button>
-            
-            <!-- Inquiry List -->
+
             <div class="inquiry-list" id="inquiryList">
                 <h4><i class="fas fa-list"></i> 공개 문의 목록</h4>
                 <div id="inquiriesContainer"></div>
             </div>
         </footer>
-    </div>
+
+    </div><!-- /.container -->
+
+
+    <!-- ══════════════════════════════════════════════
+         MODALS
+    ══════════════════════════════════════════════ -->
 
     <!-- Success Modal -->
     <div id="successModal" class="modal">
@@ -326,7 +302,7 @@
             <div class="success-icon">
                 <i class="fas fa-check-circle"></i>
             </div>
-            <h2>✅ 신청이 완료되었습니다!</h2>
+            <h2>신청이 완료되었습니다!</h2>
             <p>
                 <strong>신청하신 프로그램이 최종 승인되었습니다.</strong><br><br>
                 궁금하신 사항은 문의처에 접수해주세요.<br>
@@ -356,7 +332,6 @@
                         <input type="text" id="inquiryHo" required placeholder="예: 1001">
                     </div>
                 </div>
-                
                 <div class="form-row">
                     <div class="form-group">
                         <label for="inquiryName">이름 *</label>
@@ -367,17 +342,14 @@
                         <input type="tel" id="inquiryPhone" required placeholder="010-1234-5678">
                     </div>
                 </div>
-                
                 <div class="form-group">
                     <label for="inquiryTitle">문의 제목 *</label>
                     <input type="text" id="inquiryTitle" required placeholder="문의 제목을 입력하세요">
                 </div>
-                
                 <div class="form-group">
                     <label for="inquiryContent">문의 내용 *</label>
-                    <textarea id="inquiryContent" rows="6" required placeholder="문의 내용을 상세히 입력해주세요"></textarea>
+                    <textarea id="inquiryContent" rows="5" required placeholder="문의 내용을 상세히 입력해주세요"></textarea>
                 </div>
-                
                 <div class="form-group">
                     <label>공개 여부 *</label>
                     <div class="radio-group">
@@ -391,7 +363,6 @@
                         </label>
                     </div>
                 </div>
-                
                 <div class="modal-buttons">
                     <button type="button" class="btn-secondary" onclick="closeInquiryModal()">취소</button>
                     <button type="submit" class="btn-submit">문의 제출</button>
@@ -420,7 +391,6 @@
                         <input type="text" id="cancelHo" required placeholder="예: 1001">
                     </div>
                 </div>
-                
                 <div class="form-row">
                     <div class="form-group">
                         <label for="cancelName">이름 *</label>
@@ -431,15 +401,12 @@
                         <input type="tel" id="cancelPhone" required placeholder="010-1234-5678">
                     </div>
                 </div>
-                
                 <div class="form-group">
                     <label for="cancelLessonType">해지할 프로그램 *</label>
                     <select id="cancelLessonType" required>
                         <option value="">선택하세요</option>
-                        <!-- 프로그램 목록은 JavaScript에서 동적으로 로드됩니다 -->
                     </select>
                 </div>
-                
                 <div class="form-group">
                     <label for="cancelReason">해지 사유 *</label>
                     <select id="cancelReason" required>
@@ -452,25 +419,24 @@
                         <option value="기타">기타</option>
                     </select>
                 </div>
-                
                 <div class="form-group">
-                    <label for="cancelReasonDetail">상세 사유</label>
-                    <textarea id="cancelReasonDetail" rows="4" placeholder="해지 사유를 상세히 입력해주세요 (선택사항)"></textarea>
+                    <label for="cancelReasonDetail">상세 사유 (선택)</label>
+                    <textarea id="cancelReasonDetail" rows="3" placeholder="해지 사유를 상세히 입력해주세요"></textarea>
                 </div>
-                
-                <div class="warning-box" style="margin: 20px 0; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 8px;">
-                    <p style="margin: 0; color: #856404;">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <strong>해지 신청 안내</strong>
-                    </p>
-                    <ul style="margin: 10px 0 0 20px; color: #856404; font-size: 0.9rem;">
-                        <li><strong>매월 3~10일에만 해지 신청이 가능합니다</strong></li>
-                        <li>접수 즉시 자동 승인됩니다</li>
-                        <li>환불 규정에 따라 관리비에서 환불 금액이 차감됩니다</li>
-                        <li><strong>중도 환불은 불가능합니다</strong></li>
-                    </ul>
+
+                <div class="auto-renewal-notice" style="margin: 16px 0;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <div>
+                        <p style="margin:0 0 6px; font-weight:700; color: var(--danger);">해지 신청 안내</p>
+                        <ul style="margin:0; padding-left:18px; color:var(--gray-700); font-size:0.85rem; line-height:1.8;">
+                            <li><strong>매월 3~10일에만 해지 신청이 가능합니다</strong></li>
+                            <li>접수 즉시 자동 승인됩니다</li>
+                            <li>환불 규정에 따라 관리비에서 환불 금액이 차감됩니다</li>
+                            <li><strong>중도 환불은 불가능합니다</strong></li>
+                        </ul>
+                    </div>
                 </div>
-                
+
                 <div class="modal-buttons">
                     <button type="button" class="btn-secondary" onclick="closeCancellationModal()">취소</button>
                     <button type="submit" class="btn-submit">해지 신청</button>
@@ -479,21 +445,16 @@
         </div>
     </div>
 
-    <!-- 🆕 Cancellation Period Warning Modal -->
+    <!-- Cancellation Period Warning Modal -->
     <div id="cancellationPeriodWarningModal" class="modal">
         <div class="modal-content warning">
             <div class="warning-icon">
-                <i class="fas fa-exclamation-triangle"></i>
+                <i class="fas fa-calendar-times"></i>
             </div>
-            <h2>❌ 해지 신청 기간이 아닙니다</h2>
-            <p style="margin: 20px 0; color: #666; font-size: 1rem; line-height: 1.6;">
-                해지 신청은 <strong style="color: #e74c3c;">매월 3일부터 10일까지</strong>만 가능합니다.
-            </p>
+            <h2>해지 신청 기간이 아닙니다</h2>
+            <p>해지 신청은 <strong style="color:var(--danger);">매월 3일부터 10일까지</strong>만 가능합니다.</p>
             <div id="cancellationPeriodWarningContent" class="warning-details"></div>
-            <p class="warning-guide">
-                다음 접수 기간을 이용해주세요.<br><br>
-                궁금하신 사항은 문의처에 접수해주세요.
-            </p>
+            <p class="warning-guide">다음 접수 기간을 이용해주세요.<br>궁금하신 사항은 문의처에 접수해주세요.</p>
             <button class="btn-close-warning" onclick="closeCancellationPeriodWarning()">확인</button>
         </div>
     </div>
@@ -502,12 +463,12 @@
     <div id="duplicateWarningModal" class="modal">
         <div class="modal-content warning">
             <div class="warning-icon">
-                <i class="fas fa-exclamation-triangle"></i>
+                <i class="fas fa-copy"></i>
             </div>
-            <h2>⚠️ 이미 신청하신 프로그램입니다</h2>
+            <h2>이미 신청하신 프로그램입니다</h2>
             <div id="duplicateWarningContent" class="warning-details"></div>
             <p class="warning-guide">
-                다른 프로그램을 신청하시거나, 기존 신청을 취소하신 후 다시 신청해주세요.<br><br>
+                다른 프로그램을 신청하시거나, 기존 신청을 취소하신 후 다시 신청해주세요.<br>
                 문의사항이 있으시면 문의처에 접수해주세요.
             </p>
             <button class="btn-close-warning" onclick="closeDuplicateWarningModal()">확인</button>
@@ -520,31 +481,31 @@
             <div class="success-icon">
                 <i class="fas fa-check-circle"></i>
             </div>
-            <h2>✅ 신청이 완료되었습니다!</h2>
+            <h2>신청이 완료되었습니다!</h2>
             <div id="successNotificationContent" class="success-details"></div>
             <button class="btn-close" onclick="closeSuccessNotificationModal()">확인</button>
         </div>
     </div>
 
-    <!-- 🆕 Curriculum Modal -->
+    <!-- Curriculum Modal -->
     <div id="curriculumModal" class="modal">
-        <div class="modal-content" style="max-width: 700px;">
+        <div class="modal-content" style="max-width: 680px;">
             <div class="modal-header">
-                <h3><i class="fas fa-calendar-alt"></i> 월별 커리큘럼</h3>
+                <h2><i class="fas fa-calendar-alt"></i> 월별 커리큘럼</h2>
+                <button class="modal-close" onclick="closeCurriculumModal()">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            
             <div class="form-group" style="margin-bottom: 20px;">
                 <label>월 선택</label>
                 <select id="curriculumMonthSelect" onchange="loadCurriculum()">
                     <option value="">선택하세요</option>
                 </select>
             </div>
-            
-            <div id="curriculumContent" style="padding: 20px; background: #f8f9fa; border-radius: 8px; min-height: 200px;">
-                <p style="text-align: center; color: #6c757d;">월을 선택해주세요.</p>
+            <div id="curriculumContent" style="padding: 20px; background: var(--gray-50); border-radius: var(--radius); min-height: 180px; border: 1px solid var(--border);">
+                <p style="text-align: center; color: var(--gray-400);">월을 선택해주세요.</p>
             </div>
-            
-            <div class="modal-buttons">
+            <div class="modal-buttons" style="margin-top: 20px;">
                 <button class="btn-secondary" onclick="closeCurriculumModal()">
                     <i class="fas fa-times"></i> 닫기
                 </button>
@@ -553,31 +514,28 @@
     </div>
 
     <!-- Admin Password Modal -->
-    <div id="adminPasswordModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 10000;">
-        <div class="modal-content" style="max-width: 400px; width: 90%; margin: 0;">
-            <h2 style="text-align: center; margin-bottom: 10px;">
-                <i class="fas fa-lock"></i> 관리자 인증
-            </h2>
-            <p style="text-align: center; color: #666; margin-bottom: 20px; font-size: 0.9rem;">
+    <div id="adminPasswordModal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,.55); backdrop-filter: blur(4px); justify-content: center; align-items: center; z-index: 10000; padding: 16px;">
+        <div class="modal-content" style="max-width: 400px; width: 100%; text-align: center;">
+            <div style="width: 64px; height: 64px; background: var(--primary-bg); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; border: 2px solid var(--primary-light);">
+                <i class="fas fa-lock" style="font-size: 1.5rem; color: var(--primary);"></i>
+            </div>
+            <h2 style="font-size: 1.2rem; margin-bottom: 6px; color: var(--gray-900);">관리자 인증</h2>
+            <p style="color: var(--gray-500); margin-bottom: 20px; font-size: 0.875rem;">
                 관리자 페이지 접근을 위해 비밀번호를 입력하세요
             </p>
             <form id="adminPasswordForm" onsubmit="return false;">
-                <div class="form-group">
-                    <input 
-                        type="password" 
-                        id="adminPasswordInput" 
+                <div class="form-group" style="margin-bottom: 10px;">
+                    <input
+                        type="password"
+                        id="adminPasswordInput"
                         placeholder="비밀번호를 입력하세요"
-                        style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem;"
-                        autocomplete="off"
-                    />
+                        autocomplete="off">
                 </div>
-                <p id="adminPasswordError" style="color: #e74c3c; font-size: 0.875rem; margin: 10px 0; display: none; text-align: center;">
+                <p id="adminPasswordError" style="color: var(--danger); font-size: 0.825rem; margin: 8px 0; display: none; text-align: center;">
                     <i class="fas fa-exclamation-circle"></i> 비밀번호가 올바르지 않습니다
                 </p>
-                <div class="modal-buttons" style="margin-top: 20px;">
-                    <button type="button" class="btn-secondary" onclick="closeAdminPasswordModal()">
-                        취소
-                    </button>
+                <div class="modal-buttons" style="margin-top: 16px;">
+                    <button type="button" class="btn-secondary" onclick="closeAdminPasswordModal()">취소</button>
                     <button type="button" class="btn-submit" onclick="checkAdminPassword()">
                         <i class="fas fa-sign-in-alt"></i> 확인
                     </button>
@@ -587,6 +545,6 @@
     </div>
 
     <script src="js/complex-context.js"></script>
-<script src="js/main.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>
