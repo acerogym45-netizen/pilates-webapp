@@ -1799,15 +1799,19 @@ function showRefundRequestModal() {
     if (list)  list.innerHTML  = '';
     if (guide) guide.style.display = 'none';
     if (inp)   inp.value = '';
-    modal.style.display = 'flex';
-    modal.style.alignItems = 'flex-start';
-    modal.style.justifyContent = 'center';
-    modal.style.overflowY = 'auto';
-    modal.style.position = 'fixed';
-    modal.style.inset = '0';
-    modal.style.background = 'rgba(0,0,0,.5)';
-    modal.style.zIndex = '9999';
-    modal.style.padding = '16px';
+    modal.style.cssText = [
+        'display:flex',
+        'align-items:flex-start',
+        'justify-content:center',
+        'overflow-y:auto',
+        'position:fixed',
+        'inset:0',
+        'background:rgba(0,0,0,.55)',
+        'z-index:9999',
+        'padding:16px 12px'
+    ].join(';');
+    // body 스크롤 잠금
+    document.body.style.overflow = 'hidden';
     // 열릴 때 맨 위로 스크롤
     modal.scrollTop = 0;
 }
@@ -1815,6 +1819,8 @@ function showRefundRequestModal() {
 function closeRefundRequestModal() {
     const modal = document.getElementById('refundRequestModal');
     if (modal) modal.style.display = 'none';
+    // body 스크롤 복원
+    document.body.style.overflow = '';
     // 파일 목록 초기화
     _refundDocFiles = [];
     const list = document.getElementById('refundDocList');
@@ -1833,7 +1839,8 @@ function updateRefundDocGuide() {
     if (!guide) return;
     const guides = {
         injury:     '<i class="fas fa-file-medical"></i> <strong>진단서 필수:</strong> 6개월 이상 운동 불가를 증명하는 의사 진단서 (원본 또는 스캔본)',
-        emigration: '<i class="fas fa-passport"></i> <strong>비자 + 항공권 필수:</strong> 6개월 이상 해외 이주를 증명하는 비자 사본 및 항공권 사본'
+        emigration: '<i class="fas fa-passport"></i> <strong>비자 + 항공권 필수:</strong> 6개월 이상 해외 이주를 증명하는 비자 사본 및 항공권 사본',
+        other:      '<i class="fas fa-file-alt"></i> <strong>관련 증빙서류 제출:</strong> 환불 사유를 증명할 수 있는 서류를 첨부해 주세요. 서류 미비 시 처리가 지연될 수 있습니다.'
     };
     if (reason && guides[reason]) {
         guide.innerHTML = guides[reason];
@@ -1923,14 +1930,22 @@ async function submitRefundRequest() {
     if (!name)   { alert('이름을 입력하세요.'); return; }
     if (!phone)  { alert('연락처를 입력하세요.'); return; }
     if (!reason) { alert('환불 사유를 선택하세요.'); return; }
+    // 기타 사유는 파일 미첨부 시 경고만 (차단하지 않음), 그 외는 필수
     if (_refundDocFiles.length === 0) {
-        alert('증빙서류를 1개 이상 첨부해주세요.\n(진단서 또는 비자·항공권 사본)');
-        return;
+        if (reason === 'other') {
+            const proceed = confirm('증빙서류를 첨부하지 않으셨습니다.\n서류 미제출 시 환불 처리가 지연될 수 있습니다.\n그래도 신청하시겠습니까?');
+            if (!proceed) return;
+        } else {
+            const docHint = reason === 'injury' ? '(진단서)' : '(비자·항공권 사본)';
+            alert(`증빙서류를 1개 이상 첨부해주세요.\n${docHint}`);
+            return;
+        }
     }
 
     const reasonLabel = {
         injury:     '6개월 이상 운동 불가 질병·부상',
-        emigration: '6개월 이상 해외 이주'
+        emigration: '6개월 이상 해외 이주',
+        other:      '기타'
     }[reason] || reason;
 
     const complexCode = complexContext?.getComplexCode?.() || '';
