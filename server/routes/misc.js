@@ -311,14 +311,18 @@ router.get('/cancellations', async (req, res) => {
 
 router.post('/cancellations', async (req, res) => {
     try {
-        const { complex_id, application_id, dong, ho, name, phone, program_name, reason, request_type, refund_reason, refund_detail } = req.body;
+        const { complex_id, application_id, dong, ho, name, phone, program_name, reason, request_type, refund_reason, refund_detail, reason_detail } = req.body;
         if (!complex_id || !dong || !ho || !name || !phone) return res.status(400).json({ success: false, error: '필수 항목 누락' });
         const sb = getSupabase();
 
         // reason 필드 구성
         let reasonText = reason || '';
         if (request_type === 'refund') {
+            // 환불 신청: [환불사유: ...] 형식으로 저장
             reasonText = `[환불사유: ${refund_reason || '-'}]\n${refund_detail || ''}`;
+        } else if (reason_detail) {
+            // 해지 신청: 상세 사유가 있으면 reason에 합침
+            reasonText = reason ? `${reason}\n${reason_detail}` : reason_detail;
         }
 
         const insertData = {
