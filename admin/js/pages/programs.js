@@ -54,25 +54,44 @@ const programs = {
         programs._openProgramForm(p, getEffectiveComplexId());
     },
     _openProgramForm(p, complexId, complexName) {
-        const slots = p && Array.isArray(p.time_slots) ? p.time_slots : [];
+        const slots    = p && Array.isArray(p.time_slots) ? p.time_slots : [];
         const titleStr = complexName ? `프로그램 추가 — ${complexName}` : (p ? '프로그램 수정' : '프로그램 추가');
+
+        // 운영 요일 체크박스
+        const ALL_DAYS   = ['월','화','수','목','금','토','일'];
+        const savedDays  = (p?.days || '').split(/[,\s·&]+/).map(d => d.trim()).filter(d => ALL_DAYS.includes(d));
+        const dayBoxes   = ALL_DAYS.map(d =>
+            `<label class="day-cb-lbl"><input type="checkbox" name="pDayCheck" value="${d}" ${savedDays.includes(d)?'checked':''}><span>${d}</span></label>`
+        ).join('');
+
+        const isPersonal = p?.type === 'personal' || p?.type === 'duet';
         const body = `
             ${complexName ? `<p style="font-size:.85rem;color:#888;margin-bottom:8px"><i class="fas fa-building"></i> ${escHtml(complexName)}</p>` : ''}
             <input type="hidden" id="programComplexId" value="${complexId || ''}">
             <div class="form-group"><label>프로그램명 *</label><input type="text" id="pName" value="${p ? escHtml(p.name) : ''}"></div>
             <div class="form-group">
                 <label>유형 *</label>
-                <select id="pType">
-                    <option value="group" ${p?.type==='group'?'selected':''}>그룹</option>
-                    <option value="duet" ${p?.type==='duet'?'selected':''}>듀엣</option>
+                <select id="pType" onchange="programs._onTypeChange(this.value)">
+                    <option value="group"    ${p?.type==='group'   ?'selected':''}>그룹</option>
+                    <option value="duet"     ${p?.type==='duet'    ?'selected':''}>듀엣</option>
                     <option value="personal" ${p?.type==='personal'?'selected':''}>개인</option>
                 </select>
             </div>
-            <div class="form-group"><label>운영 요일</label><input type="text" id="pDays" value="${p ? escHtml(p.days||'') : ''}" placeholder="예: 화, 목"></div>
             <div class="form-group">
-                <label>시간대 (쉼표로 구분, 그룹수업만)</label>
-                <input type="text" id="pSlots" value="${escHtml(slots.join(', '))}" placeholder="예: 오전 09시, 오전 10시, 저녁 19시">
-                <small style="color:#999">개인/듀엣은 비워두세요 (입주민이 자유 입력)</small>
+                <label>운영 요일</label>
+                <div class="day-cb-wrap">${dayBoxes}</div>
+            </div>
+            <div class="form-group" id="pSlotsGroup" style="${isPersonal ? 'display:none' : ''}">
+                <label>시간대 <span style="font-size:.8rem;font-weight:normal;color:#888">(그룹수업 — 추가 버튼으로 등록)</span></label>
+                <div id="pSlotsContainer" style="min-height:32px;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px"></div>
+                <div style="display:flex;gap:6px">
+                    <input type="text" id="pSlotInput" placeholder="예: 오전 09:00" style="flex:1"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();programs._addSlot();}">
+                    <button type="button" class="btn-secondary btn-sm" onclick="programs._addSlot()">
+                        <i class="fas fa-plus"></i> 추가
+                    </button>
+                </div>
+                <small style="color:#999;margin-top:4px;display:block">개인/듀엣은 비워두세요 (입주민 자유 입력)</small>
             </div>
             <div class="form-row">
                 <div class="form-group"><label>월 수강료 (원)</label><input type="number" id="pPrice" value="${p?.price||0}"></div>
@@ -85,16 +104,51 @@ const programs = {
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
             <button class="btn-primary" onclick="programs.save('${p?.id||''}')"><i class="fas fa-save"></i> 저장</button>`;
         openGlobalModal(titleStr, body, footer);
+        // 모달 렌더 직후 기존 슬롯 태그 초기화
+        slots.forEach(s => programs._addSlotTag(s));
+    },
+
+    /** 유형 변경 시 시간대 섹션 토글 */
+    _onTypeChange(val) {
+        const g = document.getElementById('pSlotsGroup');
+        if (g) g.style.display = (val === 'personal' || val === 'duet') ? 'none' : '';
+    },
+
+    /** 슬롯 입력창 → 태그 추가 */
+    _addSlot() {
+        const input = document.getElementById('pSlotInput');
+        const val   = (input?.value || '').trim();
+        if (!val) { input?.focus(); return; }
+        const existing = Array.from(document.querySelectorAll('#pSlotsContainer .slot-tag')).map(el => el.dataset.val);
+        if (existing.includes(val)) { showToast('이미 추가된 시간대입니다', 'warning'); return; }
+        programs._addSlotTag(val);
+        input.value = '';
+        input.focus();
+    },
+
+    /** 슬롯 태그 DOM 생성 */
+    _addSlotTag(val) {
+        const container = document.getElementById('pSlotsContainer');
+        if (!container) return;
+        const tag = document.createElement('span');
+        tag.className   = 'slot-tag';
+        tag.dataset.val = val;
+        tag.innerHTML   = `${escHtml(val)}<button type="button" title="삭제" onclick="this.parentElement.remove()" style="background:none;border:none;color:#2980b9;cursor:pointer;padding:0 0 0 5px;font-size:1rem;line-height:1">×</button>`;
+        container.appendChild(tag);
     },
     async save(id) {
         const name = document.getElementById('pName').value.trim();
         if (!name) { showToast('프로그램명을 입력하세요', 'error'); return; }
-        const slotsRaw = document.getElementById('pSlots').value;
-        const time_slots = slotsRaw ? slotsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+        // 요일 체크박스 수집
+        const days = Array.from(document.querySelectorAll('input[name="pDayCheck"]:checked'))
+            .map(el => el.value).join(', ');
+        // 슬롯 태그 수집
+        const time_slots = Array.from(document.querySelectorAll('#pSlotsContainer .slot-tag'))
+            .map(el => el.dataset.val).filter(Boolean);
         try {
             const data = {
                 name, type: document.getElementById('pType').value,
-                days: document.getElementById('pDays').value,
+                days,
                 time_slots, price: parseInt(document.getElementById('pPrice').value)||0,
                 capacity: parseInt(document.getElementById('pCapacity').value)||6,
                 description: document.getElementById('pDesc').value,

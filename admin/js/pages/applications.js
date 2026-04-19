@@ -53,11 +53,32 @@ const applications = {
             params.complexId = getEffectiveComplexId(); if (!params.complexId) delete params.complexId;
             const res = await API.applications.list(params);
             this.data = res.data || [];
+            // ── 대기순번 동적 계산 (프로그램 + 희망시간 조합별, 신청일 오름차순) ──
+            this._calcWaitingOrders();
             this.filtered = [...this.data];
             this.applyFilters();
         } catch (e) {
             document.getElementById('appList').innerHTML = `<p class="error-hint">데이터 로드 실패: ${e.message}</p>`;
         }
+    },
+
+    /** 프로그램+희망시간별 대기 순번을 신청일 순서로 동적 계산하여 각 항목에 주입 */
+    _calcWaitingOrders() {
+        // 그룹: {program_name}|{preferred_time} 키로 대기자를 신청일 순 정렬
+        const waitingMap = {}; // key → [{id, created_at}, ...]
+        this.data.forEach(a => {
+            if (a.status !== 'waiting') return;
+            const key = `${a.program_name||''}|${a.preferred_time||''}`;
+            if (!waitingMap[key]) waitingMap[key] = [];
+            waitingMap[key].push(a);
+        });
+        // 신청일(created_at) 오름차순 정렬 후 순번 부여
+        Object.values(waitingMap).forEach(list => {
+            list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            list.forEach((a, i) => { a._waitingOrder = i + 1; });
+        });
+        // waiting이 아닌 항목은 초기화
+        this.data.forEach(a => { if (a.status !== 'waiting') a._waitingOrder = null; });
     },
 
     filter(status) {
@@ -108,7 +129,10 @@ const applications = {
                 <div class="list-item" onclick="applications.showDetail('${a.id}')">
                     <div class="item-status">
                         <span class="status-badge status-${statusClass(a.status)}">${statusLabel(a.status)}</span>
-                        ${a.waiting_order ? `<small>대기 ${a.waiting_order}번</small>` : ''}
+                        ${a.status === 'waiting' && a._waitingOrder
+                            ? `<span class="waiting-order-badge">대기 ${a._waitingOrder}번</span>`
+                            : ''
+                        }
                     </div>
                     <div class="item-main">
                         <strong>${a.dong} ${a.ho} | ${a.name}</strong>${transferBadge}${sessionsBadge}
@@ -145,7 +169,14 @@ const applications = {
 
         const bodyHtml = `
             <div class="detail-grid">
-                <div class="detail-row"><label>상태</label><span class="status-badge status-${statusClass(a.status)}">${statusLabel(a.status)}</span></div>
+                <div class="detail-row"><label>상태</label>
+                    <span>
+                        <span class="status-badge status-${statusClass(a.status)}">${statusLabel(a.status)}</span>
+                        ${a.status === 'waiting' && a._waitingOrder
+                            ? `<span class="waiting-order-badge" style="margin-left:6px">대기 ${a._waitingOrder}번</span>`
+                            : ''}
+                    </span>
+                </div>
                 <div class="detail-row"><label>동/호수</label><span>${a.dong} ${a.ho}</span></div>
                 <div class="detail-row"><label>이름</label><span>${a.name}</span></div>
                 <div class="detail-row"><label>전화번호</label><span>${a.phone}</span></div>
@@ -531,7 +562,7 @@ const applications = {
             '상태': statusLabel(a.status),
             '동': a.dong, '호수': a.ho, '이름': a.name, '전화번호': a.phone,
             '프로그램': a.program_name, '희망시간': a.preferred_time || '',
-            '대기순번': a.waiting_order || '',
+            '대기순번': a.status === 'waiting' ? (a._waitingOrder || '') : '',
             '월수강료': a.monthly_fee || '',
             '총횟수': a.total_sessions || '',
             '잔여횟수': a.remaining_sessions != null ? a.remaining_sessions : '',
