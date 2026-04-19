@@ -153,15 +153,23 @@ router.post('/csv/applications', uploadCsv.single('file'), async (req, res) => {
             const normalStatus = STATUS_MAP[status] || 'received';
 
             // 기존 항목 확인
-            const { data: existing } = await sb
+            // ✅ .single() 대신 .maybeSingle() 사용 - 결과 없을 때 에러 대신 null 반환
+            const { data: existing, error: findErr } = await sb
                 .from('applications')
                 .select('id')
                 .eq('complex_id', complex_id)
                 .eq('dong', dong)
                 .eq('ho', ho)
+                .eq('name', name)
                 .eq('program_name', program_name || '')
-                .limit(1)
-                .single();
+                .maybeSingle();
+
+            // DB 조회 에러가 난 경우에도 건너뜀 처리 (단, 로그 출력)
+            if (findErr) {
+                console.warn('CSV import find error (skipping row):', findErr.message, { dong, ho, name });
+                skipped++;
+                continue;
+            }
 
             if (existing) {
                 if (overwrite === 'true') {
