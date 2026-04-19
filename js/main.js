@@ -183,7 +183,8 @@ function goToPage1() {
     
     // Update header
     document.getElementById('pageTitle').textContent = '필라테스 레슨 신청서';
-    document.getElementById('pageSubtitle').textContent = '커뮤니티 피트니스센터';
+    const subtitleElBack = document.getElementById('pageSubtitle');
+    if (subtitleElBack) subtitleElBack.textContent = '커뮤니티 피트니스센터';
     
     // Scroll to top
     window.scrollTo(0, 0);
@@ -1228,6 +1229,7 @@ async function submitCancellation(e) {
         program_name: document.getElementById('cancelLessonType').value,  // 서버 필드명
         reason: document.getElementById('cancelReason').value,
         reason_detail: document.getElementById('cancelReasonDetail').value || '',
+        request_type: 'cancel',  // 해지 신청 구분
         status: 'pending',  // 서버에서 pending으로 처리
         created_at: new Date().toISOString()
     };
