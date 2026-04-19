@@ -15,7 +15,7 @@ const notices = {
     async load() {
         try {
             const params = {};
-            if (Admin.complex?.id) params.complexId = Admin.complex.id;
+            params.complexId = getEffectiveComplexId(); if (!params.complexId) delete params.complexId;
             const res = await API.notices.list(params);
             this.data = res.data || [];
             this.renderList();
@@ -42,14 +42,14 @@ const notices = {
     },
     showForm(id) {
         const n = id ? this.data.find(x => x.id === id) : null;
-        if (!id && !Admin.complex?.id) {
+        if (!id && !getEffectiveComplexId()) {
             // 마스터 관리자: 먼저 단지 선택
             pickComplexForCreate((complexId, complexName) => {
                 notices._openNoticeForm(null, complexId, complexName);
             });
             return;
         }
-        notices._openNoticeForm(n, Admin.complex?.id);
+        notices._openNoticeForm(n, getEffectiveComplexId());
     },
     _openNoticeForm(n, complexId, complexName) {
         const title = complexName ? `새 공지 작성 — ${complexName}` : (n ? '공지 수정' : '새 공지 작성');
@@ -83,7 +83,7 @@ const notices = {
             } else {
                 // 단지 ID: hidden input 우선, 없으면 Admin.complex.id
                 const cxIdEl = document.getElementById('noticeComplexId');
-                data.complex_id = (cxIdEl?.value) || Admin.complex?.id;
+                data.complex_id = (cxIdEl?.value) || getEffectiveComplexId();
                 if (!data.complex_id) { showToast('단지를 선택하세요', 'error'); return; }
                 await API.notices.create(data);
             }

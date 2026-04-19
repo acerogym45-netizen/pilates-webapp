@@ -129,19 +129,90 @@ function startAdminApp() {
         const myComplexMenu = document.getElementById('myComplexMenu');
         if (myComplexMenu) {
             myComplexMenu.style.display = 'flex';
+            myComplexMenu.setAttribute('data-page', 'complexes');
+            myComplexMenu.setAttribute('onclick', "navigate('complexes')");
             myComplexMenu.innerHTML = `<i class="fas fa-city"></i> <span>단지 관리</span><span class="master-badge" style="font-size:.65rem;background:linear-gradient(135deg,#f093fb,#f5576c);color:#fff;border-radius:4px;padding:1px 5px;margin-left:4px">MASTER</span>`;
         }
-        // masterMenu (전체 단지 관리) 별도 표시도 유지
-        const masterMenu = document.getElementById('masterMenu');
-        if (masterMenu) masterMenu.style.display = 'none'; // myComplexMenu로 통합했으므로 숨김
-    } else {
-        // 일반 관리자: masterMenu 숨김
+        // masterMenu 숨김 (myComplexMenu로 통합)
         const masterMenu = document.getElementById('masterMenu');
         if (masterMenu) masterMenu.style.display = 'none';
+
+        // 마스터 단지 전환 셀렉터 초기화
+        _initMasterComplexSwitcher();
+    } else {
+        // 일반 관리자: masterMenu 숨김, 단지 전환 셀렉터 숨김
+        const masterMenu = document.getElementById('masterMenu');
+        if (masterMenu) masterMenu.style.display = 'none';
+        const switcher = document.getElementById('masterComplexSwitcher');
+        if (switcher) switcher.style.display = 'none';
     }
 
     navigate('dashboard');
     loadBadges();
+}
+
+// ── 마스터 단지 전환 셀렉터 초기화 ──────────────────────────────────────────
+async function _initMasterComplexSwitcher() {
+    const switcher = document.getElementById('masterComplexSwitcher');
+    const select   = document.getElementById('masterComplexSelect');
+    if (!switcher || !select) return;
+
+    try {
+        const res = await API.complexes.list();
+        const list = (res.data || []);
+        if (!list.length) return;
+
+        // 옵션 생성
+        select.innerHTML = '<option value="">🏙 전체 단지 (통합 보기)</option>' +
+            list.map(cx => `<option value="${cx.id}" data-code="${cx.code}" data-name="${escHtml(cx.name)}">
+                ${cx.is_active ? '✅' : '⏸'} ${escHtml(cx.name)} (${escHtml(cx.code)})
+            </option>`).join('');
+
+        // 현재 선택된 단지 반영
+        if (Admin.selectedComplexId) {
+            select.value = Admin.selectedComplexId;
+        }
+
+        switcher.style.display = 'block';
+        Admin._allComplexes = list;
+    } catch(e) {
+        console.warn('단지 목록 로드 실패:', e.message);
+    }
+}
+
+// ── 마스터 단지 전환 ──────────────────────────────────────────────────────────
+function switchMasterComplex(complexId) {
+    if (Admin.role !== 'master') return;
+
+    if (!complexId) {
+        // 전체 단지 통합 보기
+        Admin.selectedComplexId   = null;
+        Admin.selectedComplexName = '전체 단지';
+        Admin.selectedComplexCode = null;
+        document.getElementById('sidebarComplexName').textContent = '마스터 관리자';
+        document.getElementById('sidebarComplexName').style.color = '#f39c12';
+    } else {
+        const cx = (Admin._allComplexes || []).find(c => c.id === complexId);
+        Admin.selectedComplexId   = complexId;
+        Admin.selectedComplexName = cx?.name || '단지';
+        Admin.selectedComplexCode = cx?.code || null;
+        document.getElementById('sidebarComplexName').textContent = cx?.name || '단지';
+        document.getElementById('sidebarComplexName').style.color = '#f39c12';
+    }
+
+    // 현재 페이지 새로고침
+    if (Admin.currentPage) navigate(Admin.currentPage);
+    loadBadges();
+}
+
+// ── 마스터의 현재 선택 단지 ID 반환 (null = 전체) ─────────────────────────────
+function getMasterSelectedComplexId() {
+    if (Admin.role !== 'master') return Admin.complex?.id || null;
+    return Admin.selectedComplexId || null;
+}
+function getMasterSelectedComplexCode() {
+    if (Admin.role !== 'master') return Admin.complex?.code || null;
+    return Admin.selectedComplexCode || null;
 }
 
 // ── 페이지 라우팅 ─────────────────────────────────────────────────────────────
@@ -167,7 +238,8 @@ function navigate(page) {
 async function loadBadges() {
     try {
         const params = {};
-        if (Admin.complex?.id) params.complexId = Admin.complex.id;
+        const effId = getMasterSelectedComplexId();
+        if (effId) params.complexId = effId;
         const res = await API.stats.dashboard(params);
         const s = res.data;
 
@@ -249,9 +321,16 @@ function escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── 단지 ID 헬퍼 (마스터 관리자의 경우 null 반환) ─────────────────────────────────
+// ── 단지 ID 헬퍼 ─────────────────────────────────────────────────────────────
+// 마스터: 선택한 단지 ID (null = 전체), 일반: 본인 단지 ID
 function getEffectiveComplexId() {
+    if (Admin.role === 'master') return getMasterSelectedComplexId();
     return Admin.complex?.id || null;
+}
+
+function getEffectiveComplexCode() {
+    if (Admin.role === 'master') return getMasterSelectedComplexCode();
+    return Admin.complex?.code || null;
 }
 
 // 단지 선택 콜백 저장소

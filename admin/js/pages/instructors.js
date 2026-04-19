@@ -14,7 +14,7 @@ const instructors = {
     },
     async load() {
         try {
-            const res = await API.instructors.list({ complexId: Admin.complex?.id });
+            const res = await API.instructors.list({ complexId: getEffectiveComplexId() });
             this.data = res.data || [];
             this.renderList();
         } catch(e) { document.getElementById('instructorList').innerHTML = `<p class="error-hint">${e.message}</p>`; }
@@ -95,7 +95,7 @@ const instructors = {
                 showToast('저장되었습니다');
                 await this.load();
             } else {
-                if (!Admin.complex?.id) {
+                if (!getEffectiveComplexId()) {
                     pickComplexForCreate(async (complexId) => {
                         data.complex_id = complexId;
                         try { await API.instructors.create(data); showToast('저장되었습니다'); await instructors.load(); }
@@ -133,7 +133,7 @@ const curricula = {
     },
     async load() {
         try {
-            const res = await API.curricula.list({ complexId: Admin.complex?.id });
+            const res = await API.curricula.list({ complexId: getEffectiveComplexId() });
             this.data = res.data || [];
             this.renderList();
         } catch(e) { document.getElementById('curricList').innerHTML = `<p class="error-hint">${e.message}</p>`; }
@@ -188,7 +188,7 @@ const curricula = {
             } catch(e) { showToast('이미지 업로드 실패', 'error'); return; }
         }
         try {
-            const complexId = Admin.complex?.id;
+            const complexId = getEffectiveComplexId();
             if (!complexId) {
                 pickComplexForCreate(async (cxId) => {
                     try {

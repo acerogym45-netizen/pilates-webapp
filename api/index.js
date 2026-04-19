@@ -121,6 +121,18 @@ app.use('/api/upload',       uploadRouter);
 // ── 나머지 정적파일 (express.static) ─────────────────────────────────────────
 app.use(express.static(ROOT_DIR, { index: false, dotfiles: 'ignore' }));
 
+// ── HTML 파일 직접 서빙 ──────────────────────────────────────────────────────
+// 루트에 있는 *.html 파일을 직접 서빙 (master-admin.html 등)
+app.get('/:file([^/]+\\.html)', (req, res) => {
+    const filePath = path.join(ROOT_DIR, req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.sendFile(path.join(ROOT_DIR, 'index.html'));
+    }
+});
+
 // ── SPA 라우팅 ────────────────────────────────────────────────────────────────
 app.get('/admin', (req, res) => {
     res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));

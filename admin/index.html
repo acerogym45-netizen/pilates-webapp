@@ -68,6 +68,22 @@
                         <small id="sidebarRoleBadge" class="sidebar-role-badge"></small>
                     </div>
                 </div>
+
+                <!-- 마스터 전용: 단지 전환 셀렉터 -->
+                <div id="masterComplexSwitcher" style="display:none; padding:10px 16px 0;">
+                    <div style="background:rgba(243,156,18,.12); border:1px solid rgba(243,156,18,.35); border-radius:9px; padding:9px 12px;">
+                        <div style="font-size:.72rem; color:#f39c12; font-weight:700; margin-bottom:6px;">
+                            <i class="fas fa-exchange-alt"></i> 단지 전환
+                        </div>
+                        <select id="masterComplexSelect"
+                                onchange="switchMasterComplex(this.value)"
+                                style="width:100%; background:#fff; border:1px solid rgba(243,156,18,.4);
+                                       border-radius:6px; padding:6px 8px; font-size:.82rem;
+                                       color:#1a1d23; cursor:pointer; font-family:inherit;">
+                            <option value="">-- 단지 선택 --</option>
+                        </select>
+                    </div>
+                </div>
                 <nav class="sidebar-nav">
                     <!-- 일반 메뉴 -->
                     <div class="nav-group-label">운영 관리</div>
