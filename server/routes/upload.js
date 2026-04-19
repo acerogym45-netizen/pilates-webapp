@@ -11,7 +11,6 @@ const { getSupabase, sbErr } = require('../db-supabase');
 require('dotenv').config();
 
 /* ── 이미지 업로드 ─────────────────────────────────────────────────────── */
-// Vercel 서버리스에서는 /tmp 디렉터리 사용
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/tmp/uploads';
 try {
     if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -55,8 +54,7 @@ const csvFilter   = (req, file, cb) => {
 const uploadCsv = multer({ storage: csvStorage, fileFilter: csvFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
 /**
- * CSV 파싱 헬퍼
- * - BOM 제거, 큰따옴표 처리
+ * CSV 파싱 헬퍼 - BOM 제거, 큰따옴표 처리
  */
 function parseCsv(buffer) {
     let text = buffer.toString('utf-8');
@@ -93,7 +91,7 @@ function parseCsv(buffer) {
     return { headers, rows };
 }
 
-/** 신청 CSV 컬럼 → DB 컬럼 매핑 */
+/** 신청 CSV 컬럼 → DB 컬럼 매핑 (한글/영문 모두 지원) */
 const APP_COL_MAP = {
     '동':      'dong',
     '호수':    'ho',
@@ -103,22 +101,30 @@ const APP_COL_MAP = {
     '희망시간':'preferred_time',
     '상태':    'status',
     '메모':    'notes',
-    // 영문 헤더도 지원
     dong:'dong', ho:'ho', name:'name', phone:'phone',
     program_name:'program_name', preferred_time:'preferred_time',
     status:'status', notes:'notes'
 };
 
+/** 상태값 정규화 - 내보내기(export) 한글 레이블도 역매핑 */
 const STATUS_MAP = {
-    '승인':'approved','대기':'waiting','거부':'rejected',
-    '해지':'cancelled','만료':'expired','이관':'transferred','접수':'received',
+    // 한글 → 영문
+    '승인':'approved', '대기':'waiting',  '거부':'rejected',
+    '해지':'cancelled','만료':'expired',  '이관':'transferred',
+    '접수':'received', '양도':'transferred','양수':'received',
+    '대기중':'waiting',
+    // 영문 → 영문 (패스스루)
     approved:'approved', waiting:'waiting', rejected:'rejected',
-    cancelled:'cancelled', expired:'expired', transferred:'transferred', received:'received'
+    cancelled:'cancelled', expired:'expired', transferred:'transferred',
+    received:'received'
 };
 
 /**
  * POST /api/upload/csv/applications
  * Body (multipart): file=<CSV>, complex_id=<uuid>, overwrite=<'true'|'false'>
+ *
+ * overwrite=false (기본): 중복 체크 없이 무조건 insert
+ * overwrite=true        : 동+호+이름+프로그램 일치 시 update, 없으면 insert
  */
 router.post('/csv/applications', uploadCsv.single('file'), async (req, res) => {
     try {
@@ -133,68 +139,97 @@ router.post('/csv/applications', uploadCsv.single('file'), async (req, res) => {
             .from('complexes').select('id').eq('id', complex_id).single();
         if (cxErr || !cx) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
 
-        const { rows } = parseCsv(req.file.buffer);
+        const { headers, rows } = parseCsv(req.file.buffer);
         if (!rows.length) return res.status(400).json({ success: false, error: 'CSV에 데이터가 없습니다' });
 
+        console.log('[CSV import] headers:', headers);
+        console.log('[CSV import] row count:', rows.length, '| first row:', rows[0]);
+        console.log('[CSV import] overwrite mode:', overwrite);
+
         let inserted = 0, updated = 0, skipped = 0;
+        const skipReasons = [];
 
         for (const row of rows) {
+            // 컬럼명 → DB 필드 매핑
             const mapped = {};
             for (const [k, v] of Object.entries(row)) {
                 const dbCol = APP_COL_MAP[k.trim()];
                 if (dbCol) mapped[dbCol] = v;
             }
 
-            const { dong, ho, name, phone, program_name,
-                    preferred_time = '', status = 'received', notes = '' } = mapped;
+            const dong           = mapped.dong          || '';
+            const ho             = mapped.ho            || '';
+            const name           = mapped.name          || '';
+            const phone          = mapped.phone         || '';
+            const program_name   = mapped.program_name  || '';
+            const preferred_time = mapped.preferred_time|| '';
+            const status         = mapped.status        || 'received';
+            const notes          = mapped.notes         || '';
 
-            if (!dong || !ho || !name) { skipped++; continue; }
-
-            const normalStatus = STATUS_MAP[status] || 'received';
-
-            // 기존 항목 확인
-            // ✅ .single() 대신 .maybeSingle() 사용 - 결과 없을 때 에러 대신 null 반환
-            const { data: existing, error: findErr } = await sb
-                .from('applications')
-                .select('id')
-                .eq('complex_id', complex_id)
-                .eq('dong', dong)
-                .eq('ho', ho)
-                .eq('name', name)
-                .eq('program_name', program_name || '')
-                .maybeSingle();
-
-            // DB 조회 에러가 난 경우에도 건너뜀 처리 (단, 로그 출력)
-            if (findErr) {
-                console.warn('CSV import find error (skipping row):', findErr.message, { dong, ho, name });
+            // 필수 필드(동, 호수, 이름) 누락 시 skip
+            if (!dong || !ho || !name) {
+                const reason = `dong=${dong||'(없음)'}, ho=${ho||'(없음)'}, name=${name||'(없음)'} ← keys: [${Object.keys(row).join(', ')}]`;
+                skipReasons.push(reason);
+                console.warn('[CSV skip] 필수 필드 누락:', reason);
                 skipped++;
                 continue;
             }
 
-            if (existing) {
-                if (overwrite === 'true') {
+            const normalStatus = STATUS_MAP[status] || STATUS_MAP[status?.toLowerCase()] || 'received';
+
+            if (overwrite === 'true') {
+                // ── 덮어쓰기 모드: 기존 항목 찾아서 update, 없으면 insert ──
+                const { data: existing, error: findErr } = await sb
+                    .from('applications')
+                    .select('id')
+                    .eq('complex_id', complex_id)
+                    .eq('dong', dong)
+                    .eq('ho', ho)
+                    .eq('name', name)
+                    .eq('program_name', program_name)
+                    .maybeSingle();
+
+                if (findErr) {
+                    console.warn('[CSV overwrite] find error:', findErr.message, { dong, ho, name });
+                    // 조회 실패해도 insert 시도
+                }
+
+                if (existing) {
                     await sb.from('applications')
-                        .update({ phone, preferred_time, status: normalStatus, notes, updated_at: new Date().toISOString() })
+                        .update({
+                            phone, preferred_time,
+                            status: normalStatus, notes,
+                            updated_at: new Date().toISOString()
+                        })
                         .eq('id', existing.id);
                     updated++;
                 } else {
-                    skipped++;
+                    await sb.from('applications').insert({
+                        id: uuidv4(), complex_id, dong, ho, name,
+                        phone, program_name, preferred_time,
+                        status: normalStatus, notes
+                    });
+                    inserted++;
                 }
             } else {
+                // ── 기본 모드: 중복 체크 없이 무조건 insert ──
                 await sb.from('applications').insert({
                     id: uuidv4(), complex_id, dong, ho, name,
-                    phone: phone || '', program_name: program_name || '',
-                    preferred_time, status: normalStatus, notes
+                    phone, program_name, preferred_time,
+                    status: normalStatus, notes
                 });
                 inserted++;
             }
         }
 
+        console.log(`[CSV import] done — inserted:${inserted}, updated:${updated}, skipped:${skipped}`);
+
         res.json({
             success: true,
             message: `가져오기 완료: 신규 ${inserted}건, 업데이트 ${updated}건, 건너뜀 ${skipped}건`,
             inserted, updated, skipped,
-            total: rows.length
+            total: rows.length,
+            debug: { headers, skipReasons: skipReasons.slice(0, 10) }
         });
     } catch (e) {
         console.error('CSV import error:', e);
@@ -214,7 +249,6 @@ router.post('/csv/inquiries', uploadCsv.single('file'), async (req, res) => {
 
         const sb = getSupabase();
 
-        // 단지 존재 확인
         const { data: cx, error: cxErr } = await sb
             .from('complexes').select('id').eq('id', complex_id).single();
         if (cxErr || !cx) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
@@ -261,7 +295,6 @@ router.post('/csv/inquiries', uploadCsv.single('file'), async (req, res) => {
 
 /**
  * GET /api/upload/csv/template/applications
- * 신청 가져오기용 CSV 템플릿 다운로드
  */
 router.get('/csv/template/applications', (req, res) => {
     const bom = '\uFEFF';
@@ -276,7 +309,6 @@ router.get('/csv/template/applications', (req, res) => {
 
 /**
  * GET /api/upload/csv/template/inquiries
- * 문의 가져오기용 CSV 템플릿 다운로드
  */
 router.get('/csv/template/inquiries', (req, res) => {
     const bom = '\uFEFF';

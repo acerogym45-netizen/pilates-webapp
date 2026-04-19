@@ -568,9 +568,9 @@ const applications = {
                         <strong>중복 처리 방식</strong>
                         <label class="checkbox-label" style="margin-top:8px;display:flex;align-items:center;gap:8px;font-weight:normal">
                             <input type="checkbox" id="importOverwrite">
-                            <span>동일 동·호수·프로그램 기존 데이터 덮어쓰기</span>
+                            <span>동일 항목(동·호수·이름·프로그램) 덮어쓰기 (UPDATE)</span>
                         </label>
-                        <p class="terms-note">※ 체크 해제 시 중복 항목은 건너뜁니다</p>
+                        <p class="terms-note">※ 체크 해제 시: 중복 여부 관계없이 모두 신규 추가<br>※ 체크 시: 동일 항목은 업데이트, 없는 항목은 신규 추가</p>
                     </div>
                 </div>
                 <div class="import-tip">
@@ -598,7 +598,13 @@ const applications = {
         try {
             const result = await API.importCsv.applications(complexId, file, overwrite);
             closeGlobalModal();
-            showToast(result.message, 'success');
+            // 디버그: skip 이유가 있으면 추가 표시
+            if (result.skipped > 0 && result.debug?.skipReasons?.length) {
+                showToast(result.message + '\n[skip 원인] ' + result.debug.skipReasons[0], 'warning');
+                console.warn('[CSV import debug]', result.debug);
+            } else {
+                showToast(result.message, result.inserted > 0 ? 'success' : 'warning');
+            }
             await this.load();
             loadBadges();
         } catch (e) {
