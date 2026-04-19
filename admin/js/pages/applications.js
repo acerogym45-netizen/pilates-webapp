@@ -1,9 +1,12 @@
-/** 신청 관리 페이지 - v2.3 양도/양수 + 관리비 계산기 */
+/** 신청 관리 페이지 - v2.4 프로그램/시간대/동 세분 필터 */
 const applications = {
     data: [],
     filtered: [],
     currentFilter: 'all',
     searchQuery: '',
+    filterProgram: '',   // 프로그램 필터
+    filterTime: '',      // 시간대 필터
+    filterDong: '',      // 동 필터
 
     async render() {
         document.getElementById('pageContent').innerHTML = `
@@ -40,6 +43,30 @@ const applications = {
                        oninput="applications.search(this.value)">
             </div>
 
+            <div class="detail-filter-bar" id="detailFilterBar">
+                <div class="detail-filter-group">
+                    <label><i class="fas fa-dumbbell"></i> 프로그램</label>
+                    <select id="filterProgram" onchange="applications.setDetailFilter('program', this.value)">
+                        <option value="">전체</option>
+                    </select>
+                </div>
+                <div class="detail-filter-group">
+                    <label><i class="fas fa-clock"></i> 시간대</label>
+                    <select id="filterTime" onchange="applications.setDetailFilter('time', this.value)">
+                        <option value="">전체</option>
+                    </select>
+                </div>
+                <div class="detail-filter-group">
+                    <label><i class="fas fa-building"></i> 동</label>
+                    <select id="filterDong" onchange="applications.setDetailFilter('dong', this.value)">
+                        <option value="">전체</option>
+                    </select>
+                </div>
+                <button class="btn-ghost btn-sm" onclick="applications.clearDetailFilters()" style="align-self:flex-end">
+                    <i class="fas fa-times"></i> 초기화
+                </button>
+            </div>
+
             <div id="appList" class="data-list">
                 <div class="loading-mini"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</div>
             </div>`;
@@ -56,10 +83,51 @@ const applications = {
             // ── 대기순번 동적 계산 (프로그램 + 희망시간 조합별, 신청일 오름차순) ──
             this._calcWaitingOrders();
             this.filtered = [...this.data];
+            this._buildDetailFilterOptions();
             this.applyFilters();
         } catch (e) {
             document.getElementById('appList').innerHTML = `<p class="error-hint">데이터 로드 실패: ${e.message}</p>`;
         }
+    },
+
+    /** 세분 필터 드롭다운 옵션 구성 */
+    _buildDetailFilterOptions() {
+        const programs = [...new Set(this.data.map(a => a.program_name).filter(Boolean))].sort();
+        const times    = [...new Set(this.data.map(a => a.preferred_time).filter(Boolean))].sort();
+        const dongs    = [...new Set(this.data.map(a => a.dong).filter(Boolean))]
+            .sort((a, b) => {
+                const na = parseInt(a), nb = parseInt(b);
+                return isNaN(na) || isNaN(nb) ? a.localeCompare(b) : na - nb;
+            });
+
+        const fill = (selId, items) => {
+            const el = document.getElementById(selId);
+            if (!el) return;
+            const cur = el.value;
+            el.innerHTML = '<option value="">전체</option>' +
+                items.map(v => `<option value="${escHtml(v)}" ${v===cur?'selected':''}>${escHtml(v)}</option>`).join('');
+        };
+        fill('filterProgram', programs);
+        fill('filterTime', times);
+        fill('filterDong', dongs);
+    },
+
+    setDetailFilter(type, value) {
+        if (type === 'program') this.filterProgram = value;
+        else if (type === 'time') this.filterTime   = value;
+        else if (type === 'dong')  this.filterDong  = value;
+        this.applyFilters();
+    },
+
+    clearDetailFilters() {
+        this.filterProgram = '';
+        this.filterTime    = '';
+        this.filterDong    = '';
+        ['filterProgram','filterTime','filterDong'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        this.applyFilters();
     },
 
     /** 프로그램+희망시간별 대기 순번을 신청일 순서로 동적 계산하여 각 항목에 주입 */
@@ -103,6 +171,9 @@ const applications = {
                 (a.program_name || '').toLowerCase().includes(q)
             );
         }
+        if (this.filterProgram) list = list.filter(a => a.program_name === this.filterProgram);
+        if (this.filterTime)    list = list.filter(a => a.preferred_time === this.filterTime);
+        if (this.filterDong)    list = list.filter(a => a.dong === this.filterDong);
         this.filtered = list;
         this.renderList();
     },

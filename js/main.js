@@ -403,93 +403,51 @@ async function loadTimeSlotStatus() {
         console.log('Total contracts for complex:', contracts.length);
         console.log('Group lesson programs:', programs.map(p => p.program_name));
         
-        // Time code to display name mapping
-        const timeDisplayMap = {
-            '09:00': '오전 09시',
-            '10:00': '오전 10시',
-            '11:00': '오전 11시',
-            '12:00': '오후 12시',
-            '13:00': '오후 13시',
-            '14:00': '오후 14시',
-            '15:00': '오후 15시',
-            '16:00': '오후 16시',
-            '17:00': '오후 17시',
-            '18:00': '저녁 18시',
-            '19:00': '저녁 19시',
-            '20:00': '저녁 20시',
-            '21:00': '저녁 21시'
-        };
-        
-        // Initialize programTimeSlots dynamically based on programs' available_time_slots
+        // ── 키를 HH:MM 형식으로 통일 (DB preferred_time과 동일한 형식)
+        // programTimeSlots = { programName: { 'HH:MM': count, ... } }
         const programTimeSlots = {};
-        
+
+        const DEFAULT_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00',
+                               '15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
+
         programs.forEach(program => {
             const availableSlots = program.available_time_slots || [];
             const timeSlotCounts = {};
-            
-            // Initialize counts for all available time slots
-            if (availableSlots.length > 0) {
-                availableSlots.forEach(timeCode => {
-                    const displayTime = timeDisplayMap[timeCode] || `${timeCode}시`;
-                    timeSlotCounts[displayTime] = 0;
-                });
-            } else {
-                // Fallback: if no available_time_slots, use default times
-                timeSlotCounts['오전 09시'] = 0;
-                timeSlotCounts['오전 10시'] = 0;
-                timeSlotCounts['오전 11시'] = 0;
-                timeSlotCounts['저녁 19시'] = 0;
-                timeSlotCounts['저녁 20시'] = 0;
-                timeSlotCounts['저녁 21시'] = 0;
-            }
-            
+            const slots = availableSlots.length > 0 ? availableSlots : DEFAULT_SLOTS;
+            slots.forEach(t => { timeSlotCounts[t] = 0; });
             const pKey = program.name || program.program_name;
             programTimeSlots[pKey] = timeSlotCounts;
-            console.log(`🔧 Initialized time slots for "${pKey}":`, Object.keys(timeSlotCounts));
         });
-        
-        // Count approved contracts only (status === 'approved')
+
+        // ── preferred_time을 HH:MM 정규화 후 카운팅 ──────────────────────
+        // 정규화: '저녁 21시' / '21시' / '21:00' → '21:00'
+        function normalizeToHHMM(raw) {
+            if (!raw) return null;
+            // 이미 HH:MM 형식
+            if (/^\d{2}:\d{2}$/.test(raw)) return raw;
+            // '오전 09시', '저녁 21시' 등 한글 포함
+            const m = raw.match(/(\d{1,2})시/);
+            if (m) return String(parseInt(m[1])).padStart(2,'0') + ':00';
+            return null;
+        }
+
         contracts.forEach(contract => {
-            if (contract.status === 'approved') {
-                let time = contract.preferred_time;
-                let program = contract.program_name || contract.lesson_type;
-                
-                console.log(`🔍 Processing contract: ${contract.name}, program: "${program}", time: "${time}"`);
-                
-                // Normalize old format (e.g., "09시" → "오전 09시")
-                if (time && !time.includes('오전') && !time.includes('오후') && !time.includes('저녁')) {
-                    const hour = time.replace('시', '');
-                    if (hour === '09' || hour === '10' || hour === '11') {
-                        time = `오전 ${hour}시`;
-                    } else if (hour === '12' || hour === '13' || hour === '14' || hour === '15' || hour === '16' || hour === '17') {
-                        time = `오후 ${hour}시`;
-                    } else if (hour === '18' || hour === '19' || hour === '20' || hour === '21') {
-                        time = `저녁 ${hour}시`;
-                    }
-                }
-                
-                // Try exact match first
-                if (programTimeSlots[program] && programTimeSlots[program].hasOwnProperty(time)) {
-                    programTimeSlots[program][time]++;
-                    console.log(`✅ Counted: ${contract.name} - ${program} ${time} (Total: ${programTimeSlots[program][time]})`);
-                } else {
-                    // Try fuzzy matching - check if program name starts with contract's lesson_type
-                    let matched = false;
-                    for (let programName in programTimeSlots) {
-                        if (programName.includes(program) || program.includes(programName)) {
-                            if (programTimeSlots[programName].hasOwnProperty(time)) {
-                                programTimeSlots[programName][time]++;
-                                console.log(`✅ Fuzzy matched: ${contract.name} - "${program}" → "${programName}" ${time} (Total: ${programTimeSlots[programName][time]})`);
-                                matched = true;
-                                break;
-                            }
+            if (contract.status !== 'approved') return;
+            const rawTime = contract.preferred_time;
+            const time = normalizeToHHMM(rawTime);
+            const program = contract.program_name || contract.lesson_type;
+            if (!time || !program) return;
+
+            if (programTimeSlots[program] && Object.prototype.hasOwnProperty.call(programTimeSlots[program], time)) {
+                programTimeSlots[program][time]++;
+            } else {
+                // 프로그램명 부분 매칭
+                for (const pName in programTimeSlots) {
+                    if (pName.includes(program) || program.includes(pName)) {
+                        if (Object.prototype.hasOwnProperty.call(programTimeSlots[pName], time)) {
+                            programTimeSlots[pName][time]++;
+                            break;
                         }
-                    }
-                    
-                    if (!matched && programTimeSlots[program]) {
-                        console.warn(`⚠️ Time slot "${time}" not found in program "${program}". Available: ${Object.keys(programTimeSlots[program]).join(', ')}`);
-                    } else if (!matched) {
-                        console.warn(`⚠️ Program "${program}" not found in programTimeSlots. Available programs: ${Object.keys(programTimeSlots).join(', ')}`);
                     }
                 }
             }
@@ -613,46 +571,35 @@ function updateTimeSlotOptions() {
     
     console.log('📊 Max capacity for this program:', maxCapacity);
     
-    // Build options HTML - only for available time slots
-    let optionsHTML = '<option value="">선택하세요</option>';
-    
-    // Map time codes to display names
+    // ── 슬롯 키는 HH:MM 형식 (programTimeSlots와 동일)
+    // option value는 HH:MM, 표시 텍스트만 한글로 변환
     const timeDisplayMap = {
-        '09:00': '오전 09시',
-        '10:00': '오전 10시',
-        '11:00': '오전 11시',
-        '12:00': '오후 12시',
-        '13:00': '오후 13시',
-        '14:00': '오후 14시',
-        '15:00': '오후 15시',
-        '16:00': '오후 16시',
-        '17:00': '오후 17시',
-        '18:00': '저녁 18시',
-        '19:00': '저녁 19시',
-        '20:00': '저녁 20시',
-        '21:00': '저녁 21시'
+        '09:00': '오전 09시', '10:00': '오전 10시', '11:00': '오전 11시',
+        '12:00': '오후 12시', '13:00': '오후 13시', '14:00': '오후 14시',
+        '15:00': '오후 15시', '16:00': '오후 16시', '17:00': '오후 17시',
+        '18:00': '저녁 18시', '19:00': '저녁 19시', '20:00': '저녁 20시',
+        '21:00': '저녁 21시', '22:00': '저녁 22시'
     };
-    
+
+    let optionsHTML = '<option value="">선택하세요</option>';
+
     availableTimeSlots.forEach(timeCode => {
-        const timeDisplay = timeDisplayMap[timeCode] || `${timeCode}시`;
-        const count = slots[timeDisplay] || 0;
+        // slots 키가 HH:MM 이므로 바로 조회
+        const count = (slots && slots[timeCode] != null) ? slots[timeCode] : 0;
         const isFull = count >= maxCapacity;
-        const isAlmostFull = count >= (maxCapacity - 1);
-        
+        const isAlmostFull = !isFull && count >= (maxCapacity - 1);
+        const timeDisplay = timeDisplayMap[timeCode] || timeCode;
+
         let status = '모집중';
-        if (isFull) {
-            status = '🔴 마감';
-        } else if (isAlmostFull) {
-            status = '⚠️ 마감임박';
-        }
-        
+        if (isFull) status = '🔴 마감';
+        else if (isAlmostFull) status = '⚠️ 마감임박';
+
         const disabled = isFull ? 'disabled' : '';
-        const style = isFull ? 'style="color: #999;"' : '';
-        
-        optionsHTML += `<option value="${timeDisplay}" ${disabled} ${style}>${timeDisplay} [${count}/${maxCapacity}명] ${status}</option>`;
-        console.log(`  ${timeDisplay}: ${count}/${maxCapacity}명 - ${status}`);
+        const style   = isFull ? 'style="color:#999"' : '';
+        // value는 HH:MM으로 저장 (DB와 일치)
+        optionsHTML += `<option value="${timeCode}" ${disabled} ${style}>${timeDisplay} [${count}/${maxCapacity}명] ${status}</option>`;
     });
-    
+
     timeSlotSelect.innerHTML = optionsHTML;
     
     console.log(`✅ Time slots updated successfully for "${selectedProgram}" with ${availableTimeSlots.length} available slots, max capacity ${maxCapacity}`);

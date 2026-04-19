@@ -753,6 +753,48 @@ code { background:#f0f2f8; padding:1px 5px; border-radius:4px; font-size:.85em; 
     font-weight: 600;
 }
 
+/* ── 신청 관리 세분 필터 바 ──────────────────────────────────────────── */
+.detail-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #f0f4ff;
+    border: 1px solid #d6e0f5;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+.detail-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 140px;
+    flex: 1;
+}
+.detail-filter-group label {
+    font-size: .75rem;
+    font-weight: 600;
+    color: #5a6a8a;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.detail-filter-group select {
+    padding: 5px 8px;
+    border: 1px solid #c5d0e8;
+    border-radius: 6px;
+    font-size: .85rem;
+    background: #fff;
+    color: #2c3e50;
+    cursor: pointer;
+}
+.detail-filter-group select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 2px rgba(74,108,247,.15);
+}
+
 /* ── 프로그램 폼: 시간대 체크박스 ───────────────────────────────────── */
 .time-cb-wrap {
     display: flex;
