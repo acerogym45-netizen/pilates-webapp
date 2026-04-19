@@ -389,8 +389,8 @@ router.get('/cancellations', async (req, res) => {
             complex_code: r.complexes?.code,
             // request_type 컬럼이 없는 기존 레코드는 'cancel'로 기본값 설정
             request_type: r.request_type || 'cancel',
-            // doc_urls: DB 컬럼 없으면 로컬 스토어에서 병합
-            doc_urls: r.doc_urls || docMetaStore[r.id] || null
+            // doc_urls: DB 컬럼 없거나 빈 배열이면 로컬 스토어에서 병합
+            doc_urls: (r.doc_urls && r.doc_urls.length > 0) ? r.doc_urls : (docMetaStore[r.id] || r.doc_urls || null)
         }));
 
         // request_type 필터 (DB 컬럼 유무에 관계없이 JS 레벨에서도 처리)
@@ -461,32 +461,39 @@ router.put('/cancellations/:id', async (req, res) => {
             updates.doc_urls = doc_urls;
         }
 
-        // 업데이트할 필드가 없으면 (doc_urls만 있거나 아무것도 없으면) 로컬 저장 처리
-        const updatesForDb = { ...updates };
-        const hasDocUrls = updatesForDb.doc_urls !== undefined;
-        delete updatesForDb.doc_urls; // doc_urls는 따로 처리
+        // doc_urls를 포함한 전체 DB 업데이트 객체 구성
+        const updatesForDb = { ...updates }; // doc_urls 포함
+        const hasDocUrls = doc_urls !== undefined;
 
         let data = null;
         let error = null;
 
         if (Object.keys(updatesForDb).length === 0) {
-            // DB 업데이트 없이 현재 레코드 조회 후 로컬에만 저장
+            // 아무 필드도 없으면 현재 레코드 조회만
             const { data: existing, error: fetchErr } = await sb
                 .from('cancellations').select('*').eq('id', req.params.id).single();
             if (fetchErr) throw sbErr(fetchErr);
             data = existing;
         } else {
-            // doc_urls 포함해서 시도 (DB에 컬럼 있으면 저장)
-            const tryWithDoc = hasDocUrls ? { ...updatesForDb, doc_urls: updates.doc_urls } : updatesForDb;
-            const result = await sb.from('cancellations').update(tryWithDoc).eq('id', req.params.id).select().single();
+            // doc_urls 포함해서 DB 업데이트 시도
+            const result = await sb.from('cancellations').update(updatesForDb).eq('id', req.params.id).select().single();
             error = result.error;
             data  = result.data;
 
             // doc_urls 컬럼 없으면 doc_urls 제외하고 재시도
             if (error && (error.message?.includes('doc_urls') || error.message?.includes('Cannot coerce'))) {
-                const retry = await sb.from('cancellations').update(updatesForDb).eq('id', req.params.id).select().single();
-                if (retry.error) throw sbErr(retry.error);
-                data  = retry.data;
+                const retryData = { ...updatesForDb };
+                delete retryData.doc_urls;
+                if (Object.keys(retryData).length > 0) {
+                    const retry = await sb.from('cancellations').update(retryData).eq('id', req.params.id).select().single();
+                    if (retry.error) throw sbErr(retry.error);
+                    data  = retry.data;
+                } else {
+                    const { data: existing, error: fetchErr } = await sb
+                        .from('cancellations').select('*').eq('id', req.params.id).single();
+                    if (fetchErr) throw sbErr(fetchErr);
+                    data = existing;
+                }
                 error = null;
             } else if (error) {
                 throw sbErr(error);
