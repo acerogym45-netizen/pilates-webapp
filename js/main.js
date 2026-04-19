@@ -905,6 +905,123 @@ function setupAdminTrigger() {
 // ===== CANCELLATION FUNCTIONS =====
 
 // Show cancellation form modal (기간 체크 추가)
+// ===== 내 신청 조회 =====
+function showMyLookupModal() {
+    const modal = document.getElementById('myLookupModal');
+    if (!modal) return;
+    // 초기화
+    ['lookupDong','lookupHo','lookupPhone4'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    document.getElementById('lookupResult').innerHTML = '';
+    modal.style.display = 'flex';
+}
+
+function closeMyLookupModal() {
+    const modal = document.getElementById('myLookupModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function lookupMyApplication() {
+    const dong   = document.getElementById('lookupDong')?.value.trim();
+    const ho     = document.getElementById('lookupHo')?.value.trim();
+    const phone4 = document.getElementById('lookupPhone4')?.value.trim();
+    const result = document.getElementById('lookupResult');
+
+    // 유효성 검사
+    if (!dong)   { document.getElementById('lookupDong').style.borderColor='#ef4444';   return; }
+    if (!ho)     { document.getElementById('lookupHo').style.borderColor='#ef4444';     return; }
+    if (!phone4 || phone4.length !== 4 || !/^\d{4}$/.test(phone4)) {
+        document.getElementById('lookupPhone4').style.borderColor='#ef4444';
+        result.innerHTML = `<p style="color:#ef4444;font-size:.83rem;text-align:center">전화번호 뒷 4자리를 숫자로 입력하세요</p>`;
+        return;
+    }
+
+    const btn = document.getElementById('lookupBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 조회 중...'; }
+    result.innerHTML = '';
+
+    try {
+        const complexCode = complexContext?.getComplexCode?.() || '';
+        const res = await fetch(`/api/applications/my?complexCode=${encodeURIComponent(complexCode)}&dong=${encodeURIComponent(dong)}&ho=${encodeURIComponent(ho)}&phone4=${encodeURIComponent(phone4)}`);
+        const data = await res.json();
+
+        if (!data.success) throw new Error(data.error || '조회 실패');
+
+        const list = (data.data || []).filter(a => a.status === 'approved');
+
+        if (!list.length) {
+            // 승인 건 없음
+            result.innerHTML = `
+                <div style="text-align:center;padding:20px 0;color:#6b7280">
+                    <i class="fas fa-search" style="font-size:2rem;opacity:.3;display:block;margin-bottom:8px"></i>
+                    <p style="font-size:.87rem">승인된 신청 내역이 없습니다.<br>
+                    <small style="color:#9ca3af">동·호수·전화번호를 다시 확인해 주세요</small></p>
+                </div>`;
+            return;
+        }
+
+        // 상태 라벨
+        const statusLabel = s => ({
+            approved:'승인', pending:'대기', waiting:'대기', rejected:'거부'
+        }[s] || s);
+
+        const statusColor = s => ({
+            approved:'#059669', pending:'#d97706', waiting:'#d97706', rejected:'#dc2626'
+        }[s] || '#6b7280');
+
+        // 시간 포맷 (HH:MM → 오전/오후 H시)
+        const fmtTime = t => {
+            if (!t) return '-';
+            const [hStr] = t.split(':');
+            const h = parseInt(hStr);
+            if (isNaN(h)) return t;
+            const period = h < 12 ? '오전' : '오후';
+            const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+            return `${period} ${h12}시`;
+        };
+
+        result.innerHTML = `
+            <div style="border-top:1px solid #f0f0f0;padding-top:12px">
+                <div style="font-size:.8rem;color:#6b7280;margin-bottom:10px;font-weight:600">
+                    <i class="fas fa-check-circle" style="color:#059669"></i>
+                    ${list.length}건의 승인된 신청 내역
+                </div>
+                ${list.map(a => `
+                <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;
+                            padding:12px 14px;margin-bottom:8px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <span style="font-weight:700;font-size:.92rem;color:#1e293b">
+                            ${a.program_name || '프로그램 정보 없음'}
+                        </span>
+                        <span style="font-size:.75rem;font-weight:700;padding:3px 8px;border-radius:20px;
+                                     background:${statusColor(a.status)}20;color:${statusColor(a.status)}">
+                            ${statusLabel(a.status)}
+                        </span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:.82rem;color:#475569">
+                        <span style="color:#94a3b8">시간대</span>
+                        <span style="font-weight:600;color:#0f172a">${fmtTime(a.preferred_time)}</span>
+                        <span style="color:#94a3b8">동·호수</span>
+                        <span>${a.dong} ${a.ho}</span>
+                        <span style="color:#94a3b8">신청일</span>
+                        <span>${a.created_at ? a.created_at.slice(0,10) : '-'}</span>
+                    </div>
+                </div>`).join('')}
+                <p style="font-size:.76rem;color:#9ca3af;text-align:center;margin-top:6px">
+                    <i class="fas fa-lock" style="font-size:.7rem"></i>
+                    개인정보 보호를 위해 일부 정보는 가려져 있습니다
+                </p>
+            </div>`;
+    } catch(e) {
+        result.innerHTML = `<p style="color:#ef4444;font-size:.83rem;text-align:center;padding:12px 0">
+            <i class="fas fa-exclamation-circle"></i> ${e.message}</p>`;
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-search"></i> 조회하기'; }
+    }
+}
+
 // ===== 접수·해지 기간 배너 =====
 function renderPeriodBanner() {
     const banner = document.getElementById('periodBanner');

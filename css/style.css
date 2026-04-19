@@ -117,7 +117,7 @@ button { font-family: inherit; cursor: pointer; }
     display: flex; align-items: center; justify-content: center;
     font-size: 1.3rem; flex-shrink: 0;
 }
-.header-text h1 { font-size: 1.1rem; font-weight: 800; line-height: 1.2; }
+.header-text h1 { font-size: 1.45rem; font-weight: 800; line-height: 1.2; }
 .header-subtitle { font-size: .75rem; opacity: .8; margin-top: 2px; }
 .header-actions { display: flex; gap: 8px; }
 
