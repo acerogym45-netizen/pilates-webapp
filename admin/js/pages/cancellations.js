@@ -208,6 +208,76 @@ const cancellations = {
             }
         }
 
+        // 첨부 서류 목록 렌더링 (doc_urls JSON 배열)
+        let docSection = '';
+        if (isRefund) {
+            let docItems = [];
+            try {
+                const raw = c.doc_urls;
+                if (Array.isArray(raw)) docItems = raw;
+                else if (typeof raw === 'string' && raw) docItems = JSON.parse(raw);
+            } catch(_) {}
+
+            const docListHtml = docItems.length > 0
+                ? docItems.map((d, i) => {
+                    const name = d.name || `서류 ${i+1}`;
+                    const url  = d.url  || '';
+                    const isImg = /\.(jpe?g|png|gif|webp)$/i.test(name);
+                    const isPdf = /\.pdf$/i.test(name);
+                    const icon  = isPdf
+                        ? '<i class="fas fa-file-pdf" style="color:#dc2626;font-size:1.1rem"></i>'
+                        : isImg
+                            ? '<i class="fas fa-file-image" style="color:#2563eb;font-size:1.1rem"></i>'
+                            : '<i class="fas fa-file" style="color:#6b7280;font-size:1.1rem"></i>';
+                    const preview = isImg && url
+                        ? `<img src="${escHtml(url)}" alt="${escHtml(name)}"
+                               style="max-width:100%;max-height:120px;border-radius:6px;border:1px solid #e5e7eb;
+                                      display:block;margin-top:6px;cursor:pointer"
+                               onclick="window.open('${escHtml(url)}','_blank')">`
+                        : '';
+                    const uploadedAt = d.uploaded_at ? formatDate(d.uploaded_at) : '';
+                    return `
+                    <div style="display:flex;flex-direction:column;gap:4px;background:#f9fafb;
+                                border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px">
+                        <div style="display:flex;align-items:center;gap:8px">
+                            ${icon}
+                            <span style="flex:1;font-size:.83rem;font-weight:600;color:#111827;
+                                         word-break:break-all">${escHtml(name)}</span>
+                            ${url ? `<a href="${escHtml(url)}" target="_blank" download="${escHtml(name)}"
+                                        style="flex-shrink:0;font-size:.78rem;color:#4f46e5;text-decoration:none;
+                                               background:#ede9fe;padding:3px 8px;border-radius:5px;font-weight:600"
+                                        title="다운로드">
+                                        <i class="fas fa-download"></i> 저장
+                                    </a>` : ''}
+                        </div>
+                        ${uploadedAt ? `<span style="font-size:.73rem;color:#9ca3af;padding-left:24px">업로드: ${uploadedAt}</span>` : ''}
+                        ${preview}
+                    </div>`;
+                }).join('')
+                : `<div style="font-size:.82rem;color:#9ca3af;text-align:center;padding:12px 0">
+                        <i class="fas fa-folder-open"></i> 첨부된 서류가 없습니다
+                   </div>`;
+
+            // 전체 다운로드(아카이브) 버튼
+            const archiveBtn = docItems.length > 0
+                ? `<button class="btn-secondary btn-sm"
+                           onclick="cancellations.downloadArchive('${c.id}','${escHtml(c.name || '')}')"
+                           style="margin-top:8px;width:100%">
+                        <i class="fas fa-archive"></i> 전체 서류 ZIP 다운로드
+                   </button>`
+                : '';
+
+            docSection = `
+                <div class="detail-row full" style="border:1.5px solid #e0e7ff;border-radius:8px;padding:12px;margin-top:4px;background:#f5f3ff">
+                    <label style="color:#4338ca;font-weight:700;margin-bottom:8px;display:block">
+                        <i class="fas fa-paperclip"></i> 첨부 증빙서류
+                        ${docItems.length > 0 ? `<span style="background:#4f46e5;color:#fff;font-size:.72rem;padding:2px 7px;border-radius:10px;margin-left:6px">${docItems.length}개</span>` : ''}
+                    </label>
+                    <div style="display:flex;flex-direction:column;gap:8px">${docListHtml}</div>
+                    ${archiveBtn}
+                </div>`;
+        }
+
         const body = `
             <div class="detail-grid">
                 <div class="detail-row">
@@ -246,6 +316,8 @@ const cancellations = {
                     </p>
                 </div>` : ''}
 
+                ${docSection}
+
                 <div class="detail-row"><label>신청일</label><span>${formatDate(c.created_at)}</span></div>
                 ${c.processed_at ? `<div class="detail-row"><label>처리일</label><span>${formatDate(c.processed_at)}</span></div>` : ''}
             </div>`;
@@ -274,6 +346,63 @@ const cancellations = {
             await this.load(this.currentStatus);
             loadBadges();
         } catch(e) { showToast('처리 실패: ' + e.message, 'error'); }
+    },
+
+    /**
+     * 환불 서류 전체를 ZIP으로 다운로드 (브라우저 레벨 — JSZip 없이 개별 다운)
+     * JSZip 미포함 환경이므로, 파일을 순차적으로 개별 다운로드하거나
+     * 서버 /api/upload/refund-docs/list 에서 목록을 재조회해 개별 열기
+     */
+    async downloadArchive(cancellationId, requesterName) {
+        try {
+            const c = this.data.find(x => x.id === cancellationId);
+            let docItems = [];
+            try {
+                const raw = c?.doc_urls;
+                if (Array.isArray(raw)) docItems = raw;
+                else if (typeof raw === 'string' && raw) docItems = JSON.parse(raw);
+            } catch(_) {}
+
+            if (docItems.length === 0) {
+                // Storage에서 재조회 시도
+                const complexCode = getEffectiveComplexId()
+                    ? (window.Admin?.complex?.code || '')
+                    : '';
+                const listRes = await fetch(
+                    `/api/upload/refund-docs/list?cancellation_id=${cancellationId}&complex_code=${complexCode}`
+                );
+                const listData = await listRes.json();
+                if (listData.success && listData.files?.length > 0) {
+                    docItems = listData.files.map(f => ({ url: f.url, name: f.name }));
+                }
+            }
+
+            if (docItems.length === 0) {
+                showToast('다운로드할 서류가 없습니다', 'error'); return;
+            }
+
+            showToast(`서류 ${docItems.length}개를 다운로드합니다...`);
+
+            // 개별 파일 순차 다운로드 (브라우저 보안 정책상 동시 다운로드 제한 있음)
+            for (let i = 0; i < docItems.length; i++) {
+                const d = docItems[i];
+                if (!d.url) continue;
+                await new Promise(resolve => {
+                    setTimeout(() => {
+                        const a = document.createElement('a');
+                        a.href = d.url;
+                        a.download = d.name || `서류_${requesterName}_${i+1}`;
+                        a.target = '_blank';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        resolve();
+                    }, i * 600); // 600ms 간격으로 순차 다운로드
+                });
+            }
+        } catch(e) {
+            showToast('다운로드 실패: ' + e.message, 'error');
+        }
     }
 };
 
