@@ -464,35 +464,106 @@
         </div>
     </div>
 
-    <!-- 관리자 로그인 모달 (center) -->
+    <!-- 관리자 로그인 모달 — 2단계 (일반 / 총괄) -->
     <div id="adminPasswordModal" class="modal center">
-        <div class="modal-content center-modal">
-            <div class="modal-header">
-                <h2><i class="fas fa-lock"></i> 관리자 인증</h2>
+        <div class="modal-content center-modal admin-login-modal">
+
+            <!-- ── 공통 헤더 ── -->
+            <div class="admin-login-header">
+                <div class="admin-login-brand">
+                    <i class="fas fa-building"></i>
+                    <span>관리자 접근</span>
+                </div>
+                <button class="modal-close" onclick="closeAdminPasswordModal()">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <div class="modal-body" style="text-align:center">
-                <p style="color:#7f8c8d; margin-bottom:16px; font-size:.88rem;">
-                    관리자 페이지 접근을 위해 비밀번호를 입력하세요
+
+            <!-- ══ STEP 1: 일반 관리자 로그인 ══ -->
+            <div id="adminStep1" class="admin-login-step">
+                <div class="admin-login-hint">
+                    <i class="fas fa-info-circle"></i>
+                    단지를 선택하고 관리자 비밀번호를 입력하세요
+                </div>
+
+                <!-- 단지 드롭다운 -->
+                <div class="admin-form-group">
+                    <label class="admin-form-label">
+                        <i class="fas fa-city"></i> 단지 선택
+                    </label>
+                    <div class="admin-select-wrap">
+                        <select id="adminComplexSelect" class="admin-select">
+                            <option value="">— 단지를 선택하세요 —</option>
+                        </select>
+                        <i class="fas fa-chevron-down admin-select-arrow"></i>
+                    </div>
+                    <div id="adminComplexLoadStatus" class="admin-load-status"></div>
+                </div>
+
+                <!-- 관리자 비밀번호 -->
+                <div class="admin-form-group">
+                    <label class="admin-form-label">
+                        <i class="fas fa-lock"></i> 관리자 비밀번호
+                    </label>
+                    <input type="password" id="adminPasswordInput"
+                           placeholder="비밀번호 입력"
+                           autocomplete="off"
+                           onkeydown="if(event.key==='Enter') checkAdminPassword()">
+                </div>
+
+                <p id="adminPasswordError" class="admin-error-msg" style="display:none">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span id="adminPasswordErrorText">비밀번호가 올바르지 않습니다</span>
                 </p>
-                <form id="adminPasswordForm" onsubmit="return false;">
-                    <div class="form-group">
-                        <input
-                            type="password"
-                            id="adminPasswordInput"
-                            placeholder="비밀번호를 입력하세요"
-                            autocomplete="off">
-                    </div>
-                    <p id="adminPasswordError" class="error-msg" style="display:none; margin:8px 0;">
-                        <i class="fas fa-exclamation-circle"></i> 비밀번호가 올바르지 않습니다
-                    </p>
-                    <div class="btn-group" style="margin-top:14px">
-                        <button type="button" class="btn-secondary" onclick="closeAdminPasswordModal()">취소</button>
-                        <button type="button" class="btn-primary" onclick="checkAdminPassword()">
-                            <i class="fas fa-sign-in-alt"></i> 확인
-                        </button>
-                    </div>
-                </form>
+
+                <!-- 버튼 영역 -->
+                <button id="adminLoginBtn" class="admin-btn admin-btn-primary" onclick="checkAdminPassword()">
+                    <i class="fas fa-sign-in-alt"></i> 입장하기
+                </button>
+
+                <div class="admin-divider"><span>또는</span></div>
+
+                <!-- 총괄 관리자 전환 -->
+                <button class="admin-btn admin-btn-master" onclick="showAdminStep2()">
+                    <i class="fas fa-crown"></i> 총괄 관리자로 로그인
+                </button>
             </div>
+
+            <!-- ══ STEP 2: 총괄 관리자 로그인 ══ -->
+            <div id="adminStep2" class="admin-login-step" style="display:none">
+                <div class="admin-master-banner">
+                    <i class="fas fa-crown"></i>
+                    <div>
+                        <strong>총괄 관리자</strong>
+                        <span>전체 단지 통합 관리</span>
+                    </div>
+                </div>
+
+                <div class="admin-form-group">
+                    <label class="admin-form-label">
+                        <i class="fas fa-key"></i> 마스터 비밀번호
+                    </label>
+                    <input type="password" id="masterPasswordInput"
+                           placeholder="마스터 비밀번호 입력"
+                           autocomplete="off"
+                           onkeydown="if(event.key==='Enter') checkMasterPassword()">
+                </div>
+
+                <p id="masterPasswordError" class="admin-error-msg" style="display:none">
+                    <i class="fas fa-exclamation-circle"></i> 마스터 비밀번호가 올바르지 않습니다
+                </p>
+
+                <button id="masterLoginBtn" class="admin-btn admin-btn-master-action" onclick="checkMasterPassword()">
+                    <i class="fas fa-crown"></i> 총괄 관리자 입장
+                </button>
+
+                <div class="admin-divider"><span>또는</span></div>
+
+                <button class="admin-btn admin-btn-back" onclick="showAdminStep1()">
+                    <i class="fas fa-arrow-left"></i> 일반 관리자 로그인으로
+                </button>
+            </div>
+
         </div>
     </div>
 

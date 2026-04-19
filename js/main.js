@@ -1294,109 +1294,208 @@ function formatPrice(price) {
 }
 
 
-// ===== ADMIN PASSWORD MODAL =====
+// ===== ADMIN PASSWORD MODAL (2단계: 일반 / 총괄) =====
 
-// Show admin password modal
+// 마스터 비밀번호 (프론트 1차 검증용)
+const MASTER_PW = 'master2026';
+
+/* 모달 열기 — 항상 Step1(일반 관리자)부터 */
 function showAdminPasswordModal() {
     const modal = document.getElementById('adminPasswordModal');
-    const input = document.getElementById('adminPasswordInput');
-    const errorMsg = document.getElementById('adminPasswordError');
-    
-    modal.style.display = 'flex';
-    input.value = '';
-    errorMsg.style.display = 'none';
-    
-    // Focus on input
-    setTimeout(() => {
-        input.focus();
-    }, 100);
-    
-    // Add Enter key support
-    const handleEnter = (e) => {
-        if (e.key === 'Enter') {
-            checkAdminPassword();
-        }
-    };
-    input.removeEventListener('keypress', handleEnter);
-    input.addEventListener('keypress', handleEnter);
+    modal.classList.add('active');
+    _showAdminStep(1);
+    _loadComplexListForAdminModal();
 }
 
-// Close admin password modal
+/* 모달 닫기 */
 function closeAdminPasswordModal() {
     const modal = document.getElementById('adminPasswordModal');
-    const input = document.getElementById('adminPasswordInput');
-    const errorMsg = document.getElementById('adminPasswordError');
-    
-    modal.style.display = 'none';
-    input.value = '';
-    errorMsg.style.display = 'none';
+    modal.classList.remove('active');
+    const pw1 = document.getElementById('adminPasswordInput');
+    const pw2 = document.getElementById('masterPasswordInput');
+    if (pw1) pw1.value = '';
+    if (pw2) pw2.value = '';
+    _hideAdminError('adminPasswordError');
+    _hideAdminError('masterPasswordError');
 }
 
-// Check admin password
-async function checkAdminPassword() {
-    const input = document.getElementById('adminPasswordInput');
-    const password = input.value;
-    const errorMsg = document.getElementById('adminPasswordError');
-    
-    if (!password) {
-        errorMsg.textContent = '비밀번호를 입력하세요';
-        errorMsg.style.display = 'block';
+/* Step 전환 */
+function showAdminStep2() { _showAdminStep(2); }
+function showAdminStep1() { _showAdminStep(1); }
+
+function _showAdminStep(step) {
+    document.getElementById('adminStep1').style.display = step === 1 ? 'block' : 'none';
+    document.getElementById('adminStep2').style.display = step === 2 ? 'block' : 'none';
+    setTimeout(() => {
+        const target = step === 1
+            ? document.getElementById('adminPasswordInput')
+            : document.getElementById('masterPasswordInput');
+        target?.focus();
+    }, 80);
+}
+
+/* 에러 표시/숨김 헬퍼 */
+function _showAdminError(id, msg) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const textEl = el.querySelector('span') || el;
+    if (msg) textEl.textContent = msg;
+    el.style.display = 'flex';
+    setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
+function _hideAdminError(id) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+}
+
+/* 버튼 로딩 상태 */
+function _setAdminBtnLoading(btnId, loading) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    if (loading) {
+        btn.disabled = true;
+        btn._origHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 인증 중...';
+    } else {
+        btn.disabled = false;
+        if (btn._origHtml) btn.innerHTML = btn._origHtml;
+    }
+}
+
+/* 단지 목록 로드 (드롭다운) */
+async function _loadComplexListForAdminModal() {
+    const select = document.getElementById('adminComplexSelect');
+    const status = document.getElementById('adminComplexLoadStatus');
+    if (!select) return;
+
+    // 현재 단지가 있으면 자동 선택 후 고정
+    const currentCode = (typeof complexContext !== 'undefined') ? complexContext.getComplexCode() : '';
+    if (currentCode) {
+        const currentName = (typeof complexContext !== 'undefined') ? (complexContext.getComplex()?.name || currentCode) : currentCode;
+        select.innerHTML = `<option value="${currentCode}">${currentName || currentCode}</option>`;
+        select.disabled = true;
+        if (status) status.textContent = `현재 단지: ${currentName || currentCode}`;
         return;
     }
-    
+
+    // 단지 코드 없는 경우: API에서 전체 목록 로드
+    if (status) status.textContent = '단지 목록 로딩 중...';
     try {
-        const complexId = complexContext.getComplexId();
-        
-        if (!complexId) {
-            console.error('❌ Complex ID not available');
-            errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i> 단지 정보를 불러올 수 없습니다';
-            errorMsg.style.display = 'block';
+        const res = await fetch('/api/complexes');
+        const data = await res.json();
+        const list = (data.data || []).filter(c => c.is_active);
+        if (!list.length) {
+            if (status) status.textContent = '등록된 단지가 없습니다';
             return;
         }
-        
-        // /api/complexes/verify-password 로 검증
-        const complexCode = complexContext.getComplexCode();
+        select.innerHTML = '<option value="">— 단지를 선택하세요 —</option>' +
+            list.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+        select.disabled = false;
+        if (status) status.textContent = '';
+    } catch(e) {
+        if (status) { status.textContent = '목록 로드 실패'; status.style.color = '#e53935'; }
+        console.warn('단지 목록 로드 실패:', e);
+    }
+}
+
+/* ── Step1: 일반 관리자 비밀번호 확인 ── */
+async function checkAdminPassword() {
+    const selectEl   = document.getElementById('adminComplexSelect');
+    const pwEl       = document.getElementById('adminPasswordInput');
+    const complexCode = selectEl ? selectEl.value : '';
+    const password    = pwEl ? pwEl.value.trim() : '';
+
+    _hideAdminError('adminPasswordError');
+
+    if (!complexCode) {
+        _showAdminError('adminPasswordError', '단지를 선택하세요');
+        selectEl?.focus(); return;
+    }
+    if (!password) {
+        _showAdminError('adminPasswordError', '비밀번호를 입력하세요');
+        pwEl?.focus(); return;
+    }
+
+    _setAdminBtnLoading('adminLoginBtn', true);
+
+    try {
         const response = await fetch('/api/complexes/verify-password', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ complexCode, password })
         });
         const result = await response.json();
-        
+
         if (result.success) {
-            console.log('✅ Password correct! Role:', result.role);
-            closeAdminPasswordModal();
-            
-            // Visual feedback
-            const logoText = document.getElementById('logoText');
-            if (logoText) {
-                logoText.style.color = '#27ae60';
-            }
-            
-            // 관리자 세션 저장
-            sessionStorage.setItem('adminRole', result.role);
+            console.log('✅ Admin password correct! Role:', result.role);
+            sessionStorage.setItem('adminRole',    result.role);
             sessionStorage.setItem('adminComplex', JSON.stringify(result.complex || {}));
-            
-            setTimeout(() => {
-                window.location.href = '/admin/';
-            }, 200);
+            closeAdminPasswordModal();
+            const logoEl = document.getElementById('logoText');
+            if (logoEl) { logoEl.style.color = '#27ae60'; setTimeout(() => logoEl.style.color = '', 600); }
+            setTimeout(() => { window.location.href = '/admin/'; }, 250);
         } else {
-            console.log('❌ Incorrect password');
-            errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i> 비밀번호가 올바르지 않습니다';
-            errorMsg.style.display = 'block';
-            input.value = '';
-            input.focus();
-            
-            // Hide error after 3 seconds
-            setTimeout(() => {
-                errorMsg.style.display = 'none';
-            }, 3000);
+            _setAdminBtnLoading('adminLoginBtn', false);
+            _showAdminError('adminPasswordError', '비밀번호가 올바르지 않습니다');
+            if (pwEl) { pwEl.value = ''; pwEl.focus(); }
         }
-        
-    } catch (error) {
-        console.error('💥 Error checking password:', error);
-        errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i> 오류가 발생했습니다';
-        errorMsg.style.display = 'block';
+    } catch(e) {
+        _setAdminBtnLoading('adminLoginBtn', false);
+        _showAdminError('adminPasswordError', '오류가 발생했습니다. 다시 시도하세요');
+        console.error('Admin password check error:', e);
+    }
+}
+
+/* ── Step2: 총괄 관리자 마스터 비밀번호 확인 ── */
+async function checkMasterPassword() {
+    const pwEl    = document.getElementById('masterPasswordInput');
+    const password = pwEl ? pwEl.value.trim() : '';
+
+    _hideAdminError('masterPasswordError');
+
+    if (!password) {
+        _showAdminError('masterPasswordError', '마스터 비밀번호를 입력하세요');
+        pwEl?.focus(); return;
+    }
+
+    _setAdminBtnLoading('masterLoginBtn', true);
+
+    // 1차: 프론트 하드코드 검증 (master2026)
+    if (password === MASTER_PW) {
+        sessionStorage.setItem('adminRole',    'master');
+        sessionStorage.setItem('adminComplex', JSON.stringify({ code: 'master', name: '마스터 관리자' }));
+        closeAdminPasswordModal();
+        const logoEl = document.getElementById('logoText');
+        if (logoEl) { logoEl.style.color = '#f39c12'; setTimeout(() => logoEl.style.color = '', 600); }
+        setTimeout(() => { window.location.href = '/admin/'; }, 250);
+        return;
+    }
+
+    // 2차: 서버 API 검증 (단지코드 '' = master 모드)
+    try {
+        const response = await fetch('/api/complexes/verify-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ complexCode: '', password })
+        });
+        const result = await response.json();
+
+        if (result.success && result.role === 'master') {
+            sessionStorage.setItem('adminRole',    'master');
+            sessionStorage.setItem('adminComplex', JSON.stringify(result.complex || { code: 'master', name: '마스터 관리자' }));
+            closeAdminPasswordModal();
+            const logoEl = document.getElementById('logoText');
+            if (logoEl) { logoEl.style.color = '#f39c12'; setTimeout(() => logoEl.style.color = '', 600); }
+            setTimeout(() => { window.location.href = '/admin/'; }, 250);
+        } else {
+            _setAdminBtnLoading('masterLoginBtn', false);
+            _showAdminError('masterPasswordError', '마스터 비밀번호가 올바르지 않습니다');
+            if (pwEl) { pwEl.value = ''; pwEl.focus(); }
+        }
+    } catch(e) {
+        _setAdminBtnLoading('masterLoginBtn', false);
+        _showAdminError('masterPasswordError', '오류가 발생했습니다. 다시 시도하세요');
+        console.error('Master password check error:', e);
     }
 }
 
