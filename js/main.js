@@ -21,6 +21,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadPublicInquiries();
     loadNotices();
     setupAdminTrigger();
+    renderPeriodBanner();   // 접수·해지 기간 배너
     
     console.log('✅ Application ready');
 });
@@ -904,6 +905,55 @@ function setupAdminTrigger() {
 // ===== CANCELLATION FUNCTIONS =====
 
 // Show cancellation form modal (기간 체크 추가)
+// ===== 접수·해지 기간 배너 =====
+function renderPeriodBanner() {
+    const banner = document.getElementById('periodBanner');
+    if (!banner) return;
+
+    const now  = new Date();
+    const kst  = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const day  = kst.getUTCDate();
+    const mon  = kst.getUTCMonth() + 1;
+
+    // 등록 접수 기간: 20~27일
+    const isEnrollPeriod = day >= 20 && day <= 27;
+    // 해지 신청 기간: 3~10일
+    const isCancelPeriod = day >= 3  && day <= 10;
+
+    if (isEnrollPeriod) {
+        banner.innerHTML = `
+            <div class="period-banner-active period-banner-enroll">
+                <i class="fas fa-calendar-check" style="font-size:1.2rem"></i>
+                <span>📝 <strong>${mon}월 등록 접수 기간입니다</strong> (${mon}월 20일 ~ 27일) — 지금 바로 신청하세요!</span>
+            </div>`;
+    } else if (isCancelPeriod) {
+        const nextMon = mon === 12 ? 1 : mon + 1;
+        banner.innerHTML = `
+            <div class="period-banner-active period-banner-cancel">
+                <i class="fas fa-exclamation-triangle" style="font-size:1.2rem"></i>
+                <span>⚠️ <strong>해지 신청 기간입니다</strong> (${mon}월 3일 ~ 10일) — 해지를 원하시면 아래 버튼을 눌러 신청하세요.<br>
+                <small style="font-weight:400;opacity:.85">당월 정상 수강 후 ${nextMon}월부터 해지 적용 · 기간 외 접수 불가</small></span>
+            </div>`;
+    } else {
+        // 기간 아님 → 다음 기간 안내
+        let nextLabel = '';
+        if (day > 10 && day < 20) {
+            nextLabel = `다음 등록 접수 기간: <strong>${mon}월 20일 ~ 27일</strong>`;
+        } else if (day > 27) {
+            const nm = mon === 12 ? 1 : mon + 1;
+            nextLabel = `다음 해지 신청 기간: <strong>${nm}월 3일 ~ 10일</strong> · 다음 등록 접수: <strong>${nm}월 20일 ~ 27일</strong>`;
+        } else {
+            nextLabel = `다음 등록 접수 기간: <strong>${mon}월 20일 ~ 27일</strong>`;
+        }
+        banner.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;
+                        background:#f9fafb;border:1px solid #e5e7eb;font-size:.81rem;color:#6b7280">
+                <i class="fas fa-calendar-alt"></i>
+                <span>${nextLabel}</span>
+            </div>`;
+    }
+}
+
 async function showCancellationForm() {
     // === 해지 접수 기간 체크 (매월 3~10일 KST만 가능) ===
     const now = new Date();

@@ -5,10 +5,64 @@ const cancellations = {
     currentStatus: '',
 
     async render() {
+        const now    = new Date();
+        const kst    = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const day    = kst.getUTCDate();
+        const mon    = kst.getUTCMonth() + 1;
+        const isCancelPeriod = day >= 3 && day <= 10;
+        const isEnrollPeriod = day >= 20 && day <= 27;
+        const nextMon = mon === 12 ? 1 : mon + 1;
+
+        // ── 기간 안내 배너 ──
+        let periodBannerHtml = '';
+        if (isCancelPeriod) {
+            periodBannerHtml = `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
+                        background:#fff7ed;border:2px solid #f97316;margin-bottom:12px;font-size:.83rem;color:#9a3412">
+                <i class="fas fa-exclamation-triangle" style="font-size:1.1rem;color:#f97316"></i>
+                <span><strong>🔔 현재 해지 신청 기간 (${mon}월 3일 ~ 10일)</strong><br>
+                <small style="opacity:.85">접수된 해지 신청은 당월 정상 수강 후 ${nextMon}월부터 해지 적용</small></span>
+            </div>`;
+        } else if (isEnrollPeriod) {
+            periodBannerHtml = `
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
+                        background:#eff6ff;border:2px solid #3b82f6;margin-bottom:12px;font-size:.83rem;color:#1e40af">
+                <i class="fas fa-calendar-check" style="font-size:1.1rem"></i>
+                <span><strong>📝 현재 신규 등록 접수 기간 (${mon}월 20일 ~ 27일)</strong></span>
+            </div>`;
+        } else {
+            const next = (day > 10 && day < 20)
+                ? `다음 해지 신청: <strong>${mon}월 말 ~ ${nextMon}월 3~10일</strong> / 다음 등록 접수: <strong>${mon}월 20~27일</strong>`
+                : `다음 해지 신청: <strong>${nextMon}월 3~10일</strong> / 다음 등록 접수: <strong>${nextMon}월 20~27일</strong>`;
+            periodBannerHtml = `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
+                        background:#f9fafb;border:1px solid #e5e7eb;margin-bottom:12px;font-size:.8rem;color:#6b7280">
+                <i class="fas fa-calendar-alt"></i><span>${next}</span>
+            </div>`;
+        }
+
         document.getElementById('pageContent').innerHTML = `
             <div class="page-header">
                 <h2><i class="fas fa-times-circle"></i> 해지 관리</h2>
                 <button class="btn-secondary btn-sm" onclick="cancellations.reload()"><i class="fas fa-sync"></i></button>
+            </div>
+
+            ${periodBannerHtml}
+
+            <!-- 관리 가이드 박스 -->
+            <div id="cancelGuideBox" style="background:#f0fdf4;border:1.5px solid #22c55e;border-radius:10px;
+                 padding:12px 14px;margin-bottom:14px;font-size:.8rem;color:#166534;line-height:1.75">
+                <div style="font-weight:700;margin-bottom:6px"><i class="fas fa-info-circle"></i> 해지 관리 운영 가이드</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
+                    <div>📅 <strong>등록 접수:</strong> 매월 20~27일</div>
+                    <div>🚫 <strong>해지 신청:</strong> 매월 3~10일</div>
+                    <div>🔄 <strong>해지 적용:</strong> 당월 수강 후 익월부터</div>
+                    <div>⚡ <strong>미신청 시:</strong> 자동 재등록 (차월 수강료 청구)</div>
+                </div>
+                <div style="margin-top:8px;padding-top:8px;border-top:1px solid #bbf7d0">
+                    💡 <strong>누락 방지 팁:</strong> 접수 기간(3~10일) 종료 후 <em>미처리 대기 건</em>을 일괄 확인·승인하고,
+                    승인된 해지 건은 익월 청구 명단에서 <strong>반드시 제외</strong>하세요.
+                </div>
             </div>
 
             <!-- 유형 탭: 해지 신청 / 환불 신청 -->
@@ -35,8 +89,7 @@ const cancellations = {
     },
 
     applyTabStyle() {
-        const style = document.getElementById('cancelTabStyle');
-        if (style) return;
+        if (document.getElementById('cancelTabStyle')) return;
         const s = document.createElement('style');
         s.id = 'cancelTabStyle';
         s.textContent = `
@@ -51,7 +104,9 @@ const cancellations = {
                 color:#fff;
             }
             .type-tab-btn:hover:not(.active) { border-color: var(--color-primary,#4f46e5); color: var(--color-primary,#4f46e5); }
-            .badge-refund { background:#fff3cd; color:#856404; border:1px solid #ffc107; }
+            .badge-refund  { background:#fff3cd; color:#856404; border:1px solid #ffc107; }
+            .badge-cancel  { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+            .cancel-apply-date { font-size:.75rem; color:#059669; font-weight:600; }
         `;
         document.head.appendChild(s);
     },
@@ -59,10 +114,8 @@ const cancellations = {
     switchTab(tab) {
         this.currentTab = tab;
         this.currentStatus = '';
-        // 유형 탭 active
         document.getElementById('tabCancel')?.classList.toggle('active', tab === 'cancel');
         document.getElementById('tabRefund')?.classList.toggle('active', tab === 'refund');
-        // 상태 필터 active 초기화
         document.querySelectorAll('.filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
         this.load();
     },
@@ -77,13 +130,27 @@ const cancellations = {
             const res = await API.cancellations.list(params);
             this.data = res.data || [];
             this.renderList(this.data);
-        } catch (e) { document.getElementById('cancelList').innerHTML = `<p class="error-hint">${e.message}</p>`; }
+        } catch (e) {
+            document.getElementById('cancelList').innerHTML = `<p class="error-hint">${e.message}</p>`;
+        }
     },
 
     filter(btn, status) {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.load(status);
+    },
+
+    // 접수일 기준 익월 해지 적용 예정일 계산
+    calcApplyMonth(createdAt) {
+        const d = new Date(createdAt);
+        const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        const applyMonth = kst.getUTCMonth() + 2; // 익월
+        const applyYear  = applyMonth > 12
+            ? kst.getUTCFullYear() + 1
+            : kst.getUTCFullYear();
+        const m = applyMonth > 12 ? 1 : applyMonth;
+        return `${applyYear}년 ${m}월 1일`;
     },
 
     renderList(list) {
@@ -95,33 +162,48 @@ const cancellations = {
             return;
         }
 
-        container.innerHTML = `<div class="list-summary">${list.length}건</div>` + list.map(c => `
-            <div class="list-item" onclick="cancellations.showDetail('${c.id}')">
-                <div class="item-status">
-                    <span class="status-badge status-${statusClass(c.status)}">${statusLabel(c.status)}</span>
-                    ${isRefund ? '<span class="status-badge badge-refund" style="margin-top:4px;display:block">환불</span>' : ''}
-                </div>
-                <div class="item-main">
-                    <strong>${c.dong} ${c.ho} | ${c.name}</strong>
-                    <p>${c.program_name || (isRefund ? '환불 신청' : '-')}</p>
-                    <small>${c.phone} | ${formatDate(c.created_at)}</small>
-                </div>
-                <i class="fas fa-chevron-right item-arrow"></i>
-            </div>`).join('');
+        // 대기중 건수 요약
+        const pendingCount = list.filter(c => c.status === 'pending').length;
+        const summaryExtra = (!isRefund && pendingCount > 0)
+            ? ` &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">미처리 대기 ${pendingCount}건</span>`
+            : '';
+
+        container.innerHTML = `<div class="list-summary">${list.length}건${summaryExtra}</div>`
+            + list.map(c => {
+                const applyDate = (!isRefund) ? this.calcApplyMonth(c.created_at) : '';
+                return `
+                <div class="list-item" onclick="cancellations.showDetail('${c.id}')">
+                    <div class="item-status">
+                        <span class="status-badge status-${statusClass(c.status)}">${statusLabel(c.status)}</span>
+                        ${isRefund ? '<span class="status-badge badge-refund" style="margin-top:4px;display:block">환불</span>'
+                                   : '<span class="status-badge badge-cancel" style="margin-top:4px;display:block">해지</span>'}
+                    </div>
+                    <div class="item-main">
+                        <strong>${c.dong} ${c.ho} | ${c.name}</strong>
+                        <p>${c.program_name || (isRefund ? '환불 신청' : '해지 신청')}</p>
+                        ${!isRefund && applyDate
+                            ? `<span class="cancel-apply-date"><i class="fas fa-calendar-check"></i> 익월 해지 예정: ${applyDate}</span>`
+                            : ''}
+                        <small>${c.phone} | ${formatDate(c.created_at)}</small>
+                    </div>
+                    <i class="fas fa-chevron-right item-arrow"></i>
+                </div>`;
+            }).join('');
     },
 
     showDetail(id) {
         const c = this.data.find(x => x.id === id);
         if (!c) return;
         const isRefund = (c.request_type === 'refund');
+        const applyDate = (!isRefund) ? this.calcApplyMonth(c.created_at) : null;
 
-        // reason 필드에서 환불사유 파싱
+        // reason 파싱 (환불)
         let reasonDisplay = c.reason || '-';
         let refundDetailDisplay = '';
         if (isRefund && c.reason) {
             const match = c.reason.match(/^\[환불사유:\s*(.+?)\]\n?([\s\S]*)$/);
             if (match) {
-                reasonDisplay     = match[1].trim();
+                reasonDisplay       = match[1].trim();
                 refundDetailDisplay = match[2].trim();
             }
         }
@@ -132,18 +214,30 @@ const cancellations = {
                     <label>유형</label>
                     <span>${isRefund
                         ? '<span class="status-badge badge-refund"><i class=\'fas fa-file-invoice-dollar\'></i> 환불 신청</span>'
-                        : '<span class="status-badge status-default"><i class=\'fas fa-times-circle\'></i> 해지 신청</span>'
+                        : '<span class="status-badge badge-cancel"><i class=\'fas fa-times-circle\'></i> 해지 신청</span>'
                     }</span>
                 </div>
-                <div class="detail-row"><label>상태</label><span class="status-badge status-${statusClass(c.status)}">${statusLabel(c.status)}</span></div>
+                <div class="detail-row"><label>상태</label>
+                    <span class="status-badge status-${statusClass(c.status)}">${statusLabel(c.status)}</span>
+                </div>
                 <div class="detail-row"><label>동/호수</label><span>${c.dong} ${c.ho}</span></div>
                 <div class="detail-row"><label>이름</label><span>${c.name}</span></div>
                 <div class="detail-row"><label>전화</label><span>${c.phone}</span></div>
                 ${!isRefund ? `<div class="detail-row"><label>프로그램</label><span>${c.program_name || '-'}</span></div>` : ''}
                 <div class="detail-row"><label>${isRefund ? '환불 사유' : '해지 사유'}</label><span>${reasonDisplay}</span></div>
-                ${isRefund && refundDetailDisplay ? `<div class="detail-row full"><label>상세 내용</label><p style="white-space:pre-wrap">${refundDetailDisplay}</p></div>` : ''}
+                ${isRefund && refundDetailDisplay
+                    ? `<div class="detail-row full"><label>상세 내용</label><p style="white-space:pre-wrap">${refundDetailDisplay}</p></div>`
+                    : ''}
+
+                ${!isRefund ? `
+                <div class="detail-row full" style="background:#f0fdf4;border-radius:6px;padding:10px 12px;margin-top:4px;border:1px solid #bbf7d0">
+                    <label style="color:#166534"><i class="fas fa-calendar-check"></i> 해지 적용 예정일</label>
+                    <p style="font-size:.92rem;color:#15803d;font-weight:700;margin-top:4px">${applyDate}</p>
+                    <p style="font-size:.78rem;color:#6b7280;margin-top:2px">접수일 기준 익월 1일부터 해지 적용 · 당월은 정상 수강</p>
+                </div>` : ''}
+
                 ${isRefund ? `
-                <div class="detail-row full" style="background:#fff5f5;border-radius:6px;padding:8px 10px;margin-top:4px">
+                <div class="detail-row full" style="background:#fff5f5;border-radius:6px;padding:8px 10px;margin-top:4px;border:1px solid #fecaca">
                     <label style="color:#c53030"><i class="fas fa-info-circle"></i> 처리 안내</label>
                     <p style="font-size:.82rem;color:#742a2a;line-height:1.6">
                         환불 승인 시 결제금액의 <strong>10% 위약금</strong> 공제 후<br>
@@ -151,6 +245,7 @@ const cancellations = {
                         <em>증빙서류 확인 필수 (진단서·비자 등)</em>
                     </p>
                 </div>` : ''}
+
                 <div class="detail-row"><label>신청일</label><span>${formatDate(c.created_at)}</span></div>
                 ${c.processed_at ? `<div class="detail-row"><label>처리일</label><span>${formatDate(c.processed_at)}</span></div>` : ''}
             </div>`;
@@ -158,7 +253,7 @@ const cancellations = {
         const footer = c.status === 'pending' ? `
             <div class="modal-btn-group">
                 <button class="btn-success btn-sm" onclick="cancellations.updateStatus('${c.id}','approved')">
-                    <i class="fas fa-check"></i> 승인
+                    <i class="fas fa-check"></i> 승인${!isRefund ? ` (${applyDate} 해지)` : ''}
                 </button>
                 <button class="btn-danger btn-sm" onclick="cancellations.updateStatus('${c.id}','rejected')">
                     <i class="fas fa-times"></i> 거부
@@ -167,7 +262,7 @@ const cancellations = {
 
         const title = isRefund
             ? '<i class="fas fa-file-invoice-dollar"></i> 환불 신청 상세'
-            : '<i class="fas fa-times-circle"></i> 해지 상세';
+            : '<i class="fas fa-times-circle"></i> 해지 신청 상세';
         openGlobalModal(title, body, footer);
     },
 
@@ -280,7 +375,6 @@ const inquiries = {
             } catch(e) { showToast('삭제 실패: ' + e.message, 'error'); }
         });
     },
-
     exportCSV() {
         const headers = ['등록일', '이름', '동', '호수', '전화번호', '제목', '내용', '답변 여부', '답변'];
         const rows = this.data.map(q => ({
@@ -291,7 +385,6 @@ const inquiries = {
         }));
         downloadCSV(`문의목록_${new Date().toLocaleDateString('ko')}.csv`, rows, headers);
     },
-
     showImportModal() {
         const templateUrl = API.importCsv.templateUrl('inquiries');
         const body = `
@@ -325,7 +418,6 @@ const inquiries = {
             </button>`;
         openGlobalModal('<i class="fas fa-upload"></i> 문의 데이터 가져오기', body, footer);
     },
-
     async doImport() {
         const fileEl = document.getElementById('importInqFile');
         if (!fileEl?.files?.length) { showToast('CSV 파일을 선택하세요', 'error'); return; }
