@@ -1,9 +1,13 @@
 /** 대시보드 페이지 */
 const dashboard = {
     async render() {
+        // 마스터 선택 단지 표시
+        const selectedName = (Admin.role === 'master' && Admin.selectedComplexName)
+            ? ` — ${Admin.selectedComplexName}` : '';
+
         document.getElementById('pageContent').innerHTML = `
             <div class="page-header">
-                <h2><i class="fas fa-chart-pie"></i> 대시보드</h2>
+                <h2><i class="fas fa-chart-pie"></i> 대시보드${selectedName}</h2>
                 <button class="btn-secondary btn-sm" onclick="dashboard.render()">
                     <i class="fas fa-sync"></i> 새로고침
                 </button>
@@ -30,7 +34,9 @@ const dashboard = {
 
     async loadStats() {
         try {
-            const res = await API.stats.dashboard({ complexId: Admin.complex?.id });
+            const effId = getEffectiveComplexId();
+            const params = effId ? { complexId: effId } : {};
+            const res = await API.stats.dashboard(params);
             const s = res.data;
             document.getElementById('dashStats').innerHTML = `
                 <div class="stat-card">
@@ -65,9 +71,11 @@ const dashboard = {
 
     async loadRecent() {
         try {
+            const effId = getEffectiveComplexId();
+            const params = effId ? { complexId: effId } : {};
             const [appsRes, inqRes] = await Promise.all([
-                API.applications.list({ complexId: Admin.complex?.id, limit: 5 }),
-                API.inquiries.list({ complexId: Admin.complex?.id, isAdmin: 'true' })
+                API.applications.list({ ...params, limit: 5 }),
+                API.inquiries.list({ ...params, isAdmin: 'true' })
             ]);
 
             const apps = appsRes.data || [];
@@ -100,11 +108,13 @@ const dashboard = {
         const panel = document.getElementById('complexLinksPanel');
         if (!panel) return;
         try {
-            // 마스터 관리자: 전체 단지 목록, 일반 관리자: 본인 단지만
             let complexList = [];
             if (Admin.role === 'master') {
+                // 마스터: 선택 단지 있으면 그것만, 없으면 전체
+                const effId = getMasterSelectedComplexId();
                 const res = await API.complexes.list();
-                complexList = res.data || [];
+                const all = res.data || [];
+                complexList = effId ? all.filter(c => c.id === effId) : all;
             } else if (Admin.complex?.id) {
                 complexList = [Admin.complex];
             }

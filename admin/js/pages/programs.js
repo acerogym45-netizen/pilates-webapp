@@ -15,7 +15,7 @@ const programs = {
     async load() {
         try {
             const params = {};
-            if (Admin.complex?.id) params.complexId = Admin.complex.id;
+            params.complexId = getEffectiveComplexId(); if (!params.complexId) delete params.complexId;
             const res = await API.programs.list(params);
             this.data = res.data || [];
             this.renderList();
@@ -44,14 +44,14 @@ const programs = {
     },
     showForm(id) {
         const p = id ? this.data.find(x => x.id === id) : null;
-        if (!id && !Admin.complex?.id) {
+        if (!id && !getEffectiveComplexId()) {
             // 마스터 관리자: 먼저 단지 선택
             pickComplexForCreate((complexId, complexName) => {
                 programs._openProgramForm(null, complexId, complexName);
             });
             return;
         }
-        programs._openProgramForm(p, Admin.complex?.id);
+        programs._openProgramForm(p, getEffectiveComplexId());
     },
     _openProgramForm(p, complexId, complexName) {
         const slots = p && Array.isArray(p.time_slots) ? p.time_slots : [];
@@ -107,7 +107,7 @@ const programs = {
             } else {
                 // 단지 ID: hidden input 우선, 없으면 Admin.complex.id
                 const cxIdEl = document.getElementById('programComplexId');
-                data.complex_id = (cxIdEl?.value) || Admin.complex?.id;
+                data.complex_id = (cxIdEl?.value) || getEffectiveComplexId();
                 if (!data.complex_id) { showToast('단지를 선택하세요', 'error'); return; }
                 await API.programs.create(data);
             }

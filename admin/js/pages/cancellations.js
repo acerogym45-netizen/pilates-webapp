@@ -18,7 +18,7 @@ const cancellations = {
     },
     async load(status = '') {
         try {
-            const params = { complexId: Admin.complex?.id };
+            const params = { complexId: getEffectiveComplexId() };
             if (status) params.status = status;
             const res = await API.cancellations.list(params);
             this.data = res.data || [];
@@ -101,7 +101,7 @@ const inquiries = {
     },
     async load() {
         try {
-            const res = await API.inquiries.list({ complexId: Admin.complex?.id, isAdmin: 'true' });
+            const res = await API.inquiries.list({ complexId: getEffectiveComplexId(), isAdmin: 'true' });
             this.data = res.data || [];
             this.renderList();
         } catch(e) { document.getElementById('inqList').innerHTML = `<p class="error-hint">${e.message}</p>`; }

@@ -50,7 +50,7 @@ const applications = {
     async load() {
         try {
             const params = { limit: 1000 };
-            if (Admin.complex?.id) params.complexId = Admin.complex.id;
+            params.complexId = getEffectiveComplexId(); if (!params.complexId) delete params.complexId;
             const res = await API.applications.list(params);
             this.data = res.data || [];
             this.filtered = [...this.data];
@@ -591,7 +591,7 @@ const applications = {
         const overwrite = document.getElementById('importOverwrite')?.checked || false;
         if (!fileEl?.files?.length) { showToast('CSV 파일을 선택하세요', 'error'); return; }
         const file = fileEl.files[0];
-        const complexId = Admin.complex?.id;
+        const complexId = getEffectiveComplexId();
         if (!complexId) { showToast('단지 정보가 없습니다. 단지 코드로 로그인해주세요', 'error'); return; }
         const btnEl = document.querySelector('#globalModal .btn-primary');
         if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...'; }
