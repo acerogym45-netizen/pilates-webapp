@@ -762,13 +762,20 @@
     <div id="duplicateWarningModal" class="modal center">
         <div class="modal-content center-modal">
             <div class="modal-body" style="text-align:center">
-                <i class="fas fa-copy result-icon warning"></i>
-                <p class="result-title">이미 신청하신 프로그램입니다</p>
+                <i class="fas fa-exclamation-triangle result-icon warning"></i>
+                <p class="result-title">이미 수강 신청 내역이 있습니다</p>
                 <div id="duplicateWarningContent" class="result-detail" style="text-align:left"></div>
-                <p class="result-message" style="margin-top:12px">
-                    다른 프로그램을 신청하시거나 기존 신청을 취소한 후 다시 신청해주세요.
-                </p>
-                <button class="btn-primary btn-full" style="margin-top:14px" onclick="closeDuplicateWarningModal()">확인</button>
+                <div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;
+                            padding:12px 14px;margin-top:12px;text-align:left;font-size:.88rem;line-height:1.6">
+                    <p style="margin:0 0 4px;font-weight:700;color:#92400e">
+                        <i class="fas fa-info-circle"></i> 안내
+                    </p>
+                    <p style="margin:0;color:#78350f">
+                        중복 수강을 희망하시는 경우<br>
+                        <strong>관리자에게 별도 문의</strong>해 주세요.
+                    </p>
+                </div>
+                <button class="btn-primary btn-full" style="margin-top:16px" onclick="closeDuplicateWarningModal()">확인</button>
             </div>
         </div>
     </div>
