@@ -797,6 +797,7 @@ async function searchMyInquiries() {
 }
 /* ── 내 문의 조회 끝 ─────────────────────────────────────────────────── */
 
+async function submitInquiry(e) {
     e.preventDefault();
     
     const inquiryData = {
