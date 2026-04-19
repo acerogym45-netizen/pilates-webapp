@@ -753,6 +753,45 @@ code { background:#f0f2f8; padding:1px 5px; border-radius:4px; font-size:.85em; 
     font-weight: 600;
 }
 
+/* ── 프로그램 폼: 시간대 체크박스 ───────────────────────────────────── */
+.time-cb-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border: 1px solid #e0e6ed;
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.time-cb-lbl {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 3px 9px;
+    border-radius: 20px;
+    border: 1px solid #d0d9e8;
+    background: #fff;
+    font-size: .82rem;
+    transition: all .15s;
+    user-select: none;
+    white-space: nowrap;
+}
+.time-cb-lbl:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.time-cb-lbl input[type="checkbox"] { display: none; }
+.time-cb-lbl:has(input:checked) {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+    font-weight: 600;
+}
+.time-cb-custom:has(input:checked) {
+    background: #27ae60;
+    border-color: #27ae60;
+}
+
 /* ── 슬롯 태그 ───────────────────────────────────────────────────────── */
 .slot-tag {
     display: inline-flex;
