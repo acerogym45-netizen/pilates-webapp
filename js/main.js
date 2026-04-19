@@ -688,8 +688,115 @@ function closeInquiryModal() {
     document.getElementById('inquiryForm').reset();
 }
 
-// Submit inquiry
-async function submitInquiry(e) {
+/* ── 내 문의 조회 모달 ───────────────────────────────────────────────── */
+function showMyInquiryModal() {
+    const modal = document.getElementById('myInquiryModal');
+    if (!modal) return;
+    // 입력 초기화
+    ['myInqDong','myInqHo','myInqName','myInqPhone4'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('myInquiryResult').innerHTML = '';
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    modal.scrollTop = 0;
+}
+
+function closeMyInquiryModal() {
+    const modal = document.getElementById('myInquiryModal');
+    if (modal) modal.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+async function searchMyInquiries() {
+    const dong      = document.getElementById('myInqDong')?.value.trim();
+    const ho        = document.getElementById('myInqHo')?.value.trim();
+    const name      = document.getElementById('myInqName')?.value.trim();
+    const phone4    = document.getElementById('myInqPhone4')?.value.trim();
+    const resultEl  = document.getElementById('myInquiryResult');
+
+    if (!dong || !ho || !name || !phone4) {
+        resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
+            <i class="fas fa-exclamation-circle"></i> 모든 항목을 입력해주세요.</p>`;
+        return;
+    }
+    if (!/^\d{4}$/.test(phone4)) {
+        resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
+            <i class="fas fa-exclamation-circle"></i> 전화번호 끝 4자리를 숫자로 입력하세요.</p>`;
+        return;
+    }
+
+    resultEl.innerHTML = `<div style="text-align:center;padding:16px;color:#9ca3af">
+        <i class="fas fa-spinner fa-spin"></i> 조회 중...</div>`;
+
+    try {
+        const complexId   = complexContext?.getComplexId?.()   || '';
+        const complexCode = complexContext?.getComplexCode?.() || '';
+        const params = new URLSearchParams({ dong, ho, name, phoneLast4: phone4 });
+        if (complexId)   params.set('complexId', complexId);
+        if (complexCode) params.set('complexCode', complexCode);
+
+        const res  = await fetch(`/api/inquiries/my?${params}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            resultEl.innerHTML = `<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;
+                padding:14px;text-align:center;font-size:.85rem;color:#b91c1c;line-height:1.6">
+                <i class="fas fa-exclamation-circle" style="font-size:1.3rem;display:block;margin-bottom:6px"></i>
+                ${data.error || '조회 결과가 없습니다.'}</div>`;
+            return;
+        }
+
+        const list = data.data || [];
+        if (list.length === 0) {
+            resultEl.innerHTML = `<div style="text-align:center;padding:20px;color:#9ca3af;font-size:.88rem">
+                <i class="fas fa-inbox" style="font-size:2rem;display:block;margin-bottom:8px"></i>
+                등록된 문의가 없습니다.</div>`;
+            return;
+        }
+
+        const fmtDate = (iso) => {
+            if (!iso) return '';
+            const d = new Date(iso);
+            return `${d.getFullYear()}. ${d.getMonth()+1}. ${d.getDate()}.`;
+        };
+
+        resultEl.innerHTML = `
+            <div style="border-top:1px solid #f0f0f0;padding-top:12px;margin-bottom:4px">
+                <span style="font-size:.8rem;font-weight:700;color:#374151">${list.length}건의 문의</span>
+            </div>
+            ${list.map(q => {
+                const answered = q.answer && q.answer.trim();
+                const badge = answered
+                    ? `<span style="background:#dcfce7;color:#166534;font-size:.72rem;padding:2px 7px;border-radius:10px;font-weight:600">답변완료</span>`
+                    : `<span style="background:#fef9c3;color:#854d0e;font-size:.72rem;padding:2px 7px;border-radius:10px;font-weight:600"><i class="fas fa-clock" style="font-size:.65rem"></i> 답변 대기중</span>`;
+                const privacy = q.is_public
+                    ? `<span style="font-size:.72rem;color:#6b7280">공개</span>`
+                    : `<span style="font-size:.72rem;color:#6b7280"><i class="fas fa-lock" style="font-size:.65rem"></i> 비공개</span>`;
+                return `
+                <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;margin-bottom:10px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <div style="display:flex;gap:6px;align-items:center">${badge}${privacy}</div>
+                        <span style="font-size:.75rem;color:#9ca3af">${fmtDate(q.created_at)}</span>
+                    </div>
+                    <div style="font-weight:700;font-size:.9rem;color:#111827;margin-bottom:4px">${q.title}</div>
+                    <div style="font-size:.83rem;color:#4b5563;white-space:pre-wrap;margin-bottom:${answered ? '10px' : '0'}">${q.content}</div>
+                    ${answered ? `
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:10px 12px;margin-top:6px">
+                        <div style="font-size:.75rem;font-weight:700;color:#166534;margin-bottom:4px">
+                            <i class="fas fa-reply"></i> 관리자 답변 ${q.answered_at ? '· ' + fmtDate(q.answered_at) : ''}
+                        </div>
+                        <div style="font-size:.84rem;color:#166534;white-space:pre-wrap;line-height:1.6">${q.answer}</div>
+                    </div>` : ''}
+                </div>`;
+            }).join('')}`;
+    } catch (e) {
+        resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
+            오류가 발생했습니다: ${e.message}</p>`;
+    }
+}
+/* ── 내 문의 조회 끝 ─────────────────────────────────────────────────── */
+
     e.preventDefault();
     
     const inquiryData = {
@@ -700,7 +807,7 @@ async function submitInquiry(e) {
         phone: document.getElementById('inquiryPhone').value,
         title: document.getElementById('inquiryTitle').value,
         content: document.getElementById('inquiryContent').value,
-        is_public: document.querySelector('input[name="isPublic"]:checked').value === 'true',
+        is_public: document.getElementById('inquiryPublic')?.checked ?? true,
         status: '대기중',
         created_at: new Date().getTime()
     };

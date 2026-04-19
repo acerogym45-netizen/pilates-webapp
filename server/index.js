@@ -40,6 +40,12 @@ app.use('/api/', apiLimiter);
 // ── 정적 파일 ─────────────────────────────────────────────────────────────────
 const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../public/uploads');
 app.use('/uploads', express.static(uploadDir));
+// Vercel(/tmp) 환경 폴백: /tmp/refund-docs 도 /uploads/refund-docs 로 서빙
+const tmpRefundDir = '/tmp/refund-docs';
+if (!require('fs').existsSync(tmpRefundDir)) {
+    try { require('fs').mkdirSync(tmpRefundDir, { recursive: true }); } catch(e) {}
+}
+app.use('/uploads/refund-docs', require('express').static(tmpRefundDir));
 app.use('/admin', express.static(path.join(__dirname, '../admin')));
 app.use(express.static(path.join(__dirname, '../public')));
 

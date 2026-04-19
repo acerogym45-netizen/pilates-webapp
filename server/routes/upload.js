@@ -153,8 +153,10 @@ const uploadDocs = multer({
     limits: { fileSize: 10 * 1024 * 1024, files: 5 }
 });
 
-// 로컬 폴백 디렉토리
-const REFUND_DOC_DIR = path.join(__dirname, '../../public/uploads/refund-docs');
+// 로컬 폴백 디렉토리 — Vercel 등 읽기전용 환경에서는 /tmp 사용
+const REFUND_DOC_DIR = process.env.REFUND_DOC_DIR
+    || (process.env.UPLOAD_DIR ? path.join(process.env.UPLOAD_DIR, 'refund-docs') : null)
+    || '/tmp/refund-docs';
 try {
     if (!fs.existsSync(REFUND_DOC_DIR)) fs.mkdirSync(REFUND_DOC_DIR, { recursive: true });
 } catch(e) { console.warn('refund-docs dir 생성 실패:', e.message); }

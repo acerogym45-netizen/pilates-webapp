@@ -147,6 +147,56 @@ router.post('/inquiries', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+/**
+ * GET /api/inquiries/my
+ * 본인 문의 조회 (비공개 포함) — 동, 호수, 이름, 전화번호 끝 4자리로 인증
+ * query: complexId, dong, ho, name, phoneLast4
+ */
+router.get('/inquiries/my', async (req, res) => {
+    try {
+        const { complexId, complexCode, dong, ho, name, phoneLast4 } = req.query;
+        if (!dong || !ho || !name || !phoneLast4) {
+            return res.status(400).json({ success: false, error: '동, 호수, 이름, 전화번호 끝 4자리를 모두 입력하세요' });
+        }
+        const sb = getSupabase();
+        let query = sb
+            .from('inquiries')
+            .select('id, dong, ho, name, title, content, answer, is_public, is_hidden, created_at, answered_at')
+            .eq('dong', dong)
+            .eq('ho', ho)
+            .eq('name', name)
+            .order('created_at', { ascending: false });
+
+        if (complexId)   query = query.eq('complex_id', complexId);
+        if (complexCode) query = query.eq('complexes.code', complexCode);
+
+        const { data, error } = await query;
+        if (error) throw sbErr(error, 'GET /inquiries/my');
+
+        // 전화번호 끝 4자리 검증 (phone 컬럼 직접 비교)
+        const sb2 = getSupabase();
+        let q2 = sb2.from('inquiries')
+            .select('id, phone')
+            .eq('dong', dong).eq('ho', ho).eq('name', name);
+        if (complexId) q2 = q2.eq('complex_id', complexId);
+        const { data: phoneData } = await q2;
+
+        // phone 끝 4자리가 일치하는 id 셋 구성
+        const validIds = new Set(
+            (phoneData || [])
+                .filter(r => r.phone && r.phone.replace(/\D/g, '').slice(-4) === phoneLast4.replace(/\D/g, ''))
+                .map(r => r.id)
+        );
+
+        if (validIds.size === 0) {
+            return res.status(404).json({ success: false, error: '일치하는 문의 내역이 없습니다.\n입력 정보를 다시 확인해주세요.' });
+        }
+
+        const result = (data || []).filter(r => validIds.has(r.id));
+        res.json({ success: true, data: result });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 router.put('/inquiries/:id', async (req, res) => {
     try {
         const { answer, is_hidden } = req.body;
