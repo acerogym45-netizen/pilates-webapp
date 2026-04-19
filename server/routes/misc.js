@@ -550,9 +550,14 @@ router.get('/stats/dashboard', async (req, res) => {
             buildQuery('applications', { status: 'waiting' }),
             buildQuery('applications', { status: 'rejected' }),
             buildQuery('cancellations', { status: 'pending' }),
-            sb.from('inquiries').select('*', { count: 'exact', head: true })
-                .is('answer', null)
-                .then(r => r)
+            (() => {
+                // 미답변(대기중) 문의 수 — complex_id 필터 포함
+                let q = sb.from('inquiries')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('status', '대기중');
+                if (complexId) q = q.eq('complex_id', complexId);
+                return q;
+            })()
         ]);
 
         res.json({

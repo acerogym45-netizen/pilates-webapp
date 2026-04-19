@@ -222,6 +222,8 @@ const cancellations = {
                 ? docItems.map((d, i) => {
                     const name = d.name || `서류 ${i+1}`;
                     const url  = d.url  || '';
+                    // URL을 절대경로로 변환 (admin 페이지에서도 올바르게 로드)
+                    const absUrl = url && url.startsWith('/') ? (window.location.origin + url) : url;
                     const isImg = /\.(jpe?g|png|gif|webp)$/i.test(name);
                     const isPdf = /\.pdf$/i.test(name);
                     const icon  = isPdf
@@ -229,19 +231,31 @@ const cancellations = {
                         : isImg
                             ? '<i class="fas fa-file-image" style="color:#2563eb;font-size:1.1rem"></i>'
                             : '<i class="fas fa-file" style="color:#6b7280;font-size:1.1rem"></i>';
-                    const preview = isImg && url
-                        ? `<img src="${escHtml(url)}" alt="${escHtml(name)}"
-                               style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid #e5e7eb;
-                                      display:block;margin-top:6px;cursor:pointer;object-fit:contain;background:#f3f4f6"
-                               onclick="window.open('${escHtml(url)}','_blank')"
-                               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-                           ><div style="display:none;align-items:center;gap:8px;margin-top:6px;padding:10px;
-                                        background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:.8rem;color:#92400e">
-                               <i class='fas fa-exclamation-triangle'></i>
-                               <span>이미지를 불러올 수 없습니다.
-                                 <a href="${escHtml(url)}" target="_blank"
-                                    style="color:#4f46e5;text-decoration:underline;margin-left:4px">직접 열기</a>
-                               </span></div>`
+                    // 이미지: 모달 내 직접 미리보기 (라이트박스) + 로드 실패 시 재시도 버튼
+                    const preview = isImg && absUrl
+                        ? `<div style="margin-top:8px;text-align:center">
+                               <img src="${escHtml(absUrl)}" alt="${escHtml(name)}"
+                                   id="doc-img-${i}"
+                                   style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid #e5e7eb;
+                                          display:block;margin:0 auto;cursor:zoom-in;object-fit:contain;background:#f3f4f6"
+                                   onclick="cancellations.openLightbox('${escHtml(absUrl)}','${escHtml(name)}')"
+                                   onerror="this.style.display='none';document.getElementById('doc-err-${i}').style.display='flex'"
+                               >
+                               <div id="doc-err-${i}" style="display:none;flex-direction:column;align-items:center;gap:8px;
+                                        margin-top:6px;padding:12px;background:#fef3c7;border:1px solid #fcd34d;
+                                        border-radius:8px;font-size:.82rem;color:#92400e">
+                                   <i class='fas fa-exclamation-triangle' style="font-size:1.2rem"></i>
+                                   <span>이미지를 불러올 수 없습니다</span>
+                                   <button onclick="cancellations.retryImage('doc-img-${i}','doc-err-${i}','${escHtml(absUrl)}')"
+                                           style="background:#4f46e5;color:#fff;border:none;padding:5px 12px;border-radius:5px;
+                                                  font-size:.78rem;cursor:pointer;font-weight:600">
+                                       <i class="fas fa-redo"></i> 다시 시도
+                                   </button>
+                               </div>
+                               <span style="font-size:.72rem;color:#9ca3af;margin-top:4px;display:block">
+                                   클릭하면 크게 볼 수 있습니다
+                               </span>
+                           </div>`
                         : '';
                     const uploadedAt = d.uploaded_at ? formatDate(d.uploaded_at) : '';
                     return `
@@ -251,7 +265,7 @@ const cancellations = {
                             ${icon}
                             <span style="flex:1;font-size:.83rem;font-weight:600;color:#111827;
                                          word-break:break-all">${escHtml(name)}</span>
-                            ${url ? `<a href="${escHtml(url)}" target="_blank" download="${escHtml(name)}"
+                            ${absUrl ? `<a href="${escHtml(absUrl)}" download="${escHtml(name)}"
                                         style="flex-shrink:0;font-size:.78rem;color:#4f46e5;text-decoration:none;
                                                background:#ede9fe;padding:3px 8px;border-radius:5px;font-weight:600"
                                         title="다운로드">
@@ -411,6 +425,72 @@ const cancellations = {
         } catch(e) {
             showToast('다운로드 실패: ' + e.message, 'error');
         }
+    },
+
+    /** 이미지 라이트박스 - 모달 내에서 크게 보기 */
+    openLightbox(url, name) {
+        // 기존 라이트박스 제거
+        const old = document.getElementById('refundLightbox');
+        if (old) old.remove();
+
+        const lb = document.createElement('div');
+        lb.id = 'refundLightbox';
+        lb.style.cssText = `
+            position:fixed;top:0;left:0;width:100%;height:100%;
+            background:rgba(0,0,0,0.88);z-index:99999;
+            display:flex;align-items:center;justify-content:center;
+            flex-direction:column;gap:12px;padding:20px;box-sizing:border-box;
+        `;
+        lb.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;
+                        width:100%;max-width:900px;color:#fff;margin-bottom:4px">
+                <span style="font-size:.9rem;font-weight:600;word-break:break-all;flex:1;margin-right:12px">
+                    <i class="fas fa-image"></i> ${name}
+                </span>
+                <div style="display:flex;gap:8px;flex-shrink:0">
+                    <a href="${url}" download="${name}"
+                       style="background:#4f46e5;color:#fff;padding:6px 14px;border-radius:6px;
+                              text-decoration:none;font-size:.82rem;font-weight:600">
+                        <i class="fas fa-download"></i> 저장
+                    </a>
+                    <button onclick="document.getElementById('refundLightbox').remove()"
+                            style="background:#374151;color:#fff;border:none;padding:6px 14px;
+                                   border-radius:6px;cursor:pointer;font-size:.82rem;font-weight:600">
+                        <i class="fas fa-times"></i> 닫기
+                    </button>
+                </div>
+            </div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;
+                        width:100%;max-width:900px;overflow:auto">
+                <img src="${url}" alt="${name}"
+                     style="max-width:100%;max-height:80vh;border-radius:8px;
+                            object-fit:contain;box-shadow:0 4px 32px rgba(0,0,0,.5)"
+                     onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
+                >
+                <div style="display:none;color:#fcd34d;text-align:center;padding:20px">
+                    <i class="fas fa-exclamation-triangle" style="font-size:2rem"></i>
+                    <p style="margin-top:8px">이미지를 불러올 수 없습니다</p>
+                </div>
+            </div>
+            <p style="color:#9ca3af;font-size:.75rem;margin-top:4px">
+                배경 클릭 또는 닫기 버튼으로 닫을 수 있습니다
+            </p>`;
+        // 배경 클릭 시 닫기
+        lb.addEventListener('click', (e) => {
+            if (e.target === lb) lb.remove();
+        });
+        document.body.appendChild(lb);
+    },
+
+    /** 이미지 로드 재시도 */
+    retryImage(imgId, errId, url) {
+        const img = document.getElementById(imgId);
+        const err = document.getElementById(errId);
+        if (!img) return;
+        img.style.display = 'block';
+        err.style.display = 'none';
+        // 캐시 방지 파라미터 추가
+        img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
     }
 };
 
