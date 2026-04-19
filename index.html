@@ -51,6 +51,9 @@
             <div class="progress-step" data-step="2"><div class="step-number">2</div></div>
         </div>
 
+        <!-- 📅 접수 기간 안내 배너 (동적 표시) -->
+        <div id="periodBanner" style="display:none"></div>
+
         <!-- 퀵 액션 버튼 -->
         <div class="quick-actions">
             <button class="quick-btn" onclick="showCurriculumModal()">
@@ -72,6 +75,10 @@
             <button class="quick-btn" onclick="showRefundRequestModal()">
                 <i class="fas fa-file-invoice"></i>
                 <span>환불 신청</span>
+            </button>
+            <button class="quick-btn" onclick="showCancellationForm()">
+                <i class="fas fa-times-circle"></i>
+                <span>해지 신청</span>
             </button>
         </div>
 
@@ -169,6 +176,27 @@
             </div>
 
             <div class="form-body">
+
+                <!-- ⚠️ 신청·해지 기간 필수 안내 박스 (계약서 상단) -->
+                <div class="period-notice-box">
+                    <div class="period-notice-title"><i class="fas fa-calendar-check"></i> 신청·해지 기간 필수 안내</div>
+                    <div class="period-notice-grid">
+                        <div class="period-notice-item period-enroll">
+                            <span class="period-label">📝 등록 접수</span>
+                            <span class="period-date">매월 <strong>20일 ~ 27일</strong></span>
+                            <span class="period-desc">이 기간에만 신규 등록 가능</span>
+                        </div>
+                        <div class="period-notice-item period-cancel">
+                            <span class="period-label">🚫 해지 신청</span>
+                            <span class="period-date">매월 <strong>3일 ~ 10일</strong></span>
+                            <span class="period-desc">당월 수강 후 익월부터 해지</span>
+                        </div>
+                    </div>
+                    <div class="period-notice-auto">
+                        <i class="fas fa-sync-alt"></i>
+                        <strong>자동 재등록 안내:</strong> 해지 신청 기간(매월 3~10일) 내에 해지 신청을 하지 않으면 <strong>다음 달 수강료가 자동 청구</strong>되며 수업이 자동 연장됩니다.
+                    </div>
+                </div>
 
                 <!-- 신청 정보 확인 -->
                 <div class="contract-summary">
@@ -285,9 +313,12 @@
                         <strong>⑦ 양도·양수</strong>
                         <p>지인에게 상품 재판매 혹은 양도 시, 다음 회차에 바로 이어서 하지 않으시는 경우 횟수는 차감됩니다.</p>
                     </div>
-                    <div class="terms-section">
-                        <strong>⑧ 자동 연장</strong>
-                        <p><strong>신청서는 최초 1회 작성 후 해지 신청서를 제출하지 않으시는 경우 자동 연장됩니다.</strong> 해지를 희망하시는 경우 반드시 해지 신청서를 별도로 작성·제출해주세요.</p>
+                    <div class="terms-section terms-section-highlight">
+                        <strong>⑧ 자동 연장 및 해지 신청</strong>
+                        <p>신청서는 최초 1회 작성 후 <strong style="color:#e53e3e">해지 신청서를 제출하지 않으시면 자동 연장</strong>됩니다.<br>
+                        해지를 원하시면 <strong style="color:#e53e3e">매월 3일 ~ 10일</strong> 사이에 반드시 해지 신청을 완료해주세요.<br>
+                        이 기간 내 해지 신청 시 <strong>당월은 정상 수강 후 익월부터 해지</strong>가 적용됩니다.<br>
+                        해지 신청 기간 이외에는 접수가 불가합니다.</p>
                     </div>
                 </div>
 
