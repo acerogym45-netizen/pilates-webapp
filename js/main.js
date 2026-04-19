@@ -145,23 +145,27 @@ function goToPage2() {
     document.querySelector('[data-step="1"]').classList.add('completed');
     document.querySelector('[data-step="2"]').classList.add('active');
     
-    // Update header
+    // Update header title (subtitle 요소는 삭제됐으므로 안전하게 처리)
     document.getElementById('pageTitle').textContent = '필라테스 레슨 이용계약서';
-    document.getElementById('pageSubtitle').textContent = '계약 내용을 확인하고 서명해주세요';
+    const subtitleEl = document.getElementById('pageSubtitle');
+    if (subtitleEl) subtitleEl.textContent = '계약 내용을 확인하고 서명해주세요';
     
     // Display form data
-    document.getElementById('displayDong').textContent = formData.dong;
-    document.getElementById('displayHo').textContent = formData.ho;
-    document.getElementById('displayName').textContent = formData.name;
+    document.getElementById('displayDong').textContent  = formData.dong;
+    document.getElementById('displayHo').textContent    = formData.ho;
+    document.getElementById('displayName').textContent  = formData.name;
     document.getElementById('displayPhone').textContent = formData.phone;
     document.getElementById('displayLesson').textContent = formData.lesson_type;
-    document.getElementById('displayTime').textContent = formData.preferred_time;
+    document.getElementById('displayTime').textContent  = formData.preferred_time;
     
-    // Initialize signature pad
-    initSignaturePad();
-    
-    // Scroll to top
+    // Scroll to top first, then init signature pad
+    // (page2가 display:block 된 직후 offsetWidth가 0일 수 있어 rAF로 지연)
     window.scrollTo(0, 0);
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            initSignaturePad();
+        });
+    });
 }
 
 // Go back to Page 1
@@ -213,13 +217,24 @@ async function submitContract() {
         alert('성명을 입력해주세요.');
         return;
     }
-    
-    // Check if signature pad has content
+
+    // 서명 미작성 체크
     if (signaturePad.isEmpty()) {
-        alert('서명란에 서명해주세요.');
+        alert('서명란에 서명해주세요.\n미작성 또는 부실한 서명은 승인되지 않으며 자동 거부됩니다.');
+        document.querySelector('.signature-canvas-wrapper').style.borderColor = '#e53e3e';
         return;
     }
-    
+
+    // 부실 서명 감지: SignaturePad 데이터 포인트 수가 너무 적으면 거부
+    const sigData = signaturePad.toData();
+    const totalPoints = sigData.reduce((sum, stroke) => sum + (stroke.points?.length || stroke.length || 0), 0);
+    if (totalPoints < 20) {
+        alert('서명이 너무 간단합니다.\n반드시 본인 서명을 직접 작성해주세요.\n부실한 서명(점, 선 하나 등)은 승인되지 않으며 자동 거부됩니다.');
+        document.querySelector('.signature-canvas-wrapper').style.borderColor = '#e53e3e';
+        return;
+    }
+    document.querySelector('.signature-canvas-wrapper').style.borderColor = '';
+
     // Get signature as base64 image
     const signatureImage = signaturePad.toDataURL();
     
@@ -363,22 +378,38 @@ async function checkProgramCapacity(contractData) {
 function initSignaturePad() {
     const canvas = document.getElementById('signaturePad');
     if (!canvas) return;
-    
-    // Set canvas size
-    function resizeCanvas() {
-        const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = canvas.offsetWidth * ratio;
-        canvas.height = canvas.offsetHeight * ratio;
-        canvas.getContext('2d').scale(ratio, ratio);
-        signaturePad.clear();
+
+    // 이전 SignaturePad 인스턴스 제거
+    if (signaturePad) {
+        signaturePad.off();
+        signaturePad = null;
     }
-    
+
+    const wrapper = canvas.parentElement;
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+
+    function resizeCanvas() {
+        // offsetWidth가 0이면 wrapper 또는 기본값 사용
+        const w = canvas.offsetWidth || wrapper?.offsetWidth || 320;
+        const h = canvas.offsetHeight || 130;
+        canvas.width  = w * ratio;
+        canvas.height = h * ratio;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(ratio, ratio);
+        if (signaturePad) signaturePad.clear();
+    }
+
     signaturePad = new SignaturePad(canvas, {
         backgroundColor: 'rgb(255, 255, 255)',
-        penColor: 'rgb(0, 0, 0)'
+        penColor: 'rgb(0, 0, 0)',
+        minWidth: 1.5,
+        maxWidth: 3
     });
-    
+
     resizeCanvas();
+
+    // resize 이벤트는 한 번만 등록 (중복 방지)
+    window.removeEventListener('resize', resizeCanvas);
     window.addEventListener('resize', resizeCanvas);
 }
 

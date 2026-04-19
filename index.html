@@ -338,6 +338,14 @@
                     <input type="text" id="signatureName" placeholder="성명을 입력하세요" style="margin-bottom:12px">
 
                     <label>전자 서명 <span class="required">*</span></label>
+                    <!-- 서명 안내 경고 박스 -->
+                    <div style="background:#fff5f5;border:1.5px solid #fc8181;border-radius:8px;
+                                padding:9px 13px;margin-bottom:8px;font-size:.8rem;color:#c53030;line-height:1.65">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong> 서명 필수 안내</strong><br>
+                        반드시 본인 서명을 직접 작성해주세요.<br>
+                        <strong>미작성 또는 부실한 서명(점, 선 하나 등)은 승인되지 않으며 자동 거부됩니다.</strong>
+                    </div>
                     <div class="signature-canvas-wrapper">
                         <canvas id="signaturePad"></canvas>
                         <button type="button" class="btn-clear-sig" onclick="clearSignature()">
