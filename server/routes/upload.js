@@ -138,9 +138,45 @@ const STATUS_MAP = {
     received:'received'
 };
 
-/* ── 환불 서류 업로드 (Supabase Storage → 로컬 폴백) ─────────────────── */
-const docMemStorage = multer.memoryStorage();
+/* ── 환불 서류 업로드 (항상 로컬 디스크 저장) ──────────────────────────── */
 const DOC_ALLOWED_TYPES = /jpeg|jpg|png|gif|webp|pdf/;
+
+// 로컬 저장 디렉토리 (절대경로로 고정)
+const REFUND_DOC_DIR = process.env.REFUND_DOC_DIR
+    || path.join(__dirname, '../../public/uploads/refund-docs');
+try {
+    if (!fs.existsSync(REFUND_DOC_DIR)) fs.mkdirSync(REFUND_DOC_DIR, { recursive: true });
+    console.log('📁 REFUND_DOC_DIR:', REFUND_DOC_DIR);
+} catch(e) { console.warn('refund-docs dir 생성 실패:', e.message); }
+
+// diskStorage: 즉시 디스크에 저장 → 서버 재시작·메모리 문제와 무관
+const docDiskStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const cancellationId = req.body?.cancellation_id || 'pending';
+        const subDir = path.join(REFUND_DOC_DIR, cancellationId);
+        try {
+            if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
+            cb(null, subDir);
+        } catch(e) {
+            cb(e);
+        }
+    },
+    filename: (req, file, cb) => {
+        // 한글 파일명 깨짐 방지
+        let originalName = file.originalname;
+        try {
+            const decoded = Buffer.from(file.originalname, 'latin1').toString('utf8');
+            if (!decoded.includes('\uFFFD')) originalName = decoded;
+        } catch(e) { /* 무시 */ }
+        const safeOrig = originalName.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+        const uniqueName = `${Date.now()}_${safeOrig}`;
+        // originalname에 최종 파일명 저장 (나중에 사용)
+        file._savedName = uniqueName;
+        file._originalNameFixed = originalName;
+        cb(null, uniqueName);
+    }
+});
+
 const docFilter = (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
     DOC_ALLOWED_TYPES.test(ext)
@@ -148,18 +184,10 @@ const docFilter = (req, file, cb) => {
         : cb(new Error('이미지(JPG/PNG/GIF/WEBP) 또는 PDF 파일만 허용됩니다'));
 };
 const uploadDocs = multer({
-    storage: docMemStorage,
+    storage: docDiskStorage,
     fileFilter: docFilter,
     limits: { fileSize: 10 * 1024 * 1024, files: 5 }
 });
-
-// 로컬 폴백 디렉토리 — Vercel 등 읽기전용 환경에서는 /tmp 사용
-const REFUND_DOC_DIR = process.env.REFUND_DOC_DIR
-    || (process.env.UPLOAD_DIR ? path.join(process.env.UPLOAD_DIR, 'refund-docs') : null)
-    || '/tmp/refund-docs';
-try {
-    if (!fs.existsSync(REFUND_DOC_DIR)) fs.mkdirSync(REFUND_DOC_DIR, { recursive: true });
-} catch(e) { console.warn('refund-docs dir 생성 실패:', e.message); }
 
 /**
  * POST /api/upload/refund-docs
@@ -173,30 +201,27 @@ router.post('/refund-docs', uploadDocs.array('files', 5), async (req, res) => {
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({ success: false, error: '파일이 없습니다' });
         }
-        const { cancellation_id, complex_code } = req.body;
+        const { cancellation_id } = req.body;
         const urls = [];
         const file_names = [];
         const storage_paths = [];
 
         for (const file of req.files) {
-            // 한글 파일명 깨짐 방지: latin1→utf8 재인코딩 시도
-            let originalName = file.originalname;
-            try {
-                const decoded = Buffer.from(file.originalname, 'latin1').toString('utf8');
-                if (!decoded.includes('\uFFFD')) originalName = decoded;
-            } catch(e) { /* 무시 */ }
+            // diskStorage가 이미 저장했으므로 경로 정보만 수집
+            const savedName     = file.filename;  // diskStorage가 지정한 파일명
+            const originalName  = file._originalNameFixed || file.originalname;
+            const usedId        = cancellation_id || 'pending';
 
-            const safeOrig = originalName.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
-            const uniqueName = `${Date.now()}_${safeOrig}`;
+            // 저장된 파일 존재 여부 확인
+            if (!fs.existsSync(file.path)) {
+                console.error('저장 실패: 파일이 존재하지 않음:', file.path);
+                return res.status(500).json({ success: false, error: `파일 저장 실패: ${originalName}` });
+            }
 
-            // 로컬 저장 (항상)
-            const subDir = path.join(REFUND_DOC_DIR, cancellation_id || 'pending');
-            if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
-            const localPath = path.join(subDir, uniqueName);
-            fs.writeFileSync(localPath, file.buffer);
+            const storagePath = `local:${usedId}/${savedName}`;
+            const finalUrl    = `/uploads/refund-docs/${usedId}/${savedName}`;
 
-            const storagePath = `local:${cancellation_id || 'pending'}/${uniqueName}`;
-            const finalUrl    = `/uploads/refund-docs/${cancellation_id || 'pending'}/${uniqueName}`;
+            console.log(`[upload] 저장 완료: ${file.path} → ${finalUrl}`);
 
             urls.push(finalUrl);
             file_names.push(originalName);
