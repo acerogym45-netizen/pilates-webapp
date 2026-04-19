@@ -32,7 +32,6 @@
                 </div>
                 <div class="header-text">
                     <h1 id="logoText">청주SK뷰자이</h1>
-                    <p class="header-subtitle" id="pageSubtitle">커뮤니티 피트니스센터</p>
                 </div>
             </div>
             <div class="header-actions">
@@ -71,6 +70,10 @@
             <button class="quick-btn" onclick="showInquiryForm()">
                 <i class="fas fa-pen"></i>
                 <span>문의하기</span>
+            </button>
+            <button class="quick-btn" onclick="showMyLookupModal()">
+                <i class="fas fa-search"></i>
+                <span>내 신청 조회</span>
             </button>
             <button class="quick-btn" onclick="showRefundRequestModal()">
                 <i class="fas fa-file-invoice"></i>
@@ -369,8 +372,10 @@
             </div>
             <div id="inquiriesContainer">
                 <div class="empty-hint">
-                    <i class="fas fa-comment-slash"></i>
-                    등록된 공개 문의가 없습니다
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 0">
+                        <i class="fas fa-inbox" style="font-size:2rem;opacity:.35"></i>
+                        <span>아직 등록된 문의가 없습니다</span>
+                    </div>
                 </div>
             </div>
         </section>
@@ -726,6 +731,72 @@
     <div id="imageModal" class="image-modal" onclick="closeImageModal(event)">
         <span class="image-modal-close" onclick="closeImageModal()">&times;</span>
         <img class="image-modal-content" id="modalImage" alt="">
+    </div>
+
+    <!-- 내 신청 조회 모달 -->
+    <div id="myLookupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+         z-index:9999;display:none;align-items:center;justify-content:center;padding:16px">
+        <div style="background:#fff;border-radius:16px;width:100%;max-width:440px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+            <!-- 헤더 -->
+            <div style="background:var(--color-primary,#4f46e5);color:#fff;padding:16px 18px;
+                        display:flex;align-items:center;justify-content:space-between">
+                <span style="font-weight:700;font-size:1rem">
+                    <i class="fas fa-search"></i> 내 신청 조회
+                </span>
+                <button onclick="closeMyLookupModal()" style="background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <!-- 바디 -->
+            <div style="padding:18px">
+                <!-- 입력 안내 -->
+                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;
+                            padding:10px 13px;margin-bottom:16px;font-size:.82rem;color:#1e40af;line-height:1.6">
+                    <i class="fas fa-info-circle"></i>
+                    <strong> 동·호수</strong>와 <strong>전화번호 뒷 4자리</strong>를 입력하면<br>
+                    승인된 프로그램을 조회할 수 있습니다.
+                </div>
+                <!-- 입력 폼 -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
+                            동 <span style="color:#ef4444">*</span>
+                        </label>
+                        <input type="text" id="lookupDong" placeholder="예: 101" inputmode="numeric"
+                            style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #d1d5db;
+                                   border-radius:8px;font-size:.9rem;outline:none"
+                            oninput="this.style.borderColor='#d1d5db'">
+                    </div>
+                    <div>
+                        <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
+                            호수 <span style="color:#ef4444">*</span>
+                        </label>
+                        <input type="text" id="lookupHo" placeholder="예: 1001" inputmode="numeric"
+                            style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #d1d5db;
+                                   border-radius:8px;font-size:.9rem;outline:none"
+                            oninput="this.style.borderColor='#d1d5db'">
+                    </div>
+                </div>
+                <div style="margin-bottom:14px">
+                    <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
+                        전화번호 뒷 4자리 <span style="color:#ef4444">*</span>
+                    </label>
+                    <input type="text" id="lookupPhone4" placeholder="예: 1234" maxlength="4" inputmode="numeric"
+                        style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #d1d5db;
+                               border-radius:8px;font-size:.9rem;outline:none"
+                        oninput="this.style.borderColor='#d1d5db'"
+                        onkeydown="if(event.key==='Enter') lookupMyApplication()">
+                </div>
+                <button onclick="lookupMyApplication()" id="lookupBtn"
+                    style="width:100%;padding:11px;border:none;border-radius:9px;
+                           background:var(--color-primary,#4f46e5);color:#fff;
+                           font-size:.93rem;font-weight:700;cursor:pointer">
+                    <i class="fas fa-search"></i> 조회하기
+                </button>
+                <!-- 결과 영역 -->
+                <div id="lookupResult" style="margin-top:14px"></div>
+            </div>
+        </div>
     </div>
 
     <!-- 환불 신청 모달 -->
