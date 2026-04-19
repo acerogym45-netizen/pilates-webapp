@@ -1618,24 +1618,28 @@ async function submitRefundRequest() {
     }[reason] || reason;
 
     const complexCode = complexContext?.getComplexCode?.() || '';
+    const complexId   = complexContext?.getComplexId?.()   || '';
 
     try {
         const btn = document.querySelector('#refundRequestModal [onclick="submitRefundRequest()"]');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 접수 중...'; }
 
-        const res = await fetch('/api/inquiries', {
+        // 해지 관리 탭에서 볼 수 있도록 /api/cancellations 로 전송
+        const res = await fetch('/api/cancellations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                complex_id: complexId,
                 complex_code: complexCode,
                 name, dong, ho, phone,
-                title: `[환불 신청] ${dong} ${ho} ${name}`,
-                content: `환불 사유: ${reasonLabel}\n\n${detail || '(상세 내용 없음)'}`,
-                is_public: false
+                program_name: '',          // 환불 신청 시 프로그램명 미입력 가능
+                request_type: 'refund',
+                refund_reason: reasonLabel,
+                refund_detail: detail || ''
             })
         });
         const data = await res.json();
-        if (!data.success) throw new Error(data.message || '접수 실패');
+        if (!data.success) throw new Error(data.error || data.message || '접수 실패');
 
         closeRefundRequestModal();
         alert('환불 신청이 접수되었습니다.\n담당자가 확인 후 연락드리겠습니다.\n증빙서류를 관리사무소에 제출해주세요.');

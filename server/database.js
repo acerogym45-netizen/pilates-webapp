@@ -218,6 +218,12 @@ function initializeSchema() {
         database.exec(`ALTER TABLE applications ADD COLUMN transfer_date TEXT DEFAULT NULL`);
     }
 
+    // ─── 마이그레이션: cancellations 테이블에 request_type 컬럼 추가 ────────
+    const cancelCols = database.prepare("PRAGMA table_info(cancellations)").all().map(c => c.name);
+    if (!cancelCols.includes('request_type')) {
+        database.exec(`ALTER TABLE cancellations ADD COLUMN request_type TEXT DEFAULT 'cancel'`);
+    }
+
     console.log('✅ Database schema initialized');
 }
 

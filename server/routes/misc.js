@@ -278,7 +278,7 @@ router.delete('/curricula/:id', async (req, res) => {
 // ═══════════════════════════════════════════════════════
 router.get('/cancellations', async (req, res) => {
     try {
-        const { complexCode, complexId, status } = req.query;
+        const { complexCode, complexId, status, request_type } = req.query;
         const sb = getSupabase();
 
         let query = sb
@@ -286,33 +286,65 @@ router.get('/cancellations', async (req, res) => {
             .select('*, complexes!inner(code)')
             .order('created_at', { ascending: false });
 
-        if (complexCode) query = query.eq('complexes.code', complexCode);
-        if (complexId)   query = query.eq('complex_id', complexId);
-        if (status)      query = query.eq('status', status);
+        if (complexCode)   query = query.eq('complexes.code', complexCode);
+        if (complexId)     query = query.eq('complex_id', complexId);
+        if (status)        query = query.eq('status', status);
 
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /cancellations');
-        const result = (data || []).map(r => ({ ...r, complex_code: r.complexes?.code }));
+
+        let result = (data || []).map(r => ({
+            ...r,
+            complex_code: r.complexes?.code,
+            // request_type 컬럼이 없는 기존 레코드는 'cancel'로 기본값 설정
+            request_type: r.request_type || 'cancel'
+        }));
+
+        // request_type 필터 (DB 컬럼 유무에 관계없이 JS 레벨에서도 처리)
+        if (request_type) {
+            result = result.filter(r => r.request_type === request_type);
+        }
+
         res.json({ success: true, data: result });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 router.post('/cancellations', async (req, res) => {
     try {
-        const { complex_id, application_id, dong, ho, name, phone, program_name, reason } = req.body;
+        const { complex_id, application_id, dong, ho, name, phone, program_name, reason, request_type, refund_reason, refund_detail } = req.body;
         if (!complex_id || !dong || !ho || !name || !phone) return res.status(400).json({ success: false, error: '필수 항목 누락' });
         const sb = getSupabase();
-        const { data, error } = await sb
-            .from('cancellations')
-            .insert({
-                complex_id, application_id: application_id || null,
-                dong, ho, name, phone,
-                program_name: program_name || '', reason: reason || '', status: 'pending'
-            })
-            .select()
-            .single();
-        if (error) throw sbErr(error);
-        res.status(201).json({ success: true, data });
+
+        // reason 필드 구성
+        let reasonText = reason || '';
+        if (request_type === 'refund') {
+            reasonText = `[환불사유: ${refund_reason || '-'}]\n${refund_detail || ''}`;
+        }
+
+        const insertData = {
+            complex_id, application_id: application_id || null,
+            dong, ho, name, phone,
+            program_name: program_name || '',
+            reason: reasonText,
+            request_type: request_type || 'cancel',
+            status: 'pending'
+        };
+
+        let result;
+        // request_type 컬럼이 없을 수 있으므로 실패 시 해당 필드 제외 후 재시도
+        let { data, error } = await sb.from('cancellations').insert(insertData).select().single();
+        if (error && error.message && error.message.includes('request_type')) {
+            // 컬럼 없으면 request_type 제외하고 재시도
+            const { request_type: _rt, ...fallbackData } = insertData;
+            const retry = await sb.from('cancellations').insert(fallbackData).select().single();
+            if (retry.error) throw sbErr(retry.error);
+            result = retry.data;
+        } else {
+            if (error) throw sbErr(error);
+            result = data;
+        }
+
+        res.status(201).json({ success: true, data: result });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
