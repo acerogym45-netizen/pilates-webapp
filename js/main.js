@@ -1573,3 +1573,76 @@ async function loadCurriculum() {
     }
 }
 
+
+// ── 환불 신청 모달 ──────────────────────────────────────────────────────
+function showRefundRequestModal() {
+    const modal = document.getElementById('refundRequestModal');
+    if (!modal) return;
+    // 입력 초기화
+    ['refundDong','refundHo','refundName','refundPhone','refundDetail'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const sel = document.getElementById('refundReason'); if (sel) sel.value = '';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.style.position = 'fixed';
+    modal.style.inset = '0';
+    modal.style.background = 'rgba(0,0,0,.5)';
+    modal.style.zIndex = '9999';
+    modal.style.padding = '16px';
+}
+
+function closeRefundRequestModal() {
+    const modal = document.getElementById('refundRequestModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function submitRefundRequest() {
+    const dong   = document.getElementById('refundDong')?.value.trim();
+    const ho     = document.getElementById('refundHo')?.value.trim();
+    const name   = document.getElementById('refundName')?.value.trim();
+    const phone  = document.getElementById('refundPhone')?.value.trim();
+    const reason = document.getElementById('refundReason')?.value;
+    const detail = document.getElementById('refundDetail')?.value.trim();
+
+    if (!dong)   { alert('동을 입력하세요.'); return; }
+    if (!ho)     { alert('호수를 입력하세요.'); return; }
+    if (!name)   { alert('이름을 입력하세요.'); return; }
+    if (!phone)  { alert('연락처를 입력하세요.'); return; }
+    if (!reason) { alert('환불 사유를 선택하세요.'); return; }
+
+    const reasonLabel = {
+        injury:     '6개월 이상 운동 불가 질병·부상',
+        emigration: '6개월 이상 해외 이주'
+    }[reason] || reason;
+
+    const complexCode = complexContext?.getComplexCode?.() || '';
+
+    try {
+        const btn = document.querySelector('#refundRequestModal [onclick="submitRefundRequest()"]');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 접수 중...'; }
+
+        const res = await fetch('/api/inquiries', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                complex_code: complexCode,
+                name, dong, ho, phone,
+                title: `[환불 신청] ${dong} ${ho} ${name}`,
+                content: `환불 사유: ${reasonLabel}\n\n${detail || '(상세 내용 없음)'}`,
+                is_public: false
+            })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || '접수 실패');
+
+        closeRefundRequestModal();
+        alert('환불 신청이 접수되었습니다.\n담당자가 확인 후 연락드리겠습니다.\n증빙서류를 관리사무소에 제출해주세요.');
+    } catch (e) {
+        alert('접수 중 오류가 발생했습니다: ' + e.message);
+    } finally {
+        const btn = document.querySelector('#refundRequestModal [onclick="submitRefundRequest()"]');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> 환불 신청 접수'; }
+    }
+}
