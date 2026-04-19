@@ -165,8 +165,8 @@ try {
  * POST /api/upload/refund-docs
  * multipart/form-data: files[]=<file>, cancellation_id=<uuid>, complex_code=<string>
  *
- * 1차: Supabase Storage 'refund-docs' 버킷에 업로드 시도
- * 2차: 버킷 없거나 실패 시 → 로컬 /public/uploads/refund-docs/ 에 저장
+ * 로컬 디렉토리에 저장 후 /uploads/refund-docs/<id>/<filename> 으로 서빙
+ * (Supabase Storage anon 키로는 버킷 생성/업로드 권한 없음 → 항상 로컬 저장)
  */
 router.post('/refund-docs', uploadDocs.array('files', 5), async (req, res) => {
     try {
@@ -174,75 +174,29 @@ router.post('/refund-docs', uploadDocs.array('files', 5), async (req, res) => {
             return res.status(400).json({ success: false, error: '파일이 없습니다' });
         }
         const { cancellation_id, complex_code } = req.body;
-        const sb = getSupabase();
-        const BUCKET = 'refund-docs';
         const urls = [];
         const file_names = [];
         const storage_paths = [];
-
-        // Supabase Storage 버킷 존재 여부 확인
-        let useSupabase = false;
-        try {
-            const { data: buckets } = await sb.storage.listBuckets();
-            useSupabase = (buckets || []).some(b => b.name === BUCKET);
-            if (!useSupabase) {
-                // 버킷 생성 시도
-                const { error: bErr } = await sb.storage.createBucket(BUCKET, {
-                    public: false,
-                    allowedMimeTypes: ['image/*', 'application/pdf'],
-                    fileSizeLimit: 10 * 1024 * 1024
-                });
-                if (!bErr || bErr.message?.includes('already exists')) useSupabase = true;
-            }
-        } catch(e) {
-            console.warn('Supabase Storage 확인 실패, 로컬 저장으로 전환:', e.message);
-        }
 
         for (const file of req.files) {
             // 한글 파일명 깨짐 방지: latin1→utf8 재인코딩 시도
             let originalName = file.originalname;
             try {
                 const decoded = Buffer.from(file.originalname, 'latin1').toString('utf8');
-                // FFFD(깨진 문자) 비율이 낮으면 재인코딩 성공으로 판단
                 if (!decoded.includes('\uFFFD')) originalName = decoded;
             } catch(e) { /* 무시 */ }
 
-            const ext  = path.extname(originalName).toLowerCase() || '.bin';
             const safeOrig = originalName.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
             const uniqueName = `${Date.now()}_${safeOrig}`;
-            let finalUrl = '';
-            let storagePath = '';
 
-            if (useSupabase) {
-                storagePath = `${complex_code || 'unknown'}/${cancellation_id || 'pending'}/${uniqueName}`;
-                const { data: upData, error: upErr } = await sb.storage
-                    .from(BUCKET)
-                    .upload(storagePath, file.buffer, {
-                        contentType: file.mimetype,
-                        upsert: false
-                    });
+            // 로컬 저장 (항상)
+            const subDir = path.join(REFUND_DOC_DIR, cancellation_id || 'pending');
+            if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
+            const localPath = path.join(subDir, uniqueName);
+            fs.writeFileSync(localPath, file.buffer);
 
-                if (upErr) {
-                    // Supabase 실패 → 로컬 저장으로 폴백
-                    console.warn(`Supabase 업로드 실패, 로컬 저장: ${upErr.message}`);
-                    useSupabase = false;
-                } else {
-                    const { data: signed } = await sb.storage
-                        .from(BUCKET)
-                        .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1년
-                    finalUrl = signed?.signedUrl || '';
-                }
-            }
-
-            if (!useSupabase || !finalUrl) {
-                // 로컬 폴백 저장
-                const subDir = path.join(REFUND_DOC_DIR, cancellation_id || 'pending');
-                if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
-                const localPath = path.join(subDir, uniqueName);
-                fs.writeFileSync(localPath, file.buffer);
-                storagePath = `local:${cancellation_id || 'pending'}/${uniqueName}`;
-                finalUrl = `/uploads/refund-docs/${cancellation_id || 'pending'}/${uniqueName}`;
-            }
+            const storagePath = `local:${cancellation_id || 'pending'}/${uniqueName}`;
+            const finalUrl    = `/uploads/refund-docs/${cancellation_id || 'pending'}/${uniqueName}`;
 
             urls.push(finalUrl);
             file_names.push(originalName);
@@ -255,7 +209,7 @@ router.post('/refund-docs', uploadDocs.array('files', 5), async (req, res) => {
             file_names,
             storage_paths,
             count: urls.length,
-            storage_type: useSupabase ? 'supabase' : 'local'
+            storage_type: 'local'
         });
     } catch (e) {
         console.error('refund-docs upload error:', e);
