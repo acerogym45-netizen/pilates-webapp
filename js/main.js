@@ -1799,17 +1799,7 @@ function showRefundRequestModal() {
     if (list)  list.innerHTML  = '';
     if (guide) guide.style.display = 'none';
     if (inp)   inp.value = '';
-    modal.style.cssText = [
-        'display:flex',
-        'align-items:flex-start',
-        'justify-content:center',
-        'overflow-y:auto',
-        'position:fixed',
-        'inset:0',
-        'background:rgba(0,0,0,.55)',
-        'z-index:9999',
-        'padding:16px 12px'
-    ].join(';');
+    modal.style.display = 'block';
     // body 스크롤 잠금
     document.body.style.overflow = 'hidden';
     // 열릴 때 맨 위로 스크롤
