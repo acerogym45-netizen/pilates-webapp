@@ -6,11 +6,13 @@ const TABLES_ENDPOINT = '../tables'; // 부모 디렉토리의 tables API
 let allContracts = [];
 let filteredContracts = [];
 
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
-    loadContracts();
+// Initialize on page load — complexSelector 인증 후 로드
+document.addEventListener('DOMContentLoaded', async function() {
+    const ok = await complexSelector.init();
+    if (ok) loadContracts();
 });
-// Load all contracts
+
+// Load all contracts — 현재 단지 코드 기반 필터링
 async function loadContracts() {
     const listContainer = document.getElementById('contractsList');
     const loadingSpinner = document.getElementById('loadingSpinner');
@@ -20,8 +22,13 @@ async function loadContracts() {
         loadingSpinner.style.display = 'block';
         listContainer.style.display = 'none';
         emptyState.style.display = 'none';
-        
-        const response = await fetch(`tables/pilates_contracts?sort=-created_at&limit=1000`);
+
+        // 단지 코드 기반 필터
+        const complexCode = complexSelector.getComplexCode();
+        const params = new URLSearchParams({ limit: 1000 });
+        if (complexCode) params.set('complexCode', complexCode);
+
+        const response = await fetch(`/api/applications?${params}`);
         const result = await response.json();
         
         allContracts = result.data || [];
