@@ -1800,13 +1800,16 @@ function showRefundRequestModal() {
     if (guide) guide.style.display = 'none';
     if (inp)   inp.value = '';
     modal.style.display = 'flex';
-    modal.style.alignItems = 'center';
+    modal.style.alignItems = 'flex-start';
     modal.style.justifyContent = 'center';
+    modal.style.overflowY = 'auto';
     modal.style.position = 'fixed';
     modal.style.inset = '0';
     modal.style.background = 'rgba(0,0,0,.5)';
     modal.style.zIndex = '9999';
     modal.style.padding = '16px';
+    // 열릴 때 맨 위로 스크롤
+    modal.scrollTop = 0;
 }
 
 function closeRefundRequestModal() {
