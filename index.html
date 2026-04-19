@@ -182,16 +182,86 @@
                     <i class="fas fa-edit"></i> 정보 수정
                 </button>
 
-                <!-- 환불 경고 -->
-                <div class="alert-box alert-warning">
-                    <strong><i class="fas fa-exclamation-triangle"></i> 환불 규정 필독 (계약 전 필수 확인)</strong>
-                    <ul>
-                        <li>🚫 취업·이직·출장·야근 등 업무 사유 → 환불 불가</li>
-                        <li>🚫 "일이 바빠서", "시간이 없어서" → 환불 불가</li>
-                        <li>🚫 국내·해외 여행(6개월 미만) → 환불 불가</li>
-                        <li>✅ 6개월 이상 운동 불가 질병·부상 (진단서 필수)</li>
-                        <li>✅ 6개월 이상 해외 이주 (비자 등 증빙 필수)</li>
-                    </ul>
+                <!-- 환불 규정 박스 -->
+                <div class="policy-box policy-refund">
+                    <div class="policy-box-header">
+                        <i class="fas fa-exclamation-circle"></i>
+                        환불 규정 <span class="policy-required-tag">필독 · 필수 동의</span>
+                    </div>
+                    <div class="policy-content">
+                        <div class="policy-sub-title">❌ 환불이 절대 불가한 경우</div>
+                        <ul>
+                            <li>취업 · 이직 · 출장 · 야근 · 업무 과부하 등 업무상 사유</li>
+                            <li>"일이 바빠서", "시간이 안 돼서" 등 개인 일정 사유</li>
+                            <li>국내외 여행 (단, 6개월 미만 기간의 여행)</li>
+                            <li>운동 의지 상실, 단순 변심, 타 센터 이동</li>
+                            <li>강사 교체 · 수업 구성원 변경 등 수업 내 인적 사유</li>
+                            <li>등록 후 <strong>1회 수업 이상 진행된 경우</strong> 월 수강료 부분 환불 불가</li>
+                        </ul>
+                        <div class="policy-sub-title policy-mt">✅ 예외적으로 환불이 가능한 경우 (증빙서류 필수)</div>
+                        <ul>
+                            <li><strong>6개월 이상 운동 불가 질병 · 부상</strong> — 전문의 진단서 제출 필수</li>
+                            <li><strong>6개월 이상 해외 이주</strong> — 비자 · 항공권 등 증빙서류 제출 필수</li>
+                            <li><strong>임신 · 출산</strong> — 산부인과 진단서 제출 필수</li>
+                        </ul>
+                        <div class="policy-sub-title policy-mt">💰 환불 계산 방식 (예외 인정 시)</div>
+                        <ul>
+                            <li>총 결제금액의 <strong>10% 위약금</strong> 공제 후 환불</li>
+                            <li>이미 수강한 횟수는 <strong>회당 20,000원</strong> 기준으로 차감</li>
+                            <li>환불 금액 = 결제금액 − 위약금(10%) − (수강 횟수 × 20,000원)</li>
+                            <li>매니저 최종 검토 및 승인 후 처리 (최대 7영업일 소요)</li>
+                        </ul>
+                        <div class="policy-notice">
+                            ※ 위 환불 불가 사유에 해당하는 경우 어떠한 경우에도 환불이 이루어지지 않습니다.<br>
+                            ※ 환불 신청은 반드시 서면(해지 신청서)으로 제출해야 하며, 구두 요청은 인정되지 않습니다.
+                        </div>
+                    </div>
+                    <label class="policy-consent-label">
+                        <input type="checkbox" id="refundAgreement" required>
+                        <span>위 <strong>환불 규정</strong>을 모두 읽고 이해하였으며 동의합니다 <span class="required">*</span></span>
+                    </label>
+                </div>
+
+                <!-- 노쇼 규정 박스 -->
+                <div class="policy-box policy-noshow">
+                    <div class="policy-box-header">
+                        <i class="fas fa-user-times"></i>
+                        노쇼(No-Show) 규정 <span class="policy-required-tag">필독 · 필수 동의</span>
+                    </div>
+                    <div class="policy-content">
+                        <div class="policy-sub-title">📌 노쇼란?</div>
+                        <ul>
+                            <li>수업 시작 <strong>2시간 전까지</strong> 취소 · 변경 연락 없이 결석하는 행위</li>
+                            <li>수업 당일 갑작스러운 취소 통보 (수업 시작 2시간 이내 연락)</li>
+                        </ul>
+                        <div class="policy-sub-title policy-mt">⚠️ 노쇼 발생 시 적용 규정</div>
+                        <ul>
+                            <li><strong>1회차 노쇼</strong> — 해당 수업 횟수 <strong>정상 차감</strong> + 경고 1회</li>
+                            <li><strong>2회차 노쇼</strong> — 해당 수업 횟수 차감 + <strong>추가 벌칙 1회 차감</strong> (총 2회 차감)</li>
+                            <li><strong>3회차 이상 누적 노쇼</strong> — 강제 수업 정지 및 <strong>관리자 면담 후 재등록</strong> 여부 결정</li>
+                            <li>노쇼 이력은 누적 관리되며 <strong>환불 거부 사유</strong>가 될 수 있습니다</li>
+                        </ul>
+                        <div class="policy-sub-title policy-mt">📞 정상 결석 처리 방법 (횟수 차감 없음)</div>
+                        <ul>
+                            <li>수업 시작 <strong>2시간 전까지</strong> 강사 또는 관리사무소에 연락</li>
+                            <li>카카오톡 · 문자 · 전화 모두 가능 (단, 수신 확인 필수)</li>
+                            <li>부득이한 응급 상황은 사후 증빙(진단서 등) 제출 시 예외 인정</li>
+                        </ul>
+                        <div class="policy-sub-title policy-mt">🔄 수업 변경 · 보강 규정</div>
+                        <ul>
+                            <li>보강 수업은 <strong>같은 달 내</strong>에만 가능하며 익월 이월 불가</li>
+                            <li>보강 일정은 강사와 협의 후 <strong>가능한 시간대에만</strong> 진행</li>
+                            <li>당월 미사용 보강 횟수는 <strong>자동 소멸</strong>됩니다</li>
+                        </ul>
+                        <div class="policy-notice">
+                            ※ 노쇼 규정은 다른 회원의 수업권 보호를 위해 엄격하게 적용됩니다.<br>
+                            ※ 반복적인 노쇼로 인한 피해 발생 시 강제 해지 조치가 취해질 수 있습니다.
+                        </div>
+                    </div>
+                    <label class="policy-consent-label">
+                        <input type="checkbox" id="noshowAgreement" required>
+                        <span>위 <strong>노쇼(No-Show) 규정</strong>을 모두 읽고 이해하였으며 동의합니다 <span class="required">*</span></span>
+                    </label>
                 </div>
 
                 <!-- 이용약관 -->
@@ -202,7 +272,7 @@
                     </div>
                     <div class="terms-section">
                         <strong>② 환불 규정</strong>
-                        <p>이민, 6개월 이상 입원, 치명적인 장애 등 부득이하게 환불할 경우 증빙서류와 매니저 동의하에 총 결제금액의 10%를 위약금으로 제하고, 회당 20,000원으로 사용한 이용요금을 제외한 차액이 환급됩니다.</p>
+                        <p>환불은 이민, 6개월 이상 입원, 임신·출산, 치명적인 장애 등 부득이한 사유에 한하여 증빙서류 제출 및 매니저 승인 후에만 가능합니다. 인정된 경우 총 결제금액의 10%를 위약금으로 공제하고 수강 횟수(회당 20,000원)를 제한 차액을 환급합니다. 단순 변심·업무 사유·여행(6개월 미만) 등은 환불이 불가합니다.</p>
                     </div>
                     <div class="terms-section">
                         <strong>③ 사고 면책</strong>
@@ -233,7 +303,7 @@
                 <div class="consent-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="termsAgreement" required>
-                        <span>위 이용약관을 모두 읽고 동의합니다 <span class="required">*</span></span>
+                        <span>위 이용약관 전체 (①~⑧)를 모두 읽고 동의합니다 <span class="required">*</span></span>
                     </label>
                 </div>
 
