@@ -155,21 +155,26 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ success: false, error: '필수 항목이 누락되었습니다' });
         }
 
-        // 중복 신청 체크
+        // ── 중복 신청 체크 ─────────────────────────────────────────
+        // 동 + 호 + 이름 + 전화번호가 모두 일치하는 활성 신청이 있으면 차단
         const { data: dupCheck } = await sb
             .from('applications')
-            .select('id')
+            .select('id, program_name, status')
             .eq('complex_id', complex_id)
             .eq('dong', dong)
             .eq('ho', ho)
-            .eq('program_name', program_name)
+            .eq('name', name)
+            .eq('phone', phone)
             .in('status', ['approved', 'waiting'])
             .limit(1);
 
         if (dupCheck && dupCheck.length > 0) {
             return res.status(409).json({
                 success: false,
-                error: '이미 해당 프로그램에 신청하셨습니다',
+                duplicate: true,
+                error: '이미 수강 신청 내역이 있습니다. 중복 수강 희망 시 관리자에게 별도 문의하세요.',
+                existingProgram: dupCheck[0].program_name,
+                existingStatus: dupCheck[0].status,
                 existingId: dupCheck[0].id
             });
         }

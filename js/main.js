@@ -267,17 +267,17 @@ async function submitContract() {
             submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 제출 중...';
         }
         
-        // 🆕 중복 신청 검사
-        console.log('🔍 Checking for duplicate applications...');
-        const isDuplicate = await checkDuplicateApplication(contractData);
-        
-        if (isDuplicate) {
-            showDuplicateWarningModal(contractData);
-            console.log('❌ Duplicate application detected - submission cancelled');
+        // 중복 신청 검사 (동+호+이름+전화번호 모두 일치)
+        console.log('🔍 중복 신청 검사 중...');
+        const dupResult = await checkDuplicateApplication(contractData);
+
+        if (dupResult.isDuplicate) {
+            showDuplicateWarningModal(contractData, dupResult.existing);
+            console.log('❌ 중복 신청 차단');
             return;
         }
-        
-        console.log('✅ No duplicate found - proceeding with submission');
+
+        console.log('✅ 중복 없음 - 신청 진행');
         
         // 신규 /api/applications 엔드포인트로 POST
         const submitPayload = {
@@ -307,6 +307,13 @@ async function submitContract() {
         
         const result = await response.json();
         
+        // 서버 중복 체크 (409 응답)
+        if (response.status === 409 && result.duplicate) {
+            showDuplicateWarningModal(contractData, { program_name: result.existingProgram, status: result.existingStatus });
+            console.log('❌ 서버에서 중복 신청 차단');
+            return;
+        }
+
         if (response.ok && result.success) {
             console.log('✅ Application submitted:', result);
             contractData.status = result.data?.status || 'approved';
@@ -334,39 +341,37 @@ async function submitContract() {
     }
 }
 
-// 🆕 중복 신청 검사 함수
+// 중복 신청 검사 함수 (동+호+이름+전화번호 모두 일치 시 중복)
 async function checkDuplicateApplication(contractData) {
     try {
         const complexCode = complexContext.getComplexCode();
-        const dong = contractData.dong;
-        const ho = contractData.ho;
-        const name = contractData.name;
-        const lessonType = contractData.lesson_type;
-        
-        console.log(`🔍 Checking duplicates for: ${dong}동 ${ho}호 ${name} - ${lessonType}`);
-        
-        // /api/applications 엔드포인트로 조회
-        const params = new URLSearchParams({ complexCode, dong, ho, status: 'approved', limit: 50 });
+        const { dong, ho, name, phone } = contractData;
+
+        console.log(`🔍 중복 검사: ${dong}동 ${ho}호 ${name} (${phone})`);
+
+        // 동+호+이름+전화번호 모두 일치하는 승인/대기 신청 조회
+        const params = new URLSearchParams({ complexCode, dong, ho, limit: 100 });
         const response = await fetch(`/api/applications?${params}`);
         const result = await response.json();
         const contracts = result.data || [];
-        
+
         const duplicates = contracts.filter(c =>
-            c.name === name &&
-            (c.program_name === lessonType || c.lesson_type === lessonType)
+            c.name  === name  &&
+            c.phone === phone &&
+            (c.status === 'approved' || c.status === 'waiting')
         );
-        
+
         if (duplicates.length > 0) {
-            console.log(`⚠️ Found ${duplicates.length} duplicate(s)`);
-            return true;
+            console.log(`⚠️ 중복 발견: ${duplicates.length}건`);
+            return { isDuplicate: true, existing: duplicates[0] };
         }
-        
-        console.log('✅ No duplicates found');
-        return false;
-        
+
+        console.log('✅ 중복 없음');
+        return { isDuplicate: false };
+
     } catch (error) {
-        console.error('❌ Error checking duplicates:', error);
-        return false;
+        console.error('❌ 중복 검사 오류:', error);
+        return { isDuplicate: false };
     }
 }
 
@@ -846,21 +851,26 @@ async function submitInquiry(e) {
     }
 }
 
-// Show duplicate warning modal
-function showDuplicateWarningModal(contractData) {
+// 중복 신청 경고 모달
+function showDuplicateWarningModal(contractData, existing) {
     const modal = document.getElementById('duplicateWarningModal');
     const content = document.getElementById('duplicateWarningContent');
-    
+
+    const statusLabel = existing?.status === 'waiting' ? '대기 중' : '승인 완료';
+    const progName = existing?.program_name || contractData.lesson_type || '-';
+
     content.innerHTML = `
-        <p><strong>동/호:</strong> ${contractData.dong}동 ${contractData.ho}호</p>
-        <p><strong>성명:</strong> ${contractData.name}</p>
-        <p><strong>프로그램:</strong> ${contractData.lesson_type}</p>
-    `;
-    
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;margin-bottom:4px">
+            <p style="margin:0 0 6px"><strong>동/호:</strong> ${contractData.dong}동 ${contractData.ho}호</p>
+            <p style="margin:0 0 6px"><strong>성명:</strong> ${contractData.name}</p>
+            <p style="margin:0 0 6px"><strong>연락처:</strong> ${contractData.phone}</p>
+            <p style="margin:0"><strong>기존 신청:</strong> ${progName} <span style="color:#d97706">(${statusLabel})</span></p>
+        </div>`;
+
     modal.classList.add('active');
 }
 
-// Close duplicate warning modal
+// 중복 신청 경고 모달 닫기
 function closeDuplicateWarningModal() {
     const modal = document.getElementById('duplicateWarningModal');
     modal.classList.remove('active');
