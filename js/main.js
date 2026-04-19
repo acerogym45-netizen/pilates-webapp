@@ -1782,7 +1782,23 @@ function showRefundRequestModal() {
     ['refundDong','refundHo','refundName','refundPhone','refundDetail'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
     });
-    const sel = document.getElementById('refundReason'); if (sel) sel.value = '';
+    const sel = document.getElementById('refundReason');
+    if (sel) {
+        sel.value = '';
+        // 사유 변경 시 서류 안내 갱신 (이미 연결됐으면 무시)
+        if (!sel._docGuideAttached) {
+            sel.addEventListener('change', updateRefundDocGuide);
+            sel._docGuideAttached = true;
+        }
+    }
+    // 파일 목록 초기화
+    _refundDocFiles = [];
+    const list  = document.getElementById('refundDocList');
+    const guide = document.getElementById('refundDocGuide');
+    const inp   = document.getElementById('refundDocInput');
+    if (list)  list.innerHTML  = '';
+    if (guide) guide.style.display = 'none';
+    if (inp)   inp.value = '';
     modal.style.display = 'flex';
     modal.style.alignItems = 'center';
     modal.style.justifyContent = 'center';
@@ -1796,8 +1812,101 @@ function showRefundRequestModal() {
 function closeRefundRequestModal() {
     const modal = document.getElementById('refundRequestModal');
     if (modal) modal.style.display = 'none';
+    // 파일 목록 초기화
+    _refundDocFiles = [];
+    const list = document.getElementById('refundDocList');
+    if (list) list.innerHTML = '';
+    const input = document.getElementById('refundDocInput');
+    if (input) input.value = '';
 }
 
+/* ── 환불 서류 첨부 관련 ───────────────────────────────────────────── */
+let _refundDocFiles = []; // { file: File, previewUrl: string|null }
+
+/** 사유 선택 시 서류 안내 박스 갱신 */
+function updateRefundDocGuide() {
+    const reason = document.getElementById('refundReason')?.value;
+    const guide  = document.getElementById('refundDocGuide');
+    if (!guide) return;
+    const guides = {
+        injury:     '<i class="fas fa-file-medical"></i> <strong>진단서 필수:</strong> 6개월 이상 운동 불가를 증명하는 의사 진단서 (원본 또는 스캔본)',
+        emigration: '<i class="fas fa-passport"></i> <strong>비자 + 항공권 필수:</strong> 6개월 이상 해외 이주를 증명하는 비자 사본 및 항공권 사본'
+    };
+    if (reason && guides[reason]) {
+        guide.innerHTML = guides[reason];
+        guide.style.display = 'block';
+    } else {
+        guide.style.display = 'none';
+    }
+}
+
+/** 파일 드롭 핸들러 */
+function handleRefundDocDrop(e) {
+    e.preventDefault();
+    const zone = document.getElementById('refundDocDropZone');
+    if (zone) { zone.style.borderColor = '#d1d5db'; zone.style.background = ''; }
+    handleRefundDocSelect(e.dataTransfer.files);
+}
+
+/** 파일 선택/드롭 공통 처리 */
+function handleRefundDocSelect(fileList) {
+    const MAX = 5;
+    const files = Array.from(fileList);
+    const allowed = /\.(jpe?g|png|gif|webp|pdf)$/i;
+    const MAX_SIZE = 10 * 1024 * 1024;
+
+    for (const f of files) {
+        if (_refundDocFiles.length >= MAX) {
+            alert(`파일은 최대 ${MAX}개까지 첨부할 수 있습니다.`); break;
+        }
+        if (!allowed.test(f.name)) {
+            alert(`"${f.name}" — JPG, PNG, GIF, WEBP, PDF 파일만 가능합니다.`); continue;
+        }
+        if (f.size > MAX_SIZE) {
+            alert(`"${f.name}" — 파일 크기가 10MB를 초과합니다.`); continue;
+        }
+        // 중복 방지
+        if (_refundDocFiles.some(x => x.file.name === f.name && x.file.size === f.size)) continue;
+        _refundDocFiles.push({ file: f, previewUrl: f.type.startsWith('image/') ? URL.createObjectURL(f) : null });
+    }
+    _renderRefundDocList();
+}
+
+/** 파일 목록 렌더링 */
+function _renderRefundDocList() {
+    const list = document.getElementById('refundDocList');
+    if (!list) return;
+    if (_refundDocFiles.length === 0) { list.innerHTML = ''; return; }
+    list.innerHTML = _refundDocFiles.map((item, idx) => {
+        const f = item.file;
+        const sizeMB = (f.size / 1024 / 1024).toFixed(1);
+        const isPdf  = f.name.toLowerCase().endsWith('.pdf');
+        const preview = item.previewUrl
+            ? `<img src="${item.previewUrl}" style="width:36px;height:36px;object-fit:cover;border-radius:5px;border:1px solid #e5e7eb;flex-shrink:0" alt="">`
+            : `<div style="width:36px;height:36px;background:#fee2e2;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fas fa-file-pdf" style="color:#dc2626;font-size:.9rem"></i></div>`;
+        return `
+        <div style="display:flex;align-items:center;gap:9px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px">
+            ${preview}
+            <div style="flex:1;min-width:0">
+                <div style="font-size:.82rem;font-weight:600;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.name}</div>
+                <div style="font-size:.74rem;color:#9ca3af;margin-top:1px">${sizeMB} MB · ${isPdf ? 'PDF' : '이미지'}</div>
+            </div>
+            <button type="button" onclick="_removeRefundDoc(${idx})"
+                    style="background:none;border:none;color:#9ca3af;cursor:pointer;padding:4px;font-size:1rem;line-height:1;flex-shrink:0"
+                    title="삭제">✕</button>
+        </div>`;
+    }).join('');
+}
+
+/** 파일 개별 삭제 */
+function _removeRefundDoc(idx) {
+    const item = _refundDocFiles[idx];
+    if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    _refundDocFiles.splice(idx, 1);
+    _renderRefundDocList();
+}
+
+/* ── 환불 신청 제출 ─────────────────────────────────────────────────── */
 async function submitRefundRequest() {
     const dong   = document.getElementById('refundDong')?.value.trim();
     const ho     = document.getElementById('refundHo')?.value.trim();
@@ -1811,6 +1920,10 @@ async function submitRefundRequest() {
     if (!name)   { alert('이름을 입력하세요.'); return; }
     if (!phone)  { alert('연락처를 입력하세요.'); return; }
     if (!reason) { alert('환불 사유를 선택하세요.'); return; }
+    if (_refundDocFiles.length === 0) {
+        alert('증빙서류를 1개 이상 첨부해주세요.\n(진단서 또는 비자·항공권 사본)');
+        return;
+    }
 
     const reasonLabel = {
         injury:     '6개월 이상 운동 불가 질병·부상',
@@ -1820,11 +1933,11 @@ async function submitRefundRequest() {
     const complexCode = complexContext?.getComplexCode?.() || '';
     const complexId   = complexContext?.getComplexId?.()   || '';
 
+    const btn = document.querySelector('#refundRequestModal [onclick="submitRefundRequest()"]');
     try {
-        const btn = document.querySelector('#refundRequestModal [onclick="submitRefundRequest()"]');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 접수 중...'; }
 
-        // 해지 관리 탭에서 볼 수 있도록 /api/cancellations 로 전송
+        // Step 1: 해지/환불 신청 레코드 먼저 생성
         const res = await fetch('/api/cancellations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1832,21 +1945,68 @@ async function submitRefundRequest() {
                 complex_id: complexId,
                 complex_code: complexCode,
                 name, dong, ho, phone,
-                program_name: '',          // 환불 신청 시 프로그램명 미입력 가능
+                program_name: '',
                 request_type: 'refund',
                 refund_reason: reasonLabel,
                 refund_detail: detail || ''
             })
         });
         const data = await res.json();
-        if (!data.success) throw new Error(data.error || data.message || '접수 실패');
+        if (!data.success) throw new Error(data.error || '접수 실패');
+
+        const cancellationId = data.data?.id;
+
+        // Step 2: 서류 파일 업로드
+        let uploadedUrls = [];
+        let uploadedNames = [];
+        if (_refundDocFiles.length > 0 && cancellationId) {
+            if (btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 서류 업로드 중...';
+            const formData = new FormData();
+            formData.append('cancellation_id', cancellationId);
+            formData.append('complex_code', complexCode);
+            _refundDocFiles.forEach(item => formData.append('files', item.file));
+
+            const upRes = await fetch('/api/upload/refund-docs', {
+                method: 'POST',
+                body: formData
+            });
+            const upData = await upRes.json();
+
+            if (upData.success) {
+                uploadedUrls  = upData.urls  || [];
+                uploadedNames = upData.file_names || [];
+
+                // Step 3: cancellation 레코드에 doc_urls 저장
+                if (uploadedUrls.length > 0) {
+                    await fetch(`/api/cancellations/${cancellationId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            doc_urls: uploadedUrls.map((url, i) => ({
+                                url,
+                                name: uploadedNames[i] || `서류${i+1}`,
+                                uploaded_at: new Date().toISOString()
+                            }))
+                        })
+                    });
+                }
+            } else {
+                // 업로드 실패해도 신청은 완료 — 경고만 표시
+                console.warn('서류 업로드 실패:', upData.error);
+                alert(`⚠️ 환불 신청은 접수되었으나 서류 업로드에 실패했습니다.\n직접 관리사무소에 서류를 제출해주세요.\n오류: ${upData.error}`);
+                closeRefundRequestModal();
+                return;
+            }
+        }
 
         closeRefundRequestModal();
-        alert('환불 신청이 접수되었습니다.\n담당자가 확인 후 연락드리겠습니다.\n증빙서류를 관리사무소에 제출해주세요.');
+        const docMsg = uploadedUrls.length > 0
+            ? `\n\n📎 첨부 서류 ${uploadedUrls.length}개가 업로드되었습니다.`
+            : '';
+        alert(`✅ 환불 신청이 접수되었습니다.\n담당자가 확인 후 연락드리겠습니다.${docMsg}`);
     } catch (e) {
         alert('접수 중 오류가 발생했습니다: ' + e.message);
     } finally {
-        const btn = document.querySelector('#refundRequestModal [onclick="submitRefundRequest()"]');
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> 환불 신청 접수'; }
     }
 }

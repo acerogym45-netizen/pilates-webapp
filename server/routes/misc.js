@@ -3,7 +3,35 @@
  */
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 const { getSupabase, sbErr } = require('../db-supabase');
+
+// ── 로컬 doc_urls 스토어 (DB에 doc_urls 컬럼이 없을 때 파일 기반 대체 저장소) ──
+const DOC_META_FILE = path.join(__dirname, '../../data/refund_doc_meta.json');
+try {
+    const dataDir = path.dirname(DOC_META_FILE);
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    if (!fs.existsSync(DOC_META_FILE)) fs.writeFileSync(DOC_META_FILE, '{}', 'utf8');
+} catch(e) { console.warn('doc_meta store init 실패:', e.message); }
+
+function readDocMeta() {
+    try { return JSON.parse(fs.readFileSync(DOC_META_FILE, 'utf8') || '{}'); }
+    catch(e) { return {}; }
+}
+function writeDocMeta(store) {
+    try { fs.writeFileSync(DOC_META_FILE, JSON.stringify(store, null, 2), 'utf8'); }
+    catch(e) { console.warn('doc_meta write 실패:', e.message); }
+}
+function saveDocMetaLocal(cancellationId, docUrls) {
+    const store = readDocMeta();
+    store[cancellationId] = docUrls;
+    writeDocMeta(store);
+}
+function getDocMetaLocal(cancellationId) {
+    const store = readDocMeta();
+    return store[cancellationId] || null;
+}
 
 // ═══════════════════════════════════════════════════════
 // 공지사항 (Notices)
@@ -293,11 +321,16 @@ router.get('/cancellations', async (req, res) => {
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /cancellations');
 
+        // 로컬 doc_meta 스토어 로드 (DB에 doc_urls 없을 때 보완)
+        const docMetaStore = readDocMeta();
+
         let result = (data || []).map(r => ({
             ...r,
             complex_code: r.complexes?.code,
             // request_type 컬럼이 없는 기존 레코드는 'cancel'로 기본값 설정
-            request_type: r.request_type || 'cancel'
+            request_type: r.request_type || 'cancel',
+            // doc_urls: DB 컬럼 없으면 로컬 스토어에서 병합
+            doc_urls: r.doc_urls || docMetaStore[r.id] || null
         }));
 
         // request_type 필터 (DB 컬럼 유무에 관계없이 JS 레벨에서도 처리)
@@ -354,19 +387,69 @@ router.post('/cancellations', async (req, res) => {
 
 router.put('/cancellations/:id', async (req, res) => {
     try {
-        const { status, refund_amount } = req.body;
+        const { status, refund_amount, doc_urls } = req.body;
         const sb = getSupabase();
-        const updates = { status, refund_amount: refund_amount || 0 };
+        const updates = {};
+        if (status !== undefined)       updates.status       = status;
+        if (refund_amount !== undefined) updates.refund_amount = refund_amount || 0;
         if (status === 'approved' || status === 'rejected') {
             updates.processed_at = new Date().toISOString();
         }
-        const { data, error } = await sb
-            .from('cancellations')
-            .update(updates)
-            .eq('id', req.params.id)
-            .select()
-            .single();
-        if (error) throw sbErr(error);
+
+        // doc_urls: DB 컬럼 있으면 저장, 없으면 로컬에 저장
+        if (doc_urls !== undefined) {
+            updates.doc_urls = doc_urls;
+        }
+
+        // 업데이트할 필드가 없으면 (doc_urls만 있거나 아무것도 없으면) 로컬 저장 처리
+        const updatesForDb = { ...updates };
+        const hasDocUrls = updatesForDb.doc_urls !== undefined;
+        delete updatesForDb.doc_urls; // doc_urls는 따로 처리
+
+        let data = null;
+        let error = null;
+
+        if (Object.keys(updatesForDb).length === 0) {
+            // DB 업데이트 없이 현재 레코드 조회 후 로컬에만 저장
+            const { data: existing, error: fetchErr } = await sb
+                .from('cancellations').select('*').eq('id', req.params.id).single();
+            if (fetchErr) throw sbErr(fetchErr);
+            data = existing;
+        } else {
+            // doc_urls 포함해서 시도 (DB에 컬럼 있으면 저장)
+            const tryWithDoc = hasDocUrls ? { ...updatesForDb, doc_urls: updates.doc_urls } : updatesForDb;
+            const result = await sb.from('cancellations').update(tryWithDoc).eq('id', req.params.id).select().single();
+            error = result.error;
+            data  = result.data;
+
+            // doc_urls 컬럼 없으면 doc_urls 제외하고 재시도
+            if (error && (error.message?.includes('doc_urls') || error.message?.includes('Cannot coerce'))) {
+                const retry = await sb.from('cancellations').update(updatesForDb).eq('id', req.params.id).select().single();
+                if (retry.error) throw sbErr(retry.error);
+                data  = retry.data;
+                error = null;
+            } else if (error) {
+                throw sbErr(error);
+            }
+        }
+
+        // doc_urls 로컬 저장 (항상 백업 + DB 컬럼 없을 때 유일한 저장소)
+        if (hasDocUrls && Array.isArray(updates.doc_urls) && updates.doc_urls.length > 0) {
+            saveDocMetaLocal(req.params.id, updates.doc_urls);
+            data = { ...data, doc_urls: updates.doc_urls };
+        } else if (hasDocUrls && data) {
+            // doc_urls가 빈 배열이면 로컬에서도 삭제
+            const store = readDocMeta();
+            delete store[req.params.id];
+            writeDocMeta(store);
+        }
+
+        // 로컬 스토어에서 doc_urls 병합 (DB에 없는 경우 대비)
+        if (data && !data.doc_urls) {
+            const localDocs = getDocMetaLocal(req.params.id);
+            if (localDocs) data = { ...data, doc_urls: localDocs };
+        }
+
         res.json({ success: true, data });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });

@@ -138,6 +138,195 @@ const STATUS_MAP = {
     received:'received'
 };
 
+/* ── 환불 서류 업로드 (Supabase Storage → 로컬 폴백) ─────────────────── */
+const docMemStorage = multer.memoryStorage();
+const DOC_ALLOWED_TYPES = /jpeg|jpg|png|gif|webp|pdf/;
+const docFilter = (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
+    DOC_ALLOWED_TYPES.test(ext)
+        ? cb(null, true)
+        : cb(new Error('이미지(JPG/PNG/GIF/WEBP) 또는 PDF 파일만 허용됩니다'));
+};
+const uploadDocs = multer({
+    storage: docMemStorage,
+    fileFilter: docFilter,
+    limits: { fileSize: 10 * 1024 * 1024, files: 5 }
+});
+
+// 로컬 폴백 디렉토리
+const REFUND_DOC_DIR = path.join(__dirname, '../../public/uploads/refund-docs');
+try {
+    if (!fs.existsSync(REFUND_DOC_DIR)) fs.mkdirSync(REFUND_DOC_DIR, { recursive: true });
+} catch(e) { console.warn('refund-docs dir 생성 실패:', e.message); }
+
+/**
+ * POST /api/upload/refund-docs
+ * multipart/form-data: files[]=<file>, cancellation_id=<uuid>, complex_code=<string>
+ *
+ * 1차: Supabase Storage 'refund-docs' 버킷에 업로드 시도
+ * 2차: 버킷 없거나 실패 시 → 로컬 /public/uploads/refund-docs/ 에 저장
+ */
+router.post('/refund-docs', uploadDocs.array('files', 5), async (req, res) => {
+    try {
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ success: false, error: '파일이 없습니다' });
+        }
+        const { cancellation_id, complex_code } = req.body;
+        const sb = getSupabase();
+        const BUCKET = 'refund-docs';
+        const urls = [];
+        const file_names = [];
+        const storage_paths = [];
+
+        // Supabase Storage 버킷 존재 여부 확인
+        let useSupabase = false;
+        try {
+            const { data: buckets } = await sb.storage.listBuckets();
+            useSupabase = (buckets || []).some(b => b.name === BUCKET);
+            if (!useSupabase) {
+                // 버킷 생성 시도
+                const { error: bErr } = await sb.storage.createBucket(BUCKET, {
+                    public: false,
+                    allowedMimeTypes: ['image/*', 'application/pdf'],
+                    fileSizeLimit: 10 * 1024 * 1024
+                });
+                if (!bErr || bErr.message?.includes('already exists')) useSupabase = true;
+            }
+        } catch(e) {
+            console.warn('Supabase Storage 확인 실패, 로컬 저장으로 전환:', e.message);
+        }
+
+        for (const file of req.files) {
+            // 한글 파일명 깨짐 방지: latin1→utf8 재인코딩 시도
+            let originalName = file.originalname;
+            try {
+                const decoded = Buffer.from(file.originalname, 'latin1').toString('utf8');
+                // FFFD(깨진 문자) 비율이 낮으면 재인코딩 성공으로 판단
+                if (!decoded.includes('\uFFFD')) originalName = decoded;
+            } catch(e) { /* 무시 */ }
+
+            const ext  = path.extname(originalName).toLowerCase() || '.bin';
+            const safeOrig = originalName.replace(/[^a-zA-Z0-9가-힣._-]/g, '_');
+            const uniqueName = `${Date.now()}_${safeOrig}`;
+            let finalUrl = '';
+            let storagePath = '';
+
+            if (useSupabase) {
+                storagePath = `${complex_code || 'unknown'}/${cancellation_id || 'pending'}/${uniqueName}`;
+                const { data: upData, error: upErr } = await sb.storage
+                    .from(BUCKET)
+                    .upload(storagePath, file.buffer, {
+                        contentType: file.mimetype,
+                        upsert: false
+                    });
+
+                if (upErr) {
+                    // Supabase 실패 → 로컬 저장으로 폴백
+                    console.warn(`Supabase 업로드 실패, 로컬 저장: ${upErr.message}`);
+                    useSupabase = false;
+                } else {
+                    const { data: signed } = await sb.storage
+                        .from(BUCKET)
+                        .createSignedUrl(storagePath, 60 * 60 * 24 * 365); // 1년
+                    finalUrl = signed?.signedUrl || '';
+                }
+            }
+
+            if (!useSupabase || !finalUrl) {
+                // 로컬 폴백 저장
+                const subDir = path.join(REFUND_DOC_DIR, cancellation_id || 'pending');
+                if (!fs.existsSync(subDir)) fs.mkdirSync(subDir, { recursive: true });
+                const localPath = path.join(subDir, uniqueName);
+                fs.writeFileSync(localPath, file.buffer);
+                storagePath = `local:${cancellation_id || 'pending'}/${uniqueName}`;
+                finalUrl = `/uploads/refund-docs/${cancellation_id || 'pending'}/${uniqueName}`;
+            }
+
+            urls.push(finalUrl);
+            file_names.push(originalName);
+            storage_paths.push(storagePath);
+        }
+
+        res.json({
+            success: true,
+            urls,
+            file_names,
+            storage_paths,
+            count: urls.length,
+            storage_type: useSupabase ? 'supabase' : 'local'
+        });
+    } catch (e) {
+        console.error('refund-docs upload error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+/**
+ * GET /api/upload/refund-docs/list?cancellation_id=<uuid>&complex_code=<string>
+ * Supabase Storage 또는 로컬에서 해당 신청의 파일 목록 + URL 반환
+ */
+router.get('/refund-docs/list', async (req, res) => {
+    try {
+        const { cancellation_id, complex_code } = req.query;
+        if (!cancellation_id) return res.status(400).json({ success: false, error: 'cancellation_id 필수' });
+
+        const files = [];
+        const sb = getSupabase();
+        const BUCKET = 'refund-docs';
+
+        // 1) Supabase Storage 조회 시도
+        try {
+            const prefix = `${complex_code || ''}/${cancellation_id}`;
+            const { data: fileList, error: listErr } = await sb.storage
+                .from(BUCKET)
+                .list(prefix, { limit: 20, sortBy: { column: 'name', order: 'asc' } });
+
+            if (!listErr && fileList?.length > 0) {
+                for (const f of fileList) {
+                    const storagePath = `${prefix}/${f.name}`;
+                    const { data: signed } = await sb.storage
+                        .from(BUCKET)
+                        .createSignedUrl(storagePath, 60 * 60 * 24 * 7);
+                    files.push({
+                        name: f.name,
+                        path: storagePath,
+                        size: f.metadata?.size || 0,
+                        type: f.metadata?.mimetype || '',
+                        url: signed?.signedUrl || null,
+                        source: 'supabase'
+                    });
+                }
+            }
+        } catch(e) { /* Supabase 실패 무시 */ }
+
+        // 2) 로컬 폴백 조회
+        if (files.length === 0) {
+            const localDir = path.join(REFUND_DOC_DIR, cancellation_id);
+            if (fs.existsSync(localDir)) {
+                const localFiles = fs.readdirSync(localDir);
+                for (const fname of localFiles) {
+                    const fpath = path.join(localDir, fname);
+                    const stat = fs.statSync(fpath);
+                    files.push({
+                        name: fname,
+                        path: `local:${cancellation_id}/${fname}`,
+                        size: stat.size,
+                        type: '',
+                        url: `/uploads/refund-docs/${cancellation_id}/${fname}`,
+                        source: 'local'
+                    });
+                }
+            }
+        }
+
+        res.json({ success: true, files, count: files.length });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+/* ── END 환불 서류 업로드 ─────────────────────────────────────────────── */
+
 /**
  * POST /api/upload/csv/applications
  * Body (multipart): file=<CSV>, complex_id=<uuid>, overwrite=<'true'|'false'>
