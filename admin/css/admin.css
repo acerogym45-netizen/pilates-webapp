@@ -720,3 +720,63 @@ code { background:#f0f2f8; padding:1px 5px; border-radius:4px; font-size:.85em; 
     .kpi-value { font-size:1.6rem; }
     .complex-cards-grid { grid-template-columns:1fr; }
 }
+
+/* ── 프로그램 폼: 요일 체크박스 ─────────────────────────────────────── */
+.day-cb-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border: 1px solid #e0e6ed;
+    border-radius: 8px;
+}
+.day-cb-lbl {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid #d0d9e8;
+    background: #fff;
+    font-size: .88rem;
+    transition: all .15s;
+    user-select: none;
+}
+.day-cb-lbl:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.day-cb-lbl input[type="checkbox"] { display: none; }
+.day-cb-lbl:has(input:checked) {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ── 슬롯 태그 ───────────────────────────────────────────────────────── */
+.slot-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #e8f4fd;
+    color: #2980b9;
+    border: 1px solid #bce0f9;
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: .85rem;
+}
+
+/* ── 대기순번 뱃지 ────────────────────────────────────────────────────── */
+.waiting-order-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffc107;
+    border-radius: 12px;
+    padding: 1px 8px;
+    font-size: .75rem;
+    font-weight: 700;
+    white-space: nowrap;
+    margin-top: 3px;
+}
