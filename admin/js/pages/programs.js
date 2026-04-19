@@ -57,11 +57,30 @@ const programs = {
         const slots    = p && Array.isArray(p.time_slots) ? p.time_slots : [];
         const titleStr = complexName ? `프로그램 추가 — ${complexName}` : (p ? '프로그램 수정' : '프로그램 추가');
 
-        // 운영 요일 체크박스
-        const ALL_DAYS   = ['월','화','수','목','금','토','일'];
-        const savedDays  = (p?.days || '').split(/[,\s·&]+/).map(d => d.trim()).filter(d => ALL_DAYS.includes(d));
-        const dayBoxes   = ALL_DAYS.map(d =>
-            `<label class="day-cb-lbl"><input type="checkbox" name="pDayCheck" value="${d}" ${savedDays.includes(d)?'checked':''}><span>${d}</span></label>`
+        // ── 운영 요일 체크박스 ──────────────────────────────────────────
+        const ALL_DAYS  = ['월','화','수','목','금','토','일'];
+        const savedDays = (p?.days || '').split(/[,\s·&]+/).map(d => d.trim()).filter(d => ALL_DAYS.includes(d));
+        const dayBoxes  = ALL_DAYS.map(d =>
+            `<label class="day-cb-lbl">
+                <input type="checkbox" name="pDayCheck" value="${d}" ${savedDays.includes(d)?'checked':''}>
+                <span>${d}</span>
+            </label>`
+        ).join('');
+
+        // ── 시간대 프리셋 (06:00~22:00, 30분 간격) ─────────────────────
+        const PRESET_TIMES = [
+            '06:00','06:30','07:00','07:30','08:00','08:30',
+            '09:00','09:30','10:00','10:30','11:00','11:30',
+            '12:00','12:30','13:00','13:30','14:00','14:30',
+            '15:00','15:30','16:00','16:30','17:00','17:30',
+            '18:00','18:30','19:00','19:30','20:00','20:30',
+            '21:00','21:30','22:00'
+        ];
+        const timeBoxes = PRESET_TIMES.map(t =>
+            `<label class="time-cb-lbl">
+                <input type="checkbox" name="pTimeCheck" value="${t}" ${slots.includes(t)?'checked':''}>
+                <span>${t}</span>
+            </label>`
         ).join('');
 
         const isPersonal = p?.type === 'personal' || p?.type === 'duet';
@@ -82,13 +101,13 @@ const programs = {
                 <div class="day-cb-wrap">${dayBoxes}</div>
             </div>
             <div class="form-group" id="pSlotsGroup" style="${isPersonal ? 'display:none' : ''}">
-                <label>시간대 <span style="font-size:.8rem;font-weight:normal;color:#888">(그룹수업 — 추가 버튼으로 등록)</span></label>
-                <div id="pSlotsContainer" style="min-height:32px;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:4px"></div>
-                <div style="display:flex;gap:6px">
-                    <input type="text" id="pSlotInput" placeholder="예: 오전 09:00" style="flex:1"
-                        onkeydown="if(event.key==='Enter'){event.preventDefault();programs._addSlot();}">
-                    <button type="button" class="btn-secondary btn-sm" onclick="programs._addSlot()">
-                        <i class="fas fa-plus"></i> 추가
+                <label>시간대 <span style="font-size:.8rem;font-weight:normal;color:#888">(그룹수업 — 해당 시간 선택)</span></label>
+                <div class="time-cb-wrap">${timeBoxes}</div>
+                <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+                    <input type="text" id="pSlotInput" placeholder="직접 입력 (예: 07:45)" style="flex:1;font-size:.85rem"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();programs._addCustomSlot();}">
+                    <button type="button" class="btn-secondary btn-sm" onclick="programs._addCustomSlot()">
+                        <i class="fas fa-plus"></i> 직접 추가
                     </button>
                 </div>
                 <small style="color:#999;margin-top:4px;display:block">개인/듀엣은 비워두세요 (입주민 자유 입력)</small>
@@ -104,8 +123,11 @@ const programs = {
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
             <button class="btn-primary" onclick="programs.save('${p?.id||''}')"><i class="fas fa-save"></i> 저장</button>`;
         openGlobalModal(titleStr, body, footer);
-        // 모달 렌더 직후 기존 슬롯 태그 초기화
-        slots.forEach(s => programs._addSlotTag(s));
+
+        // 기존 슬롯 중 프리셋에 없는 값은 직접추가 체크박스로 동적 생성
+        slots.forEach(s => {
+            if (!PRESET_TIMES.includes(s)) programs._addCustomSlotCheckbox(s, true);
+        });
     },
 
     /** 유형 변경 시 시간대 섹션 토글 */
@@ -114,27 +136,33 @@ const programs = {
         if (g) g.style.display = (val === 'personal' || val === 'duet') ? 'none' : '';
     },
 
-    /** 슬롯 입력창 → 태그 추가 */
-    _addSlot() {
+    /** 직접 입력 시간대 → 동적 체크박스 추가 */
+    _addCustomSlot() {
         const input = document.getElementById('pSlotInput');
         const val   = (input?.value || '').trim();
         if (!val) { input?.focus(); return; }
-        const existing = Array.from(document.querySelectorAll('#pSlotsContainer .slot-tag')).map(el => el.dataset.val);
-        if (existing.includes(val)) { showToast('이미 추가된 시간대입니다', 'warning'); return; }
-        programs._addSlotTag(val);
+        // 이미 있는 값 체크
+        const existing = Array.from(document.querySelectorAll('.time-cb-lbl input[name="pTimeCheck"]'))
+            .map(el => el.value);
+        if (existing.includes(val)) {
+            // 이미 있으면 해당 체크박스만 체크
+            const found = document.querySelector(`.time-cb-lbl input[value="${CSS.escape(val)}"]`);
+            if (found) { found.checked = true; showToast(`${val} 선택됨`, 'success'); }
+            input.value = ''; return;
+        }
+        programs._addCustomSlotCheckbox(val, true);
         input.value = '';
         input.focus();
     },
 
-    /** 슬롯 태그 DOM 생성 */
-    _addSlotTag(val) {
-        const container = document.getElementById('pSlotsContainer');
-        if (!container) return;
-        const tag = document.createElement('span');
-        tag.className   = 'slot-tag';
-        tag.dataset.val = val;
-        tag.innerHTML   = `${escHtml(val)}<button type="button" title="삭제" onclick="this.parentElement.remove()" style="background:none;border:none;color:#2980b9;cursor:pointer;padding:0 0 0 5px;font-size:1rem;line-height:1">×</button>`;
-        container.appendChild(tag);
+    /** 동적 시간대 체크박스 DOM 생성 */
+    _addCustomSlotCheckbox(val, checked) {
+        const wrap = document.querySelector('.time-cb-wrap');
+        if (!wrap) return;
+        const lbl = document.createElement('label');
+        lbl.className = 'time-cb-lbl time-cb-custom';
+        lbl.innerHTML = `<input type="checkbox" name="pTimeCheck" value="${escHtml(val)}" ${checked?'checked':''}><span>${escHtml(val)}</span>`;
+        wrap.appendChild(lbl);
     },
     async save(id) {
         const name = document.getElementById('pName').value.trim();
@@ -142,9 +170,9 @@ const programs = {
         // 요일 체크박스 수집
         const days = Array.from(document.querySelectorAll('input[name="pDayCheck"]:checked'))
             .map(el => el.value).join(', ');
-        // 슬롯 태그 수집
-        const time_slots = Array.from(document.querySelectorAll('#pSlotsContainer .slot-tag'))
-            .map(el => el.dataset.val).filter(Boolean);
+        // 시간대 체크박스 수집
+        const time_slots = Array.from(document.querySelectorAll('input[name="pTimeCheck"]:checked'))
+            .map(el => el.value).filter(Boolean);
         try {
             const data = {
                 name, type: document.getElementById('pType').value,
