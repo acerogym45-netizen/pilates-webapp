@@ -231,9 +231,17 @@ const cancellations = {
                             : '<i class="fas fa-file" style="color:#6b7280;font-size:1.1rem"></i>';
                     const preview = isImg && url
                         ? `<img src="${escHtml(url)}" alt="${escHtml(name)}"
-                               style="max-width:100%;max-height:120px;border-radius:6px;border:1px solid #e5e7eb;
-                                      display:block;margin-top:6px;cursor:pointer"
-                               onclick="window.open('${escHtml(url)}','_blank')">`
+                               style="max-width:100%;max-height:200px;border-radius:6px;border:1px solid #e5e7eb;
+                                      display:block;margin-top:6px;cursor:pointer;object-fit:contain;background:#f3f4f6"
+                               onclick="window.open('${escHtml(url)}','_blank')"
+                               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+                           ><div style="display:none;align-items:center;gap:8px;margin-top:6px;padding:10px;
+                                        background:#fef3c7;border:1px solid #fcd34d;border-radius:6px;font-size:.8rem;color:#92400e">
+                               <i class='fas fa-exclamation-triangle'></i>
+                               <span>이미지를 불러올 수 없습니다.
+                                 <a href="${escHtml(url)}" target="_blank"
+                                    style="color:#4f46e5;text-decoration:underline;margin-left:4px">직접 열기</a>
+                               </span></div>`
                         : '';
                     const uploadedAt = d.uploaded_at ? formatDate(d.uploaded_at) : '';
                     return `
