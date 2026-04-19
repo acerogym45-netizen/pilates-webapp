@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마스터 관리자 대시보드</title>
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <style>
+        /* ── 마스터 전용 추가 스타일 ── */
+        :root {
+            --master: #4f46e5;
+            --master-d: #3730a3;
+            --master-bg: #eef2ff;
+        }
+
+        /* 비밀번호 화면 */
+        #passwordScreen {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--master) 0%, #7c3aed 100%);
+        }
+        .pw-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 48px 40px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,.2);
+        }
+        .pw-card .lock-icon {
+            width: 72px; height: 72px;
+            background: var(--master-bg);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 24px;
+            font-size: 1.8rem;
+            color: var(--master);
+        }
+        .pw-card h2 { font-size: 1.4rem; color: #1e1b4b; margin-bottom: 6px; }
+        .pw-card p  { color: #6b7280; font-size: .9rem; margin-bottom: 28px; }
+        .pw-card input {
+            width: 100%; padding: 12px 16px;
+            border: 2px solid #e5e7eb; border-radius: 10px;
+            font-size: 1rem; margin-bottom: 12px;
+            transition: border-color .2s;
+        }
+        .pw-card input:focus { outline: none; border-color: var(--master); }
+        .pw-card .btn-login {
+            width: 100%; padding: 13px;
+            background: var(--master); color: #fff; border: none;
+            border-radius: 10px; font-size: 1rem; font-weight: 700;
+            cursor: pointer; transition: background .2s;
+        }
+        .pw-card .btn-login:hover { background: var(--master-d); }
+        .pw-error { color: #dc2626; font-size: .85rem; margin-top: 10px; display: none; }
+
+        /* 메인 컨텐츠 */
+        #mainContent { display: none; }
+        #mainContent.show { display: block; }
+
+        /* 마스터 헤더 */
+        .master-header {
+            background: linear-gradient(135deg, var(--master), #7c3aed);
+            color: #fff;
+            padding: 28px 32px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+        .master-header-left h1 {
+            font-size: 1.6rem; font-weight: 800; display: flex;
+            align-items: center; gap: 12px; margin-bottom: 4px;
+        }
+        .master-header-left p { font-size: .9rem; opacity: .85; }
+        .master-badge {
+            background: rgba(255,255,255,.2);
+            border: 1px solid rgba(255,255,255,.3);
+            padding: 6px 16px; border-radius: 20px;
+            font-size: .8rem; font-weight: 700;
+        }
+        .btn-logout {
+            background: rgba(255,255,255,.15);
+            border: 1px solid rgba(255,255,255,.4);
+            color: #fff; padding: 8px 18px; border-radius: 8px;
+            font-size: .85rem; cursor: pointer; transition: background .2s;
+        }
+        .btn-logout:hover { background: rgba(255,255,255,.25); }
+
+        /* 전체 통계 */
+        .master-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .master-stat-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        }
+        .master-stat-icon {
+            width: 48px; height: 48px; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3rem; flex-shrink: 0;
+        }
+        .icon-complexes { background: #eef2ff; color: var(--master); }
+        .icon-members   { background: #dcfce7; color: #16a34a; }
+        .icon-waiting   { background: #fef9c3; color: #ca8a04; }
+        .icon-cancel    { background: #fee2e2; color: #dc2626; }
+        .master-stat-card h3 { font-size: 1.6rem; font-weight: 800; color: #111827; line-height: 1; }
+        .master-stat-card p  { font-size: .8rem; color: #6b7280; margin-top: 4px; }
+
+        /* 섹션 헤더 */
+        .section-title {
+            font-size: 1.1rem; font-weight: 700; color: #1f2937;
+            margin-bottom: 16px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .section-title i { color: var(--master); }
+
+        /* 단지 카드 그리드 */
+        .complex-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+        .complex-card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,.06);
+            transition: box-shadow .2s, transform .2s;
+        }
+        .complex-card:hover {
+            box-shadow: 0 8px 24px rgba(0,0,0,.1);
+            transform: translateY(-2px);
+        }
+        .complex-card-header {
+            padding: 20px 22px 16px;
+            border-bottom: 1px solid #f3f4f6;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+        }
+        .complex-color-dot {
+            width: 40px; height: 40px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem; color: #fff; flex-shrink: 0;
+            background: var(--master);
+        }
+        .complex-info { flex: 1; margin-left: 14px; }
+        .complex-info h3 { font-size: 1.05rem; font-weight: 700; color: #111827; margin-bottom: 3px; }
+        .complex-info .complex-code {
+            font-size: .75rem; color: #9ca3af;
+            background: #f9fafb; border-radius: 4px;
+            padding: 2px 6px; display: inline-block;
+        }
+        .complex-status-badge {
+            font-size: .72rem; font-weight: 700;
+            padding: 3px 10px; border-radius: 20px;
+        }
+        .status-active   { background: #dcfce7; color: #15803d; }
+        .status-inactive { background: #f3f4f6; color: #6b7280; }
+
+        .complex-card-stats {
+            display: grid; grid-template-columns: repeat(3,1fr);
+            gap: 0;
+        }
+        .cstat {
+            padding: 14px 16px; text-align: center;
+            border-right: 1px solid #f3f4f6;
+        }
+        .cstat:last-child { border-right: none; }
+        .cstat-num { font-size: 1.3rem; font-weight: 800; color: #111827; line-height: 1; }
+        .cstat-label { font-size: .72rem; color: #9ca3af; margin-top: 4px; }
+
+        .complex-card-footer {
+            padding: 14px 22px;
+            border-top: 1px solid #f3f4f6;
+            display: flex; gap: 8px;
+        }
+        .btn-manage {
+            flex: 1; padding: 9px;
+            background: var(--master); color: #fff;
+            border: none; border-radius: 8px; font-size: .85rem;
+            font-weight: 700; cursor: pointer; transition: background .2s;
+            text-decoration: none; display: flex;
+            align-items: center; justify-content: center; gap: 6px;
+        }
+        .btn-manage:hover { background: var(--master-d); }
+        .btn-manage-sec {
+            flex: 1; padding: 9px;
+            background: #f9fafb; color: #374151;
+            border: 1px solid #e5e7eb; border-radius: 8px; font-size: .85rem;
+            font-weight: 600; cursor: pointer; transition: all .2s;
+            text-decoration: none; display: flex;
+            align-items: center; justify-content: center; gap: 6px;
+        }
+        .btn-manage-sec:hover { background: #f3f4f6; border-color: #d1d5db; }
+
+        /* 단지 추가 버튼 */
+        .complex-card.add-card {
+            border: 2px dashed #d1d5db;
+            display: flex; align-items: center; justify-content: center;
+            min-height: 200px; cursor: pointer;
+            color: #9ca3af; transition: all .2s;
+        }
+        .complex-card.add-card:hover {
+            border-color: var(--master);
+            color: var(--master);
+            transform: translateY(-2px);
+        }
+        .add-card-inner { text-align: center; }
+        .add-card-inner i { font-size: 2rem; margin-bottom: 10px; display: block; }
+        .add-card-inner span { font-size: .95rem; font-weight: 600; }
+
+        /* 단지 추가/편집 모달 */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,.5); z-index: 1000;
+            align-items: center; justify-content: center; padding: 20px;
+        }
+        .modal-overlay.open { display: flex; animation: fadeIn .2s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .modal-box {
+            background: #fff; border-radius: 16px;
+            max-width: 560px; width: 100%;
+            max-height: 90vh; overflow-y: auto;
+            animation: slideIn .2s ease;
+        }
+        @keyframes slideIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal-box-header {
+            padding: 22px 28px; border-bottom: 1px solid #f3f4f6;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .modal-box-header h3 { font-size: 1.1rem; font-weight: 700; color: #111827; }
+        .modal-close-btn {
+            background: none; border: none; font-size: 1.2rem;
+            color: #9ca3af; cursor: pointer; padding: 4px;
+        }
+        .modal-box-body { padding: 24px 28px; }
+        .modal-box-footer {
+            padding: 18px 28px; border-top: 1px solid #f3f4f6;
+            display: flex; gap: 10px; justify-content: flex-end;
+        }
+
+        /* 폼 */
+        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .form-item { display: flex; flex-direction: column; gap: 6px; }
+        .form-item.full { grid-column: 1 / -1; }
+        .form-item label { font-size: .85rem; font-weight: 600; color: #374151; }
+        .form-item input, .form-item select, .form-item textarea {
+            padding: 10px 14px;
+            border: 1.5px solid #e5e7eb; border-radius: 8px;
+            font-size: .9rem; transition: border-color .2s;
+        }
+        .form-item input:focus, .form-item select:focus {
+            outline: none; border-color: var(--master);
+            box-shadow: 0 0 0 3px rgba(79,70,229,.1);
+        }
+        .form-hint { font-size: .78rem; color: #9ca3af; }
+        .required { color: #dc2626; }
+
+        .btn-primary-sm {
+            padding: 10px 22px; background: var(--master);
+            color: #fff; border: none; border-radius: 8px;
+            font-size: .9rem; font-weight: 700; cursor: pointer;
+        }
+        .btn-primary-sm:hover { background: var(--master-d); }
+        .btn-secondary-sm {
+            padding: 10px 22px; background: #f9fafb;
+            color: #374151; border: 1px solid #e5e7eb;
+            border-radius: 8px; font-size: .9rem; font-weight: 600; cursor: pointer;
+        }
+
+        /* 알림 토스트 */
+        .toast {
+            position: fixed; bottom: 24px; left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937; color: #fff;
+            padding: 12px 22px; border-radius: 50px;
+            font-size: .88rem; font-weight: 600;
+            box-shadow: 0 4px 20px rgba(0,0,0,.25);
+            z-index: 9999; display: none;
+        }
+        .toast.show { display: block; animation: toastIn .2s ease; }
+        .toast.success { background: #16a34a; }
+        .toast.error   { background: #dc2626; }
+        @keyframes toastIn { from { opacity:0; transform:translate(-50%,8px); } to { opacity:1; transform:translate(-50%,0); } }
+
+        /* 삭제 확인 */
+        .delete-confirm {
+            background: #fef2f2; border: 1px solid #fecaca;
+            border-radius: 10px; padding: 16px 20px; margin-bottom: 16px;
+        }
+        .delete-confirm p { color: #991b1b; font-size: .9rem; margin-bottom: 12px; }
+        .delete-confirm strong { font-size: 1rem; }
+
+        /* 빈 상태 */
+        .empty-state {
+            text-align: center; padding: 60px 20px;
+            color: #9ca3af;
+        }
+        .empty-state i { font-size: 3rem; margin-bottom: 16px; display: block; }
+        .loading-spinner-sm {
+            width: 36px; height: 36px;
+            border: 4px solid #e5e7eb;
+            border-top-color: var(--master);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            margin: 40px auto;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 640px) {
+            .master-stats { grid-template-columns: repeat(2,1fr); }
+            .form-grid    { grid-template-columns: 1fr; }
+            .complex-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── 비밀번호 화면 ── -->
+<div id="passwordScreen">
+    <div class="pw-card">
+        <div class="lock-icon"><i class="fas fa-shield-alt"></i></div>
+        <h2>마스터 관리자</h2>
+        <p>전체 단지 통합 관리 시스템</p>
+        <input type="password" id="pwInput" placeholder="마스터 비밀번호 입력"
+               onkeydown="if(event.key==='Enter') doLogin()">
+        <button class="btn-login" onclick="doLogin()">
+            <i class="fas fa-sign-in-alt"></i> 접속
+        </button>
+        <p class="pw-error" id="pwError">
+            <i class="fas fa-exclamation-circle"></i> 비밀번호가 올바르지 않습니다
+        </p>
+    </div>
+</div>
+
+<!-- ── 메인 컨텐츠 ── -->
+<div id="mainContent" class="admin-container">
+
+    <!-- 마스터 헤더 -->
+    <header class="master-header">
+        <div class="master-header-left">
+            <h1><i class="fas fa-layer-group"></i> 마스터 관리자 대시보드</h1>
+            <p>전체 단지 통합 관리 · 각 단지별 데이터 독립 운영</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+            <span class="master-badge"><i class="fas fa-crown"></i> MASTER</span>
+            <button class="btn-logout" onclick="doLogout()">
+                <i class="fas fa-sign-out-alt"></i> 로그아웃
+            </button>
+        </div>
+    </header>
+
+    <!-- 전체 통계 -->
+    <div class="master-stats" id="masterStats">
+        <div class="master-stat-card">
+            <div class="master-stat-icon icon-complexes"><i class="fas fa-building"></i></div>
+            <div>
+                <h3 id="statComplexes">—</h3>
+                <p>전체 단지</p>
+            </div>
+        </div>
+        <div class="master-stat-card">
+            <div class="master-stat-icon icon-members"><i class="fas fa-users"></i></div>
+            <div>
+                <h3 id="statMembers">—</h3>
+                <p>총 승인 회원</p>
+            </div>
+        </div>
+        <div class="master-stat-card">
+            <div class="master-stat-icon icon-waiting"><i class="fas fa-clock"></i></div>
+            <div>
+                <h3 id="statWaiting">—</h3>
+                <p>대기중</p>
+            </div>
+        </div>
+        <div class="master-stat-card">
+            <div class="master-stat-icon icon-cancel"><i class="fas fa-times-circle"></i></div>
+            <div>
+                <h3 id="statCancels">—</h3>
+                <p>해지 접수</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 단지 목록 -->
+    <div class="section-title">
+        <i class="fas fa-building"></i> 단지 현황
+        <button class="btn-primary-sm" style="margin-left:auto" onclick="openAddModal()">
+            <i class="fas fa-plus"></i> 단지 추가
+        </button>
+    </div>
+
+    <div id="complexGrid" class="complex-grid">
+        <div style="grid-column:1/-1; text-align:center; padding:40px;">
+            <div class="loading-spinner-sm"></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ── 단지 추가/편집 모달 ── -->
+<div id="complexModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-box-header">
+            <h3 id="modalTitle"><i class="fas fa-building"></i> 단지 추가</h3>
+            <button class="modal-close-btn" onclick="closeModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-box-body">
+            <form id="complexForm" onsubmit="return false;">
+                <input type="hidden" id="complexEditId">
+                <div class="form-grid">
+                    <div class="form-item">
+                        <label>단지 코드 <span class="required">*</span></label>
+                        <input type="text" id="fCode" placeholder="예: cheongju-sk" autocomplete="off">
+                        <span class="form-hint">영문·숫자·하이픈만 사용, URL용 식별자</span>
+                    </div>
+                    <div class="form-item">
+                        <label>단지명 <span class="required">*</span></label>
+                        <input type="text" id="fName" placeholder="예: 청주SK뷰자이">
+                    </div>
+                    <div class="form-item full">
+                        <label>주소</label>
+                        <input type="text" id="fAddress" placeholder="단지 주소 (선택)">
+                    </div>
+                    <div class="form-item">
+                        <label>관리자 비밀번호 <span class="required">*</span></label>
+                        <input type="password" id="fAdminPw" placeholder="단지 관리자용 비밀번호">
+                    </div>
+                    <div class="form-item">
+                        <label>대표 색상</label>
+                        <input type="color" id="fColor" value="#667eea" style="padding:4px 8px; height:42px;">
+                    </div>
+                    <div class="form-item full">
+                        <label>로고 URL (선택)</label>
+                        <input type="text" id="fLogoUrl" placeholder="https://...">
+                    </div>
+                    <div class="form-item">
+                        <label>활성 상태</label>
+                        <select id="fIsActive">
+                            <option value="true">활성</option>
+                            <option value="false">비활성</option>
+                        </select>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="modal-box-footer">
+            <button class="btn-secondary-sm" onclick="closeModal()">취소</button>
+            <button class="btn-primary-sm" onclick="saveComplex()">
+                <i class="fas fa-save"></i> 저장
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ── 삭제 확인 모달 ── -->
+<div id="deleteModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:420px;">
+        <div class="modal-box-header">
+            <h3><i class="fas fa-trash"></i> 단지 삭제</h3>
+            <button class="modal-close-btn" onclick="closeDeleteModal()"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-box-body">
+            <div class="delete-confirm">
+                <p><strong id="deleteComplexName"></strong> 단지를 삭제하시겠습니까?</p>
+                <p>⚠️ 해당 단지의 모든 데이터(프로그램, 신청, 강사, 공지 등)가 <strong>영구 삭제</strong>됩니다.</p>
+            </div>
+        </div>
+        <div class="modal-box-footer">
+            <button class="btn-secondary-sm" onclick="closeDeleteModal()">취소</button>
+            <button class="btn-primary-sm" style="background:#dc2626;" onclick="confirmDelete()">
+                <i class="fas fa-trash"></i> 삭제
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 토스트 -->
+<div id="toast" class="toast"></div>
+
+<script src="js/api.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════
+   마스터 관리자 대시보드 스크립트
+   ═══════════════════════════════════════════════════ */
+
+const MASTER_KEY = 'master_auth_ok';
+let allComplexes = [];
+let deleteTargetId = null;
+
+/* ── 로그인 ── */
+async function doLogin() {
+    const pw = document.getElementById('pwInput').value.trim();
+    const errEl = document.getElementById('pwError');
+    errEl.style.display = 'none';
+    if (!pw) return;
+
+    try {
+        const res = await API.complexes.verifyPassword('', pw);
+        if (res.success && res.role === 'master') {
+            sessionStorage.setItem(MASTER_KEY, '1');
+            document.getElementById('passwordScreen').style.display = 'none';
+            document.getElementById('mainContent').classList.add('show');
+            loadDashboard();
+        } else {
+            errEl.style.display = 'block';
+        }
+    } catch (e) {
+        errEl.style.display = 'block';
+    }
+}
+
+function doLogout() {
+    sessionStorage.removeItem(MASTER_KEY);
+    location.reload();
+}
+
+/* ── 대시보드 로드 ── */
+async function loadDashboard() {
+    try {
+        // 단지 목록
+        const res = await API.complexes.list();
+        allComplexes = res.data || [];
+
+        // 전체 통계 로드
+        await loadGlobalStats();
+
+        // 단지 카드 렌더
+        renderComplexGrid();
+    } catch (e) {
+        showToast('데이터 로드 실패: ' + e.message, 'error');
+    }
+}
+
+async function loadGlobalStats() {
+    try {
+        // 병렬로 전체 데이터 조회
+        const [appsRes, cancelsRes] = await Promise.all([
+            fetch('/api/applications?limit=9999').then(r => r.json()),
+            fetch('/api/cancellations?status=pending&limit=9999').then(r => r.json()),
+        ]);
+
+        const apps     = appsRes.data    || [];
+        const cancels  = cancelsRes.data || [];
+
+        document.getElementById('statComplexes').textContent = allComplexes.filter(c => c.is_active).length;
+        document.getElementById('statMembers').textContent   = apps.filter(a => a.status === 'approved').length;
+        document.getElementById('statWaiting').textContent   = apps.filter(a => a.status === 'waiting').length;
+        document.getElementById('statCancels').textContent   = cancels.length;
+
+        // 각 단지별 카운트 저장
+        allComplexes.forEach(c => {
+            c._memberCount  = apps.filter(a => a.complex_id === c.id && a.status === 'approved').length;
+            c._waitingCount = apps.filter(a => a.complex_id === c.id && a.status === 'waiting').length;
+            c._cancelCount  = cancels.filter(ca => ca.complex_id === c.id).length;
+        });
+    } catch (e) {
+        console.warn('Stats load error:', e.message);
+        document.getElementById('statComplexes').textContent = allComplexes.length;
+    }
+}
+
+/* ── 단지 카드 렌더 ── */
+function renderComplexGrid() {
+    const grid = document.getElementById('complexGrid');
+
+    if (!allComplexes.length) {
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+            <i class="fas fa-building"></i>
+            <p>등록된 단지가 없습니다. 단지를 추가해주세요.</p>
+        </div>`;
+        return;
+    }
+
+    const cards = allComplexes
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(c => {
+            const color   = c.primary_color || '#667eea';
+            const isActive = c.is_active !== false;
+            const members  = c._memberCount  ?? '—';
+            const waiting  = c._waitingCount ?? '—';
+            const cancels  = c._cancelCount  ?? '—';
+
+            return `
+            <div class="complex-card">
+                <div class="complex-card-header">
+                    <div class="complex-color-dot" style="background:${color}">
+                        <i class="fas fa-building"></i>
+                    </div>
+                    <div class="complex-info">
+                        <h3>${esc(c.name)}</h3>
+                        <span class="complex-code">${esc(c.code)}</span>
+                    </div>
+                    <span class="complex-status-badge ${isActive ? 'status-active' : 'status-inactive'}">
+                        ${isActive ? '운영중' : '비활성'}
+                    </span>
+                </div>
+                <div class="complex-card-stats">
+                    <div class="cstat">
+                        <div class="cstat-num">${members}</div>
+                        <div class="cstat-label">승인 회원</div>
+                    </div>
+                    <div class="cstat">
+                        <div class="cstat-num">${waiting}</div>
+                        <div class="cstat-label">대기중</div>
+                    </div>
+                    <div class="cstat">
+                        <div class="cstat-num">${cancels}</div>
+                        <div class="cstat-label">해지 접수</div>
+                    </div>
+                </div>
+                <div class="complex-card-footer">
+                    <a class="btn-manage"
+                       href="admin-main.html?complex=${encodeURIComponent(c.code)}&master=1">
+                        <i class="fas fa-cog"></i> 관리
+                    </a>
+                    <button class="btn-manage-sec" onclick="openEditModal('${c.id}')">
+                        <i class="fas fa-edit"></i> 편집
+                    </button>
+                    <button class="btn-manage-sec" style="color:#dc2626; border-color:#fecaca;"
+                            onclick="openDeleteModal('${c.id}', '${esc(c.name)}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+
+    // 추가 버튼 카드
+    const addCard = `
+        <div class="complex-card add-card" onclick="openAddModal()">
+            <div class="add-card-inner">
+                <i class="fas fa-plus-circle"></i>
+                <span>새 단지 추가</span>
+            </div>
+        </div>`;
+
+    grid.innerHTML = cards + addCard;
+}
+
+/* ── 단지 추가/편집 모달 ── */
+function openAddModal() {
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-plus"></i> 단지 추가';
+    document.getElementById('complexEditId').value = '';
+    document.getElementById('fCode').value     = '';
+    document.getElementById('fName').value     = '';
+    document.getElementById('fAddress').value  = '';
+    document.getElementById('fAdminPw').value  = '';
+    document.getElementById('fColor').value    = '#667eea';
+    document.getElementById('fLogoUrl').value  = '';
+    document.getElementById('fIsActive').value = 'true';
+    document.getElementById('fCode').disabled  = false;
+    document.getElementById('complexModal').classList.add('open');
+}
+
+function openEditModal(id) {
+    const c = allComplexes.find(x => x.id === id);
+    if (!c) return;
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> 단지 편집';
+    document.getElementById('complexEditId').value = c.id;
+    document.getElementById('fCode').value     = c.code    || '';
+    document.getElementById('fName').value     = c.name    || '';
+    document.getElementById('fAddress').value  = c.address || '';
+    document.getElementById('fAdminPw').value  = '';  // 보안상 비워둠
+    document.getElementById('fColor').value    = c.primary_color || '#667eea';
+    document.getElementById('fLogoUrl').value  = c.logo_url || '';
+    document.getElementById('fIsActive').value = String(c.is_active !== false);
+    document.getElementById('fCode').disabled  = true; // 코드는 변경 불가
+    document.getElementById('complexModal').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('complexModal').classList.remove('open');
+}
+
+async function saveComplex() {
+    const editId   = document.getElementById('complexEditId').value;
+    const code     = document.getElementById('fCode').value.trim();
+    const name     = document.getElementById('fName').value.trim();
+    const address  = document.getElementById('fAddress').value.trim();
+    const adminPw  = document.getElementById('fAdminPw').value.trim();
+    const color    = document.getElementById('fColor').value;
+    const logoUrl  = document.getElementById('fLogoUrl').value.trim();
+    const isActive = document.getElementById('fIsActive').value === 'true';
+
+    if (!editId && (!code || !name)) {
+        showToast('단지 코드와 단지명은 필수입니다', 'error'); return;
+    }
+    if (editId && !name) {
+        showToast('단지명은 필수입니다', 'error'); return;
+    }
+
+    const payload = {
+        name, address,
+        primary_color: color,
+        logo_url: logoUrl,
+        is_active: isActive
+    };
+    if (!editId) { payload.code = code; }
+    if (adminPw) { payload.admin_password = adminPw; }
+
+    try {
+        if (editId) {
+            await API.complexes.update(editId, payload);
+            showToast('단지 정보가 수정되었습니다', 'success');
+        } else {
+            await API.complexes.create(payload);
+            showToast('단지가 추가되었습니다', 'success');
+        }
+        closeModal();
+        loadDashboard();
+    } catch (e) {
+        showToast('저장 실패: ' + e.message, 'error');
+    }
+}
+
+/* ── 단지 삭제 ── */
+function openDeleteModal(id, name) {
+    deleteTargetId = id;
+    document.getElementById('deleteComplexName').textContent = name;
+    document.getElementById('deleteModal').classList.add('open');
+}
+function closeDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('open');
+    deleteTargetId = null;
+}
+async function confirmDelete() {
+    if (!deleteTargetId) return;
+    try {
+        await API.complexes.delete(deleteTargetId);
+        showToast('단지가 삭제되었습니다', 'success');
+        closeDeleteModal();
+        loadDashboard();
+    } catch (e) {
+        showToast('삭제 실패: ' + e.message, 'error');
+    }
+}
+
+/* ── 유틸 ── */
+function esc(str) {
+    return String(str || '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer;
+function showToast(msg, type = '') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className   = 'toast show' + (type ? ' ' + type : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+/* ── 초기화 ── */
+document.addEventListener('DOMContentLoaded', () => {
+    if (sessionStorage.getItem(MASTER_KEY)) {
+        document.getElementById('passwordScreen').style.display = 'none';
+        document.getElementById('mainContent').classList.add('show');
+        loadDashboard();
+    }
+    document.getElementById('pwInput').focus();
+});
+</script>
+</body>
+</html>
