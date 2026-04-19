@@ -154,11 +154,23 @@ router.post('/inquiries', async (req, res) => {
  */
 router.get('/inquiries/my', async (req, res) => {
     try {
-        const { complexId, complexCode, dong, ho, name, phoneLast4 } = req.query;
+        const { complexId: rawComplexId, complexCode, dong, ho, name, phoneLast4 } = req.query;
         if (!dong || !ho || !name || !phoneLast4) {
             return res.status(400).json({ success: false, error: '동, 호수, 이름, 전화번호 끝 4자리를 모두 입력하세요' });
         }
         const sb = getSupabase();
+
+        // complexCode → complex_id 변환 (complexes 조인 없이 eq 사용하기 위함)
+        let resolvedComplexId = rawComplexId || null;
+        if (!resolvedComplexId && complexCode) {
+            const { data: cx } = await sb
+                .from('complexes')
+                .select('id')
+                .eq('code', complexCode)
+                .single();
+            if (cx) resolvedComplexId = cx.id;
+        }
+
         let query = sb
             .from('inquiries')
             .select('id, dong, ho, name, title, content, answer, is_public, is_hidden, created_at, answered_at')
@@ -167,18 +179,16 @@ router.get('/inquiries/my', async (req, res) => {
             .eq('name', name)
             .order('created_at', { ascending: false });
 
-        if (complexId)   query = query.eq('complex_id', complexId);
-        if (complexCode) query = query.eq('complexes.code', complexCode);
+        if (resolvedComplexId) query = query.eq('complex_id', resolvedComplexId);
 
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /inquiries/my');
 
         // 전화번호 끝 4자리 검증 (phone 컬럼 직접 비교)
-        const sb2 = getSupabase();
-        let q2 = sb2.from('inquiries')
+        let q2 = sb.from('inquiries')
             .select('id, phone')
             .eq('dong', dong).eq('ho', ho).eq('name', name);
-        if (complexId) q2 = q2.eq('complex_id', complexId);
+        if (resolvedComplexId) q2 = q2.eq('complex_id', resolvedComplexId);
         const { data: phoneData } = await q2;
 
         // phone 끝 4자리가 일치하는 id 셋 구성
