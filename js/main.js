@@ -186,11 +186,23 @@ function goToPage1() {
 
 // Submit contract
 async function submitContract() {
-    const termsAgreement = document.getElementById('termsAgreement').checked;
-    const signatureName = document.getElementById('signatureName').value.trim();
-    const signatureDate = document.getElementById('signatureDate').value;
+    const refundAgreement  = document.getElementById('refundAgreement')?.checked;
+    const noshowAgreement  = document.getElementById('noshowAgreement')?.checked;
+    const termsAgreement   = document.getElementById('termsAgreement').checked;
+    const signatureName    = document.getElementById('signatureName').value.trim();
+    const signatureDate    = document.getElementById('signatureDate').value;
     
     // Validation
+    if (!refundAgreement) {
+        alert('환불 규정에 동의해주세요.');
+        document.getElementById('refundAgreement')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
+    if (!noshowAgreement) {
+        alert('노쇼(No-Show) 규정에 동의해주세요.');
+        document.getElementById('noshowAgreement')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+    }
     if (!termsAgreement) {
         alert('이용약관에 동의해주세요.');
         return;
@@ -735,6 +747,8 @@ function closeSuccessNotificationModal() {
     // 모달 닫을 때 폼 리셋
     document.getElementById('contractForm').reset();
     document.getElementById('termsAgreement').checked = false;
+    const ra = document.getElementById('refundAgreement');  if (ra)  ra.checked = false;
+    const na = document.getElementById('noshowAgreement'); if (na) na.checked = false;
     document.getElementById('signatureName').value = '';
     if (typeof signaturePad !== 'undefined' && signaturePad) {
         signaturePad.clear();

@@ -347,6 +347,115 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 .alert-box li { margin-bottom: 3px; line-height: 1.6; }
 
 /* ════════════════════════════════════════════════
+   환불 · 노쇼 규정 전용 박스
+════════════════════════════════════════════════ */
+.policy-box {
+    border-radius: 12px;
+    margin-bottom: 18px;
+    overflow: hidden;
+    border: 2px solid #e53e3e;
+    box-shadow: 0 2px 10px rgba(229,62,62,.12);
+}
+.policy-box-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #e53e3e;
+    color: #fff;
+    font-size: .95rem;
+    font-weight: 700;
+    padding: 11px 16px;
+    letter-spacing: -.3px;
+}
+.policy-required-tag {
+    margin-left: auto;
+    background: rgba(255,255,255,.25);
+    color: #fff;
+    font-size: .72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    border: 1px solid rgba(255,255,255,.4);
+    white-space: nowrap;
+}
+.policy-content {
+    background: #fff5f5;
+    padding: 14px 16px;
+    font-size: .84rem;
+    color: #2d2d2d;
+}
+.policy-sub-title {
+    font-weight: 700;
+    color: #c53030;
+    font-size: .85rem;
+    margin-bottom: 6px;
+}
+.policy-mt { margin-top: 12px; }
+.policy-content ul {
+    margin: 0 0 4px 0;
+    padding-left: 18px;
+}
+.policy-content li {
+    margin-bottom: 4px;
+    line-height: 1.65;
+    color: #3d3d3d;
+}
+.policy-content strong { color: #c53030; }
+.policy-notice {
+    margin-top: 12px;
+    padding: 9px 12px;
+    background: #fed7d7;
+    border-left: 3px solid #e53e3e;
+    border-radius: 0 6px 6px 0;
+    font-size: .8rem;
+    color: #742a2a;
+    line-height: 1.7;
+}
+/* 노쇼 박스는 약간 다른 붉은 톤 */
+.policy-noshow {
+    border-color: #c0392b;
+}
+.policy-noshow .policy-box-header {
+    background: #c0392b;
+}
+.policy-noshow .policy-sub-title { color: #a93226; }
+.policy-noshow .policy-content strong { color: #a93226; }
+.policy-noshow .policy-notice {
+    background: #fce8e6;
+    border-left-color: #c0392b;
+    color: #6e2217;
+}
+/* 동의 체크박스 */
+.policy-consent-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    padding: 12px 16px;
+    background: #fff0f0;
+    border-top: 1px solid #feb2b2;
+    cursor: pointer;
+    font-size: .88rem;
+    font-weight: 600;
+    color: #742a2a;
+    line-height: 1.5;
+}
+.policy-consent-label input[type="checkbox"] {
+    margin-top: 2px;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    accent-color: #e53e3e;
+    cursor: pointer;
+}
+.policy-consent-label span { flex: 1; }
+.policy-consent-label strong { color: #c53030; }
+.policy-noshow .policy-consent-label {
+    border-top-color: #f5c6c2;
+    color: #6e2217;
+    background: #fef0ed;
+}
+
+/* ════════════════════════════════════════════════
    공지사항
 ════════════════════════════════════════════════ */
 .notice-item {
