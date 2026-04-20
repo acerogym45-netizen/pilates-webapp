@@ -148,7 +148,8 @@ router.post('/', async (req, res) => {
         const sb = getSupabase();
         const {
             complex_id, dong, ho, name, phone, program_id, program_name, preferred_time,
-            signature_name, signature_data, signature_date, agreement, terms_agreement, notes
+            signature_name, signature_data, signature_date, agreement, terms_agreement, notes,
+            admin_bypass   // 관리자가 중복 차단을 우회하여 복수 프로그램 신청 시 true
         } = req.body;
 
         if (!complex_id || !dong || !ho || !name || !phone || !program_name) {
@@ -156,27 +157,30 @@ router.post('/', async (req, res) => {
         }
 
         // ── 중복 신청 체크 ─────────────────────────────────────────
-        // 동 + 호 + 이름 + 전화번호가 모두 일치하는 활성 신청이 있으면 차단
-        const { data: dupCheck } = await sb
-            .from('applications')
-            .select('id, program_name, status')
-            .eq('complex_id', complex_id)
-            .eq('dong', dong)
-            .eq('ho', ho)
-            .eq('name', name)
-            .eq('phone', phone)
-            .in('status', ['approved', 'waiting'])
-            .limit(1);
+        // admin_bypass=true 이면 관리자가 직접 추가하는 경우이므로 중복 체크 생략
+        if (!admin_bypass) {
+            // 동 + 호 + 이름 + 전화번호가 모두 일치하는 활성 신청이 있으면 차단
+            const { data: dupCheck } = await sb
+                .from('applications')
+                .select('id, program_name, status')
+                .eq('complex_id', complex_id)
+                .eq('dong', dong)
+                .eq('ho', ho)
+                .eq('name', name)
+                .eq('phone', phone)
+                .in('status', ['approved', 'waiting'])
+                .limit(1);
 
-        if (dupCheck && dupCheck.length > 0) {
-            return res.status(409).json({
-                success: false,
-                duplicate: true,
-                error: '이미 수강 신청 내역이 있습니다. 중복 수강 희망 시 관리자에게 별도 문의하세요.',
-                existingProgram: dupCheck[0].program_name,
-                existingStatus: dupCheck[0].status,
-                existingId: dupCheck[0].id
-            });
+            if (dupCheck && dupCheck.length > 0) {
+                return res.status(409).json({
+                    success: false,
+                    duplicate: true,
+                    error: '이미 수강 신청 내역이 있습니다. 중복 수강 희망 시 관리자에게 별도 문의하세요.',
+                    existingProgram: dupCheck[0].program_name,
+                    existingStatus: dupCheck[0].status,
+                    existingId: dupCheck[0].id
+                });
+            }
         }
 
         // 정원 확인
