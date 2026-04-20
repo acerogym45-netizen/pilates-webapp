@@ -95,16 +95,25 @@ const instructors = {
                 showToast('저장되었습니다');
                 await this.load();
             } else {
-                if (!getEffectiveComplexId()) {
-                    pickComplexForCreate(async (complexId) => {
-                        data.complex_id = complexId;
-                        try { await API.instructors.create(data); showToast('저장되었습니다'); await instructors.load(); }
+                const complexId = getEffectiveComplexId();
+                if (!complexId) {
+                    pickComplexForCreate(async (cxId) => {
+                        data.complex_id = cxId;
+                        try {
+                            await API.instructors.create(data);
+                            closeGlobalModal();
+                            showToast('저장되었습니다');
+                            await instructors.load();
+                        }
                         catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
                     });
                     return;
                 }
-                data.complex_id = Admin.complex.id;
+                data.complex_id = complexId;
                 await API.instructors.create(data);
+                closeGlobalModal();
+                showToast('저장되었습니다');
+                await this.load();
             }
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
     },
