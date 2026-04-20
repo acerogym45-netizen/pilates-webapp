@@ -13,6 +13,9 @@ const applications = {
             <div class="page-header">
                 <h2><i class="fas fa-file-alt"></i> 신청 관리</h2>
                 <div class="header-actions">
+                    <button class="btn-primary btn-sm" onclick="applications.showAddModal()" style="background:#27ae60;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
+                        <i class="fas fa-plus"></i> 신청 추가
+                    </button>
                     <button class="btn-fee btn-sm" onclick="applications.showFeeCalc()" style="background:#f39c12;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
                         <i class="fas fa-calculator"></i> 관리비 계산기
                     </button>
@@ -714,6 +717,245 @@ const applications = {
         } catch (e) {
             showToast('가져오기 실패: ' + e.message, 'error');
             if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-upload"></i> 가져오기 실행'; }
+        }
+    },
+
+    // ══════════════════════════════════════════════════
+    //  관리자 직접 신청 추가 (중복 허용)
+    // ══════════════════════════════════════════════════
+    async showAddModal() {
+        // 프로그램 목록 먼저 로드
+        let programOptions = '<option value="">-- 프로그램 선택 --</option>';
+        try {
+            const complexId = getEffectiveComplexId();
+            const res = await API.programs.list({ complexId, limit: 100 });
+            const programs = res.data || [];
+            programOptions += programs.map(p =>
+                `<option value="${escHtml(p.id)}" data-name="${escHtml(p.name)}" data-times="${escHtml(JSON.stringify(p.time_slots || []))}">${escHtml(p.name)}</option>`
+            ).join('');
+        } catch (e) { /* 프로그램 없어도 수동 입력 가능 */ }
+
+        const body = `
+            <div style="background:#e8f8f0;border:1px solid #27ae60;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:.85rem">
+                <i class="fas fa-info-circle" style="color:#27ae60"></i>
+                <strong>관리자 직접 추가</strong> — 중복 수강 신청도 허용됩니다.<br>
+                <span style="color:#888">기존 입주민 정보를 검색하거나 직접 입력하세요.</span>
+            </div>
+
+            <!-- 기존 입주민 검색 -->
+            <div style="background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:14px">
+                <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:8px">
+                    <i class="fas fa-search"></i> 기존 입주민 검색 (선택 시 자동 입력)
+                </label>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input type="text" id="addSearchQuery" placeholder="이름 또는 동호수 입력..."
+                        style="flex:1;padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem"
+                        oninput="applications._searchExistingResident(this.value)">
+                </div>
+                <div id="addSearchResults" style="margin-top:8px;max-height:160px;overflow-y:auto;display:none;border:1px solid #e0e0e0;border-radius:6px;background:#fff"></div>
+            </div>
+
+            <!-- 입주민 정보 -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                <div class="form-group" style="margin:0">
+                    <label style="font-size:.82rem;color:#666">동 *</label>
+                    <input type="text" id="addDong" placeholder="예: 101">
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label style="font-size:.82rem;color:#666">호수 *</label>
+                    <input type="text" id="addHo" placeholder="예: 1201">
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label style="font-size:.82rem;color:#666">이름 *</label>
+                    <input type="text" id="addName" placeholder="이름">
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label style="font-size:.82rem;color:#666">전화번호 *</label>
+                    <input type="tel" id="addPhone" placeholder="010-0000-0000">
+                </div>
+            </div>
+
+            <!-- 프로그램 선택 -->
+            <div class="form-group" style="margin-bottom:10px">
+                <label style="font-size:.82rem;color:#666">프로그램 *</label>
+                <select id="addProgram" onchange="applications._onAddProgramChange(this)">
+                    ${programOptions}
+                </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                <div class="form-group" style="margin:0">
+                    <label style="font-size:.82rem;color:#666">희망 시간</label>
+                    <select id="addTime">
+                        <option value="">-- 시간 선택 --</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin:0">
+                    <label style="font-size:.82rem;color:#666">상태</label>
+                    <select id="addStatus">
+                        <option value="approved">승인</option>
+                        <option value="waiting">대기</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+                <label style="font-size:.82rem;color:#666">메모 (관리자 메모)</label>
+                <textarea id="addNotes" rows="2" placeholder="예: 중복 수강 희망 (관리자 직접 추가)"></textarea>
+            </div>
+
+            <!-- 기존 수강 현황 표시 영역 -->
+            <div id="addExistingInfo" style="display:none;background:#fff8e1;border:1px solid #f39c12;border-radius:8px;padding:10px 14px;font-size:.83rem">
+                <strong><i class="fas fa-exclamation-triangle" style="color:#f39c12"></i> 현재 수강 중인 프로그램</strong>
+                <div id="addExistingList" style="margin-top:6px"></div>
+            </div>`;
+
+        const footer = `
+            <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
+            <button class="btn-primary" style="background:#27ae60" onclick="applications.doAdd()">
+                <i class="fas fa-plus"></i> 신청 추가
+            </button>`;
+
+        openGlobalModal('<i class="fas fa-user-plus"></i> 신청 직접 추가', body, footer);
+    },
+
+    // 기존 입주민 검색 (현재 로드된 data에서 실시간 검색)
+    _searchExistingResident(query) {
+        const container = document.getElementById('addSearchResults');
+        if (!container) return;
+        if (!query || query.trim().length < 1) { container.style.display = 'none'; return; }
+
+        const q = query.trim().toLowerCase();
+        // 중복 제거: dong+ho+name+phone 기준 unique 입주민 목록
+        const seen = new Set();
+        const residents = [];
+        this.data.forEach(a => {
+            const key = `${a.dong}|${a.ho}|${a.name}|${a.phone}`;
+            if (seen.has(key)) return;
+            if (
+                (a.name || '').toLowerCase().includes(q) ||
+                (a.dong || '').includes(q) ||
+                (a.ho || '').includes(q) ||
+                (a.phone || '').includes(q)
+            ) {
+                seen.add(key);
+                residents.push(a);
+            }
+        });
+
+        if (!residents.length) {
+            container.innerHTML = '<div style="padding:10px;color:#999;font-size:.83rem;text-align:center">검색 결과 없음</div>';
+            container.style.display = 'block';
+            return;
+        }
+
+        container.innerHTML = residents.slice(0, 10).map(a => `
+            <div onclick="applications._fillResidentInfo('${escHtml(a.dong)}','${escHtml(a.ho)}','${escHtml(a.name)}','${escHtml(a.phone)}')"
+                style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:.85rem;display:flex;justify-content:space-between;align-items:center"
+                onmouseover="this.style.background='#f0f9f4'" onmouseout="this.style.background=''">
+                <span><strong>${escHtml(a.dong)}동 ${escHtml(a.ho)}호</strong> ${escHtml(a.name)}</span>
+                <span style="color:#888;font-size:.8rem">${escHtml(a.phone)}</span>
+            </div>`).join('');
+        container.style.display = 'block';
+    },
+
+    // 선택한 입주민 정보 자동 입력 + 기존 수강 현황 표시
+    async _fillResidentInfo(dong, ho, name, phone) {
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        setVal('addDong', dong);
+        setVal('addHo', ho);
+        setVal('addName', name);
+        setVal('addPhone', phone);
+
+        // 검색창 초기화
+        const searchInput = document.getElementById('addSearchQuery');
+        if (searchInput) searchInput.value = `${dong}동 ${ho}호 ${name}`;
+        const resultsDiv = document.getElementById('addSearchResults');
+        if (resultsDiv) resultsDiv.style.display = 'none';
+
+        // 기존 수강 현황 표시
+        const existing = this.data.filter(a =>
+            a.dong === dong && a.ho === ho && a.name === name && a.phone === phone &&
+            (a.status === 'approved' || a.status === 'waiting')
+        );
+        const infoDiv  = document.getElementById('addExistingInfo');
+        const listDiv  = document.getElementById('addExistingList');
+        if (infoDiv && listDiv) {
+            if (existing.length > 0) {
+                listDiv.innerHTML = existing.map(a =>
+                    `<div style="padding:3px 0">
+                        <span class="status-badge status-${statusClass(a.status)}" style="font-size:.75rem">${statusLabel(a.status)}</span>
+                        <strong style="margin-left:4px">${escHtml(a.program_name)}</strong>
+                        ${a.preferred_time ? `<span style="color:#666;margin-left:4px">${escHtml(a.preferred_time)}</span>` : ''}
+                    </div>`
+                ).join('');
+                infoDiv.style.display = 'block';
+            } else {
+                infoDiv.style.display = 'none';
+            }
+        }
+    },
+
+    // 프로그램 선택 시 시간대 드롭다운 자동 갱신
+    _onAddProgramChange(select) {
+        const opt = select.options[select.selectedIndex];
+        const timesRaw = opt?.getAttribute('data-times') || '[]';
+        let times = [];
+        try { times = JSON.parse(timesRaw); } catch (e) { times = []; }
+
+        const timeSelect = document.getElementById('addTime');
+        if (!timeSelect) return;
+        if (!times.length) {
+            timeSelect.innerHTML = '<option value="">-- 시간 없음 (직접 입력 불가) --</option>';
+            return;
+        }
+        timeSelect.innerHTML = '<option value="">-- 시간 선택 --</option>' +
+            times.map(t => `<option value="${escHtml(t)}">${escHtml(t)}</option>`).join('');
+    },
+
+    // 신청 추가 실행
+    async doAdd() {
+        const dong    = document.getElementById('addDong')?.value?.trim();
+        const ho      = document.getElementById('addHo')?.value?.trim();
+        const name    = document.getElementById('addName')?.value?.trim();
+        const phone   = document.getElementById('addPhone')?.value?.trim();
+        const progEl  = document.getElementById('addProgram');
+        const programId   = progEl?.value || '';
+        const programName = progEl?.options[progEl.selectedIndex]?.getAttribute('data-name') || progEl?.value || '';
+        const preferred_time = document.getElementById('addTime')?.value?.trim() || '';
+        const status  = document.getElementById('addStatus')?.value || 'approved';
+        const notes   = document.getElementById('addNotes')?.value?.trim() || '';
+
+        if (!dong || !ho || !name || !phone) {
+            showToast('동·호수·이름·전화번호는 필수입니다', 'error'); return;
+        }
+        if (!programName) {
+            showToast('프로그램을 선택하거나 입력하세요', 'error'); return;
+        }
+
+        const complexId = getEffectiveComplexId();
+        if (!complexId) { showToast('단지 정보가 없습니다', 'error'); return; }
+
+        const btnEl = document.querySelector('#globalModal .btn-primary');
+        if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...'; }
+
+        try {
+            const payload = {
+                complex_id: complexId,
+                dong, ho, name, phone,
+                program_id: programId || undefined,
+                program_name: programName,
+                preferred_time: preferred_time || undefined,
+                status,
+                notes,
+                admin_bypass: true   // 중복 차단 우회
+            };
+            await API.applications.create(payload);
+            closeGlobalModal();
+            showToast(`✅ ${name} 님의 "${programName}" 신청이 추가되었습니다`, 'success');
+            await this.load();
+            loadBadges();
+        } catch (e) {
+            showToast('신청 추가 실패: ' + e.message, 'error');
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-plus"></i> 신청 추가'; }
         }
     }
 };
