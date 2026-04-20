@@ -215,49 +215,75 @@ const curricula = {
         openGlobalModal(cu ? '커리큘럼 수정' : '커리큘럼 등록', body, footer);
     },
     async save(id) {
+        // 저장 버튼 로딩 표시
+        const saveBtn = document.querySelector('#globalModal .btn-primary');
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 저장 중...'; }
+
         let imageUrl = document.getElementById('cuImage').value.trim();
         const fileInput = document.getElementById('cuImageFile');
-        if (fileInput.files[0]) {
+
+        // 파일 업로드 처리 (절대 URL 사용)
+        if (fileInput && fileInput.files && fileInput.files[0]) {
             try {
                 const formData = new FormData();
                 formData.append('image', fileInput.files[0]);
-                const res = await fetch('/api/upload/image', { method: 'POST', body: formData });
+                const uploadUrl = window.location.origin + '/api/upload/image';
+                const res = await fetch(uploadUrl, { method: 'POST', body: formData });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
                 const result = await res.json();
-                if (result.success) imageUrl = result.url;
-            } catch(e) { showToast('이미지 업로드 실패', 'error'); return; }
-        }
-        try {
-            const complexId = getEffectiveComplexId();
-            if (!complexId) {
-                pickComplexForCreate(async (cxId) => {
-                    try {
-                        await API.curricula.create({
-                            complex_id: cxId,
-                            year: parseInt(document.getElementById('cuYear').value),
-                            month: parseInt(document.getElementById('cuMonth').value),
-                            title: document.getElementById('cuTitle').value,
-                            content: document.getElementById('cuContent').value,
-                            image_url: imageUrl
-                        });
-                        closeGlobalModal();
-                        showToast('저장되었습니다');
-                        await curricula.load();
-                    } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
-                });
+                if (result.success && result.url) {
+                    imageUrl = result.url;
+                } else {
+                    throw new Error(result.error || '업로드 응답 오류');
+                }
+            } catch(e) {
+                console.error('[curricula] 이미지 업로드 실패:', e);
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+                showToast('이미지 업로드 실패: ' + e.message, 'error');
                 return;
             }
-            await API.curricula.create({
-                complex_id: complexId,
+        }
+
+        try {
+            const formData = {
                 year: parseInt(document.getElementById('cuYear').value),
                 month: parseInt(document.getElementById('cuMonth').value),
                 title: document.getElementById('cuTitle').value,
                 content: document.getElementById('cuContent').value,
                 image_url: imageUrl
-            });
-            closeGlobalModal();
-            showToast('저장되었습니다');
-            await this.load();
-        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+            };
+
+            if (id) {
+                // 수정: PUT /curricula/:id
+                await API.curricula.update(id, formData);
+                closeGlobalModal();
+                showToast('저장되었습니다');
+                await this.load();
+            } else {
+                // 신규: complex_id 필요
+                const complexId = getEffectiveComplexId();
+                if (!complexId) {
+                    pickComplexForCreate(async (cxId) => {
+                        try {
+                            await API.curricula.create({ complex_id: cxId, ...formData });
+                            closeGlobalModal();
+                            showToast('저장되었습니다');
+                            await curricula.load();
+                        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+                    });
+                    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+                    return;
+                }
+                await API.curricula.create({ complex_id: complexId, ...formData });
+                closeGlobalModal();
+                showToast('저장되었습니다');
+                await this.load();
+            }
+        } catch(e) {
+            console.error('[curricula] save 오류:', e);
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+            showToast('저장 실패: ' + e.message, 'error');
+        }
     },
     deleteItem(id) {
         showConfirm('삭제 확인', '커리큘럼을 삭제하시겠습니까?', async () => {
