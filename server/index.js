@@ -38,7 +38,10 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 
 // ── 정적 파일 ─────────────────────────────────────────────────────────────────
-const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, '../public/uploads');
+// upload.js 의 UPLOAD_DIR 과 반드시 동일하게 절대경로로 설정
+const uploadDir = process.env.UPLOAD_DIR
+    ? path.resolve(process.env.UPLOAD_DIR)
+    : path.resolve(__dirname, '../public/uploads');
 app.use('/uploads', express.static(uploadDir));
 // Vercel(/tmp) 환경 폴백: /tmp/refund-docs 도 /uploads/refund-docs 로 서빙
 const tmpRefundDir = '/tmp/refund-docs';

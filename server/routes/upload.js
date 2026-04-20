@@ -11,12 +11,16 @@ const { getSupabase, sbErr } = require('../db-supabase');
 require('dotenv').config();
 
 /* ── 이미지 업로드 ─────────────────────────────────────────────────────── */
-const UPLOAD_DIR = process.env.UPLOAD_DIR || '/tmp/uploads';
+// server/index.js 의 express.static('/uploads') 과 반드시 같은 경로여야 함
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+    ? path.resolve(process.env.UPLOAD_DIR)
+    : path.resolve(__dirname, '../../public/uploads');
 try {
     if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 } catch (e) {
     console.warn('UPLOAD_DIR 생성 실패 (무시):', e.message);
 }
+console.log('[upload] UPLOAD_DIR:', UPLOAD_DIR);
 
 const imgStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, UPLOAD_DIR),
