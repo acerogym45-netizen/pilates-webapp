@@ -11,53 +11,78 @@ const { getSupabase, sbErr } = require('../db-supabase');
 require('dotenv').config();
 
 /* ── 이미지 업로드 ─────────────────────────────────────────────────────── */
-// server/index.js 의 express.static('/uploads') 과 반드시 같은 경로여야 함
-const UPLOAD_DIR = process.env.UPLOAD_DIR
-    ? path.resolve(process.env.UPLOAD_DIR)
-    : path.resolve(__dirname, '../../public/uploads');
+// Vercel 환경 감지: /var/task 또는 VERCEL 환경변수
+const IS_VERCEL = !!process.env.VERCEL || __dirname.startsWith('/var/task');
+
+// 로컬: diskStorage → /uploads/<filename> URL 반환
+// Vercel: memoryStorage → Base64 data URL 반환 (파일시스템 read-only)
+const UPLOAD_DIR = IS_VERCEL
+    ? '/tmp/uploads'
+    : (process.env.UPLOAD_DIR
+        ? path.resolve(process.env.UPLOAD_DIR)
+        : path.resolve(__dirname, '../../public/uploads'));
+
 try {
     if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 } catch (e) {
     console.warn('UPLOAD_DIR 생성 실패 (무시):', e.message);
 }
-console.log('[upload] UPLOAD_DIR:', UPLOAD_DIR);
+console.log('[upload] UPLOAD_DIR:', UPLOAD_DIR, IS_VERCEL ? '(Vercel/tmp)' : '(local)');
 
-const imgStorage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-    filename:    (req, file, cb) => {
-        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        // 원본 확장자 추출 (한글 파일명도 안전하게 처리)
-        const origName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-        const ext = path.extname(origName).toLowerCase() || path.extname(file.originalname).toLowerCase() || '.jpg';
-        cb(null, unique + ext);
-    }
-});
 const imgFilter = (req, file, cb) => {
     // MIME 타입 우선 체크 (image/* 전체 허용) + 확장자 이중 체크 (한글 파일명 안전 처리)
     const mimeOk = /^image\//.test(file.mimetype) || file.mimetype === 'application/octet-stream';
     const origName = Buffer.from(file.originalname, 'latin1').toString('utf8');
     const extOk = /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(origName)
                || /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(file.originalname);
-    // 파일명이 photo.jpg (Canvas 업로드)인 경우 항상 허용
     const isCanvasUpload = file.originalname === 'photo.jpg' || file.originalname === 'image.jpg';
     (mimeOk || extOk || isCanvasUpload) ? cb(null, true) : cb(new Error('이미지 파일만 허용됩니다 (JPG/PNG/GIF/WEBP)'));
 };
-const uploadImage = multer({ storage: imgStorage, fileFilter: imgFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
-// multer 에러를 JSON으로 처리하는 래퍼
-function handleImageUpload(req, res) {
-    uploadImage.single('image')(req, res, (err) => {
-        if (err) {
-            console.error('[upload/image] multer error:', err.message);
-            return res.status(400).json({ success: false, error: err.message });
-        }
-        if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다' });
-        console.log('[upload/image] 저장 완료:', req.file.path, '→', `/uploads/${req.file.filename}`);
-        res.json({ success: true, url: `/uploads/${req.file.filename}`, filename: req.file.filename });
-    });
-}
+// Vercel: memoryStorage (Buffer로 받아 Base64 반환)
+const memUpload = multer({ storage: multer.memoryStorage(), fileFilter: imgFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
-router.post('/image', handleImageUpload);
+// 로컬: diskStorage
+const imgStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    filename: (req, file, cb) => {
+        const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const origName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const ext = path.extname(origName).toLowerCase() || path.extname(file.originalname).toLowerCase() || '.jpg';
+        cb(null, unique + ext);
+    }
+});
+const diskUpload = multer({ storage: imgStorage, fileFilter: imgFilter, limits: { fileSize: 10 * 1024 * 1024 } });
+
+// 이미지 업로드 라우터: Vercel → Base64 data URL, 로컬 → /uploads/<file>
+router.post('/image', (req, res) => {
+    if (IS_VERCEL) {
+        // Vercel: memory로 받아서 Base64 data URL 반환
+        memUpload.single('image')(req, res, (err) => {
+            if (err) {
+                console.error('[upload/image] Vercel multer error:', err.message);
+                return res.status(400).json({ success: false, error: err.message });
+            }
+            if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다' });
+            const mime = req.file.mimetype || 'image/jpeg';
+            const b64 = req.file.buffer.toString('base64');
+            const dataUrl = `data:${mime};base64,${b64}`;
+            console.log('[upload/image] Vercel: Base64 반환, size:', req.file.size);
+            res.json({ success: true, url: dataUrl, filename: req.file.originalname, type: 'base64' });
+        });
+    } else {
+        // 로컬: disk에 저장 후 /uploads/<filename> 반환
+        diskUpload.single('image')(req, res, (err) => {
+            if (err) {
+                console.error('[upload/image] multer error:', err.message);
+                return res.status(400).json({ success: false, error: err.message });
+            }
+            if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다' });
+            console.log('[upload/image] 저장 완료:', req.file.path, '→', `/uploads/${req.file.filename}`);
+            res.json({ success: true, url: `/uploads/${req.file.filename}`, filename: req.file.filename, type: 'file' });
+        });
+    }
+});
 
 router.delete('/image/:filename', (req, res) => {
     const filePath = path.join(UPLOAD_DIR, req.params.filename);
