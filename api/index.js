@@ -7,6 +7,11 @@ if (!process.env.MASTER_PASSWORD) {
     process.env.MASTER_PASSWORD = 'master2026';
 }
 
+// Vercel 환경 명시 (upload.js의 IS_VERCEL 감지에 사용)
+if (!process.env.VERCEL) {
+    process.env.VERCEL = '1';
+}
+
 const express = require('express');
 const cors    = require('cors');
 const helmet  = require('helmet');
