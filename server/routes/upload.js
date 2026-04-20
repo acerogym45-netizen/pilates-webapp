@@ -26,20 +26,35 @@ const imgStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, UPLOAD_DIR),
     filename:    (req, file, cb) => {
         const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, unique + path.extname(file.originalname));
+        // 원본 확장자 추출 (한글 파일명도 안전하게 처리)
+        const origName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        const ext = path.extname(origName).toLowerCase() || path.extname(file.originalname).toLowerCase() || '.jpg';
+        cb(null, unique + ext);
     }
 });
 const imgFilter = (req, file, cb) => {
-    /jpeg|jpg|png|gif|webp/.test(path.extname(file.originalname).toLowerCase())
-        ? cb(null, true)
-        : cb(new Error('이미지 파일만 허용됩니다'));
+    // MIME 타입 우선 체크 + 확장자 이중 체크 (한글 파일명 안전 처리)
+    const mimeOk = /^image\/(jpeg|png|gif|webp)$/.test(file.mimetype);
+    const origName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    const extOk = /\.(jpe?g|png|gif|webp)$/i.test(origName) || /\.(jpe?g|png|gif|webp)$/i.test(file.originalname);
+    mimeOk || extOk ? cb(null, true) : cb(new Error('이미지 파일만 허용됩니다 (JPG/PNG/GIF/WEBP)'));
 };
 const uploadImage = multer({ storage: imgStorage, fileFilter: imgFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
-router.post('/image', uploadImage.single('image'), (req, res) => {
-    if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다' });
-    res.json({ success: true, url: `/uploads/${req.file.filename}`, filename: req.file.filename });
-});
+// multer 에러를 JSON으로 처리하는 래퍼
+function handleImageUpload(req, res) {
+    uploadImage.single('image')(req, res, (err) => {
+        if (err) {
+            console.error('[upload/image] multer error:', err.message);
+            return res.status(400).json({ success: false, error: err.message });
+        }
+        if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다' });
+        console.log('[upload/image] 저장 완료:', req.file.path, '→', `/uploads/${req.file.filename}`);
+        res.json({ success: true, url: `/uploads/${req.file.filename}`, filename: req.file.filename });
+    });
+}
+
+router.post('/image', handleImageUpload);
 
 router.delete('/image/:filename', (req, res) => {
     const filePath = path.join(UPLOAD_DIR, req.params.filename);

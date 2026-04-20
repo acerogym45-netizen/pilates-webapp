@@ -352,6 +352,27 @@ router.post('/curricula', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+router.put('/curricula/:id', async (req, res) => {
+    try {
+        const { year, month, title, content, image_url } = req.body;
+        const sb = getSupabase();
+        const updates = {};
+        if (year !== undefined)       updates.year       = parseInt(year);
+        if (month !== undefined)      updates.month      = parseInt(month);
+        if (title !== undefined)      updates.title      = title;
+        if (content !== undefined)    updates.content    = content;
+        if (image_url !== undefined)  updates.image_url  = image_url;
+        const { data, error } = await sb
+            .from('curricula')
+            .update(updates)
+            .eq('id', req.params.id)
+            .select()
+            .single();
+        if (error) throw sbErr(error, 'PUT /curricula/:id');
+        res.json({ success: true, data });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 router.delete('/curricula/:id', async (req, res) => {
     try {
         const sb = getSupabase();
