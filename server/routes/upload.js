@@ -11,23 +11,23 @@ const { getSupabase, sbErr } = require('../db-supabase');
 require('dotenv').config();
 
 /* ── 이미지 업로드 ─────────────────────────────────────────────────────── */
-// Vercel 환경 감지: /var/task 또는 VERCEL 환경변수
-const IS_VERCEL = !!process.env.VERCEL || __dirname.startsWith('/var/task');
+// Vercel 환경 감지 함수 (요청 시점에 평가 → 환경변수 주입 타이밍 문제 해결)
+// /var/task = Vercel 서버리스 런타임 경로, VERCEL env = Vercel 자동 주입 또는 api/index.js 수동 설정
+function isVercelEnv() {
+    return !!process.env.VERCEL || __dirname.startsWith('/var/task');
+}
 
-// 로컬: diskStorage → /uploads/<filename> URL 반환
-// Vercel: memoryStorage → Base64 data URL 반환 (파일시스템 read-only)
-const UPLOAD_DIR = IS_VERCEL
-    ? '/tmp/uploads'
-    : (process.env.UPLOAD_DIR
-        ? path.resolve(process.env.UPLOAD_DIR)
-        : path.resolve(__dirname, '../../public/uploads'));
+// 로컬 diskStorage용 UPLOAD_DIR (Vercel에서는 사용하지 않음)
+const UPLOAD_DIR = process.env.UPLOAD_DIR
+    ? path.resolve(process.env.UPLOAD_DIR)
+    : path.resolve(__dirname, '../../public/uploads');
 
 try {
-    if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    if (!isVercelEnv() && !fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 } catch (e) {
     console.warn('UPLOAD_DIR 생성 실패 (무시):', e.message);
 }
-console.log('[upload] UPLOAD_DIR:', UPLOAD_DIR, IS_VERCEL ? '(Vercel/tmp)' : '(local)');
+console.log('[upload] UPLOAD_DIR:', UPLOAD_DIR, isVercelEnv() ? '(Vercel→memStorage)' : '(local/disk)');
 
 const imgFilter = (req, file, cb) => {
     // MIME 타입 우선 체크 (image/* 전체 허용) + 확장자 이중 체크 (한글 파일명 안전 처리)
@@ -39,10 +39,10 @@ const imgFilter = (req, file, cb) => {
     (mimeOk || extOk || isCanvasUpload) ? cb(null, true) : cb(new Error('이미지 파일만 허용됩니다 (JPG/PNG/GIF/WEBP)'));
 };
 
-// Vercel: memoryStorage (Buffer로 받아 Base64 반환)
+// memoryStorage (Vercel용, 항상 준비)
 const memUpload = multer({ storage: multer.memoryStorage(), fileFilter: imgFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
-// 로컬: diskStorage
+// diskStorage (로컬용)
 const imgStorage = multer.diskStorage({
     destination: (req, file, cb) => cb(null, UPLOAD_DIR),
     filename: (req, file, cb) => {
@@ -54,9 +54,11 @@ const imgStorage = multer.diskStorage({
 });
 const diskUpload = multer({ storage: imgStorage, fileFilter: imgFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
-// 이미지 업로드 라우터: Vercel → Base64 data URL, 로컬 → /uploads/<file>
+// 이미지 업로드 라우터: 요청 시점에 Vercel 감지 → Base64 data URL, 로컬 → /uploads/<file>
 router.post('/image', (req, res) => {
-    if (IS_VERCEL) {
+    // 요청마다 환경 재확인 (모듈 로드 시점 타이밍 문제 방지)
+    const vercel = isVercelEnv();
+    if (vercel) {
         // Vercel: memory로 받아서 Base64 data URL 반환
         memUpload.single('image')(req, res, (err) => {
             if (err) {
