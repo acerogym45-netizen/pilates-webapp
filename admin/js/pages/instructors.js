@@ -58,28 +58,54 @@ const instructors = {
     },
     previewPhoto(input) {
         if (!input.files[0]) return;
+        const file = input.files[0];
         const reader = new FileReader();
         reader.onload = e => {
-            document.getElementById('iPhotoPreview').innerHTML = `<img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">`;
+            const preview = document.getElementById('iPhotoPreview');
+            if (preview) {
+                preview.innerHTML = `
+                    <img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid #27ae60">
+                    <div style="font-size:.75rem;color:#27ae60;margin-top:4px"><i class="fas fa-check-circle"></i> 파일 선택됨: ${escHtml(file.name)}</div>`;
+            }
+            // iPhoto URL 필드는 비워두기 (파일 우선 사용 명확히 표시)
+            const iPhoto = document.getElementById('iPhoto');
+            if (iPhoto) iPhoto.placeholder = '파일 업로드 선택됨 (저장 시 자동 처리)';
         };
-        reader.readAsDataURL(input.files[0]);
+        reader.readAsDataURL(file);
     },
     async save(id) {
         const name = document.getElementById('iName').value.trim();
         if (!name) { showToast('이름을 입력하세요', 'error'); return; }
-        
+
+        // 저장 버튼 로딩 표시
+        const saveBtn = document.querySelector('#globalModal .btn-primary');
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 저장 중...'; }
+
         let photoUrl = document.getElementById('iPhoto').value.trim();
         const fileInput = document.getElementById('iPhotoFile');
-        
+
         // 파일 업로드 처리
-        if (fileInput.files[0]) {
+        if (fileInput && fileInput.files && fileInput.files[0]) {
             try {
                 const formData = new FormData();
                 formData.append('image', fileInput.files[0]);
-                const res = await fetch('/api/upload/image', { method: 'POST', body: formData });
+                // 절대 URL 사용 (sandbox 환경에서 상대경로 오동작 방지)
+                const uploadUrl = window.location.origin + '/api/upload/image';
+                const res = await fetch(uploadUrl, { method: 'POST', body: formData });
+                if (!res.ok) throw new Error('HTTP ' + res.status);
                 const result = await res.json();
-                if (result.success) photoUrl = result.url;
-            } catch(e) { showToast('이미지 업로드 실패', 'error'); return; }
+                if (result.success && result.url) {
+                    photoUrl = result.url;
+                    console.log('[instructor] 이미지 업로드 성공:', photoUrl);
+                } else {
+                    throw new Error(result.error || '업로드 응답 오류');
+                }
+            } catch(e) {
+                console.error('[instructor] 이미지 업로드 실패:', e);
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+                showToast('이미지 업로드 실패: ' + e.message, 'error');
+                return;
+            }
         }
 
         try {
@@ -115,7 +141,11 @@ const instructors = {
                 showToast('저장되었습니다');
                 await this.load();
             }
-        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+        } catch(e) {
+            console.error('[instructor] save 오류:', e);
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+            showToast('저장 실패: ' + e.message, 'error');
+        }
     },
     deleteItem(id) {
         showConfirm('삭제 확인', '강사를 삭제하시겠습니까?', async () => {
