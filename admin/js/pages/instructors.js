@@ -73,6 +73,27 @@ const instructors = {
         };
         reader.readAsDataURL(file);
     },
+    // 이미지를 Canvas로 리사이즈 후 Blob 반환 (최대 800px, JPEG 0.85)
+    _resizeImage(file, maxPx = 800) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                URL.revokeObjectURL(url);
+                let w = img.width, h = img.height;
+                if (w > maxPx || h > maxPx) {
+                    if (w >= h) { h = Math.round(h * maxPx / w); w = maxPx; }
+                    else        { w = Math.round(w * maxPx / h); h = maxPx; }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w; canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.85);
+            };
+            img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+            img.src = url;
+        });
+    },
     async save(id) {
         const name = document.getElementById('iName').value.trim();
         if (!name) { showToast('이름을 입력하세요', 'error'); return; }
@@ -84,21 +105,27 @@ const instructors = {
         let photoUrl = document.getElementById('iPhoto').value.trim();
         const fileInput = document.getElementById('iPhotoFile');
 
-        // 파일 업로드 처리
+        // 파일 업로드 처리 (Canvas 리사이즈 → JPEG → FormData)
         if (fileInput && fileInput.files && fileInput.files[0]) {
             try {
+                const origFile = fileInput.files[0];
+                // Canvas로 리사이즈 (최대 800px, JPEG 변환) → multipart 오류 방지
+                const blob = await this._resizeImage(origFile);
+                const uploadFile = blob
+                    ? new File([blob], 'photo.jpg', { type: 'image/jpeg' })
+                    : origFile;
+
                 const formData = new FormData();
-                formData.append('image', fileInput.files[0]);
-                // 절대 URL 사용 (sandbox 환경에서 상대경로 오동작 방지)
+                formData.append('image', uploadFile);
                 const uploadUrl = window.location.origin + '/api/upload/image';
                 const res = await fetch(uploadUrl, { method: 'POST', body: formData });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const result = await res.json();
-                if (result.success && result.url) {
+                // 에러 응답 body도 읽어서 정확한 메시지 표시
+                const result = await res.json().catch(() => ({ success: false, error: 'HTTP ' + res.status }));
+                if (res.ok && result.success && result.url) {
                     photoUrl = result.url;
                     console.log('[instructor] 이미지 업로드 성공:', photoUrl);
                 } else {
-                    throw new Error(result.error || '업로드 응답 오류');
+                    throw new Error(result.error || 'HTTP ' + res.status);
                 }
             } catch(e) {
                 console.error('[instructor] 이미지 업로드 실패:', e);
@@ -222,19 +249,23 @@ const curricula = {
         let imageUrl = document.getElementById('cuImage').value.trim();
         const fileInput = document.getElementById('cuImageFile');
 
-        // 파일 업로드 처리 (절대 URL 사용)
+        // 파일 업로드 처리 (Canvas 리사이즈 → JPEG → FormData)
         if (fileInput && fileInput.files && fileInput.files[0]) {
             try {
+                const origFile = fileInput.files[0];
+                const blob = await instructors._resizeImage(origFile);
+                const uploadFile = blob
+                    ? new File([blob], 'image.jpg', { type: 'image/jpeg' })
+                    : origFile;
                 const formData = new FormData();
-                formData.append('image', fileInput.files[0]);
+                formData.append('image', uploadFile);
                 const uploadUrl = window.location.origin + '/api/upload/image';
                 const res = await fetch(uploadUrl, { method: 'POST', body: formData });
-                if (!res.ok) throw new Error('HTTP ' + res.status);
-                const result = await res.json();
-                if (result.success && result.url) {
+                const result = await res.json().catch(() => ({ success: false, error: 'HTTP ' + res.status }));
+                if (res.ok && result.success && result.url) {
                     imageUrl = result.url;
                 } else {
-                    throw new Error(result.error || '업로드 응답 오류');
+                    throw new Error(result.error || 'HTTP ' + res.status);
                 }
             } catch(e) {
                 console.error('[curricula] 이미지 업로드 실패:', e);

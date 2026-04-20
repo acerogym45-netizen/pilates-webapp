@@ -33,11 +33,14 @@ const imgStorage = multer.diskStorage({
     }
 });
 const imgFilter = (req, file, cb) => {
-    // MIME 타입 우선 체크 + 확장자 이중 체크 (한글 파일명 안전 처리)
-    const mimeOk = /^image\/(jpeg|png|gif|webp)$/.test(file.mimetype);
+    // MIME 타입 우선 체크 (image/* 전체 허용) + 확장자 이중 체크 (한글 파일명 안전 처리)
+    const mimeOk = /^image\//.test(file.mimetype) || file.mimetype === 'application/octet-stream';
     const origName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-    const extOk = /\.(jpe?g|png|gif|webp)$/i.test(origName) || /\.(jpe?g|png|gif|webp)$/i.test(file.originalname);
-    mimeOk || extOk ? cb(null, true) : cb(new Error('이미지 파일만 허용됩니다 (JPG/PNG/GIF/WEBP)'));
+    const extOk = /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(origName)
+               || /\.(jpe?g|png|gif|webp|bmp|tiff?)$/i.test(file.originalname);
+    // 파일명이 photo.jpg (Canvas 업로드)인 경우 항상 허용
+    const isCanvasUpload = file.originalname === 'photo.jpg' || file.originalname === 'image.jpg';
+    (mimeOk || extOk || isCanvasUpload) ? cb(null, true) : cb(new Error('이미지 파일만 허용됩니다 (JPG/PNG/GIF/WEBP)'));
 };
 const uploadImage = multer({ storage: imgStorage, fileFilter: imgFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
