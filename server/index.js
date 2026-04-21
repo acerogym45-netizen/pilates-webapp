@@ -4,6 +4,9 @@
  * - 로컬 개발: .env의 SUPABASE_URL / SUPABASE_KEY 사용
  * - 프로덕션(Vercel): 환경변수로 자동 연결
  */
+// ── 타임존 설정: 서버 전체를 한국 표준시(KST, UTC+9)로 고정 ──────────────────
+process.env.TZ = 'Asia/Seoul';
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');

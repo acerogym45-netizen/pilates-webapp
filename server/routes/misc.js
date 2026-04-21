@@ -6,6 +6,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { getSupabase, sbErr } = require('../db-supabase');
+const { sendInquiryAnswerSms, getSmsStatus, isSmsConfigured } = require('../utils/sms');
 
 // ── 로컬 doc_urls 스토어 (DB에 doc_urls 컬럼이 없을 때 파일 기반 대체 저장소) ──
 const DOC_META_FILE = path.join(__dirname, '../../data/refund_doc_meta.json');
@@ -211,6 +212,14 @@ router.put('/inquiries/:id', async (req, res) => {
     try {
         const { answer, is_hidden } = req.body;
         const sb = getSupabase();
+
+        // 기존 문의 정보 조회 (SMS 발송에 필요한 phone, name, title + 이전 답변 여부 확인)
+        const { data: prevInquiry } = await sb
+            .from('inquiries')
+            .select('id, name, phone, title, answer, complex_id')
+            .eq('id', req.params.id)
+            .single();
+
         const updates = { is_hidden: Boolean(is_hidden) };
         if (answer !== undefined) {
             updates.answer = answer;
@@ -223,7 +232,39 @@ router.put('/inquiries/:id', async (req, res) => {
             .select()
             .single();
         if (error) throw sbErr(error);
-        res.json({ success: true, data });
+
+        // ── SMS 자동 발송 ────────────────────────────────────────────
+        // 답변이 새로 등록되었고(이전에 답변이 없었거나 답변이 변경됨), 전화번호가 있을 때
+        let smsResult = null;
+        if (answer && prevInquiry?.phone) {
+            const wasAnsweredBefore = Boolean(prevInquiry.answer);
+
+            // 단지명 조회
+            let complexName = '';
+            try {
+                const { data: cx } = await sb
+                    .from('complexes')
+                    .select('name')
+                    .eq('id', prevInquiry.complex_id)
+                    .single();
+                if (cx) complexName = cx.name;
+            } catch (_) { /* 무시 */ }
+
+            // 신규 답변 등록 시에만 SMS 발송 (답변 수정은 발송 안 함)
+            if (!wasAnsweredBefore) {
+                smsResult = await sendInquiryAnswerSms({
+                    phone: prevInquiry.phone,
+                    name:  prevInquiry.name,
+                    title: prevInquiry.title,
+                    answer: answer,
+                    complexName,
+                });
+                console.log('[inquiries] SMS 발송 결과:', smsResult);
+            }
+        }
+        // ─────────────────────────────────────────────────────────────
+
+        res.json({ success: true, data, sms: smsResult });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -468,13 +509,50 @@ router.post('/cancellations', async (req, res) => {
 
 router.put('/cancellations/:id', async (req, res) => {
     try {
-        const { status, refund_amount, doc_urls } = req.body;
+        const {
+            status, refund_amount, doc_urls,
+            // ── 해지 관리비 부과 필드 ──────────────────────────
+            termination_date,        // 실제 해지 처리 날짜 (YYYY-MM-DD)
+            termination_month,       // 해지 처리 월 (YYYY-MM)
+            attended_sessions,       // 해지 월 실제 수강 횟수
+            total_sessions_in_month, // 해지 월 총 수강 가능 횟수
+            session_fee,             // 1회당 수강료 단가
+            billing_amount,          // 청구 금액 (수강횟수 × 단가, 자동계산 or 수동)
+            billing_memo,            // 청구 메모
+            billing_processed,       // 청구 처리 여부
+        } = req.body;
         const sb = getSupabase();
         const updates = {};
         if (status !== undefined)       updates.status       = status;
         if (refund_amount !== undefined) updates.refund_amount = refund_amount || 0;
         if (status === 'approved' || status === 'rejected') {
             updates.processed_at = new Date().toISOString();
+            // 승인 시 해지 처리 월 자동 설정 (미입력 시)
+            if (status === 'approved' && !termination_month) {
+                const now = new Date();
+                const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+                const y = kst.getUTCFullYear();
+                const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
+                updates.termination_month = `${y}-${m}`;
+            }
+        }
+
+        // ── 해지 관리비 필드 업데이트 ─────────────────────────
+        if (termination_date    !== undefined) updates.termination_date        = termination_date || null;
+        if (termination_month   !== undefined) updates.termination_month       = termination_month || null;
+        if (attended_sessions   !== undefined) updates.attended_sessions       = parseInt(attended_sessions) || 0;
+        if (total_sessions_in_month !== undefined) updates.total_sessions_in_month = parseInt(total_sessions_in_month) || 0;
+        if (session_fee         !== undefined) updates.session_fee             = parseInt(session_fee) || 0;
+        if (billing_memo        !== undefined) updates.billing_memo            = billing_memo || null;
+        if (billing_processed   !== undefined) {
+            updates.billing_processed    = !!billing_processed;
+            updates.billing_processed_at = billing_processed ? new Date().toISOString() : null;
+        }
+        // billing_amount: 자동 계산 (attended_sessions × session_fee) 또는 수동 입력
+        if (billing_amount !== undefined) {
+            updates.billing_amount = parseInt(billing_amount) || 0;
+        } else if (attended_sessions !== undefined && session_fee !== undefined) {
+            updates.billing_amount = (parseInt(attended_sessions) || 0) * (parseInt(session_fee) || 0);
         }
 
         // doc_urls: DB 컬럼 있으면 저장, 없으면 로컬에 저장
@@ -501,24 +579,36 @@ router.put('/cancellations/:id', async (req, res) => {
             error = result.error;
             data  = result.data;
 
-            // doc_urls 컬럼 없으면 doc_urls 제외하고 재시도
-            if (error && (error.message?.includes('doc_urls') || error.message?.includes('Cannot coerce'))) {
-                const retryData = { ...updatesForDb };
-                delete retryData.doc_urls;
-                if (Object.keys(retryData).length > 0) {
-                    const retry = await sb.from('cancellations').update(retryData).eq('id', req.params.id).select().single();
-                    if (retry.error) throw sbErr(retry.error);
-                    data  = retry.data;
-                } else {
+            // 컬럼 없음 오류 시 해당 컬럼 제거 후 재시도 (점진적 fallback)
+            const OPTIONAL_COLS = [
+                'billing_processed_at', 'billing_processed', 'billing_amount', 'billing_memo',
+                'session_fee', 'total_sessions_in_month', 'attended_sessions',
+                'termination_month', 'termination_date', 'doc_urls'
+            ];
+            let retryCount = 0;
+            while (error && retryCount < OPTIONAL_COLS.length) {
+                const errMsg = error.message || '';
+                // 오류 메시지에서 정확한 컬럼명 추출 시도
+                const exactMatch = errMsg.match(/column[s]? '?([a-z_]+)'? (of|in)/i);
+                const exactCol = exactMatch ? exactMatch[1] : null;
+                // 정확 매칭 우선, 없으면 오류 메시지에 포함된 컬럼 찾기
+                const badCol = (exactCol && OPTIONAL_COLS.includes(exactCol))
+                    ? exactCol
+                    : OPTIONAL_COLS.find(col => errMsg.includes(col));
+                if (!badCol) break;
+                delete updatesForDb[badCol];
+                console.warn(`[cancellations PUT] 컬럼 '${badCol}' 없음 - 제외 후 재시도 (${retryCount+1}차)`);
+                if (Object.keys(updatesForDb).length === 0) {
                     const { data: existing, error: fetchErr } = await sb
                         .from('cancellations').select('*').eq('id', req.params.id).single();
                     if (fetchErr) throw sbErr(fetchErr);
-                    data = existing;
+                    data = existing; error = null; break;
                 }
-                error = null;
-            } else if (error) {
-                throw sbErr(error);
+                const retry = await sb.from('cancellations').update(updatesForDb).eq('id', req.params.id).select().single();
+                error = retry.error; data = retry.data;
+                retryCount++;
             }
+            if (error) throw sbErr(error);
         }
 
         // doc_urls 로컬 저장 (항상 백업 + DB 컬럼 없을 때 유일한 저장소)
@@ -593,6 +683,85 @@ router.get('/stats/dashboard', async (req, res) => {
             }
         });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════
+// SMS 설정 관리
+// ═══════════════════════════════════════════════════════
+
+/**
+ * GET /api/sms/status
+ * SMS 설정 상태 조회 (관리자용)
+ */
+router.get('/sms/status', (req, res) => {
+    res.json({ success: true, ...getSmsStatus() });
+});
+
+/**
+ * POST /api/sms/settings
+ * SMS 설정 저장 (런타임 환경변수 업데이트)
+ * body: { apiKey, apiSecret, sender, enabled }
+ *
+ * ※ 이 설정은 현재 프로세스의 환경변수를 덮어쓰며,
+ *    서버 재시작 시 .env 파일이 우선합니다.
+ *    Vercel 환경에서는 Vercel 대시보드 > Environment Variables에서 설정하세요.
+ */
+router.post('/sms/settings', (req, res) => {
+    try {
+        const { apiKey, apiSecret, sender, enabled } = req.body;
+
+        if (apiKey    !== undefined && apiKey    !== '') process.env.SOLAPI_API_KEY    = apiKey;
+        if (apiSecret !== undefined && apiSecret !== '') process.env.SOLAPI_API_SECRET = apiSecret;
+        if (sender    !== undefined && sender    !== '') process.env.SOLAPI_SENDER     = sender;
+        if (enabled   !== undefined) process.env.SMS_ENABLED = String(enabled);
+
+        // 솔라피 서비스 인스턴스 재생성 (키가 바뀌었을 수 있으므로)
+        // sms.js 모듈의 캐시 초기화는 require 캐시 삭제로 처리
+        try {
+            const smsModulePath = require.resolve('../utils/sms');
+            if (require.cache[smsModulePath]) {
+                delete require.cache[smsModulePath];
+            }
+        } catch(_) {}
+
+        console.log('[SMS] 설정 업데이트:', { sender: process.env.SOLAPI_SENDER, enabled: process.env.SMS_ENABLED });
+        res.json({ success: true, message: 'SMS 설정이 저장되었습니다', ...getSmsStatus() });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+/**
+ * POST /api/sms/test
+ * SMS 테스트 발송 (관리자용)
+ * body: { phone, name }
+ */
+router.post('/sms/test', async (req, res) => {
+    try {
+        const { phone, name } = req.body;
+        if (!phone) return res.status(400).json({ success: false, error: '전화번호를 입력하세요' });
+
+        const { sendInquiryAnswerSms: sendSms } = require('../utils/sms');
+        const result = await sendSms({
+            phone,
+            name: name || '테스트',
+            title: '테스트 문의 제목',
+            answer: '테스트 답변입니다. SMS 연동이 정상적으로 작동합니다.',
+            complexName: '테스트 단지',
+        });
+
+        if (result.skipped) {
+            return res.status(400).json({ success: false, error: 'SMS가 비활성화되어 있습니다. 설정을 먼저 완료하세요.' });
+        }
+
+        res.json({
+            success: result.success,
+            message: result.success ? `${phone}으로 테스트 SMS를 발송했습니다` : `발송 실패: ${result.error}`,
+            result,
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 module.exports = router;

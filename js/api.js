@@ -125,6 +125,13 @@ const API = (() => {
             }
         },
 
+        // ─── SMS 설정 ────────────────────────────────────
+        sms: {
+            status:   ()         => req('GET',  '/sms/status'),
+            settings: (data)     => req('POST', '/sms/settings', data),
+            test:     (phone, name) => req('POST', '/sms/test', { phone, name }),
+        },
+
         // ─── CSV 가져오기 ────────────────────────────────
         importCsv: {
             templateUrl: (type) => `${BASE}/upload/csv/template/${type}`,

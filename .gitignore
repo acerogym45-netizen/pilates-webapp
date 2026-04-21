@@ -36,6 +36,12 @@ database.sqlite
 *.sqlite
 *.tar.gz
 *.tar
+
+# Uploaded files (로컬 업로드 파일 - Vercel/서버마다 달라 추적 불필요)
+public/uploads/
+
+# Test CSV files
+test_*.csv
 ecosystem.config.cjs
 push-to-github.sh
 test_api.sh

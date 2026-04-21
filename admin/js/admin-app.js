@@ -340,9 +340,39 @@ function showToast(msg, type = 'success') {
 }
 
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
+/**
+ * UTC 날짜 문자열을 KST(한국표준시 UTC+9)로 변환하여 표시
+ * Supabase DB는 UTC로 저장하므로 +9시간 변환 필요
+ */
 function formatDate(str) {
     if (!str) return '-';
-    return str.slice(0, 16).replace('T', ' ');
+    try {
+        const d = new Date(str);
+        if (isNaN(d.getTime())) return str.slice(0, 16).replace('T', ' ');
+        // KST = UTC + 9h
+        const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        const y = kst.getUTCFullYear();
+        const mo = String(kst.getUTCMonth() + 1).padStart(2, '0');
+        const da = String(kst.getUTCDate()).padStart(2, '0');
+        const h  = String(kst.getUTCHours()).padStart(2, '0');
+        const mi = String(kst.getUTCMinutes()).padStart(2, '0');
+        return `${y}-${mo}-${da} ${h}:${mi}`;
+    } catch(e) {
+        return str.slice(0, 16).replace('T', ' ');
+    }
+}
+/** 날짜만 반환 (KST 기준) */
+function formatDateOnly(str) {
+    if (!str) return '-';
+    try {
+        const d = new Date(str);
+        if (isNaN(d.getTime())) return str.slice(0, 10);
+        const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        const y = kst.getUTCFullYear();
+        const mo = String(kst.getUTCMonth() + 1).padStart(2, '0');
+        const da = String(kst.getUTCDate()).padStart(2, '0');
+        return `${y}-${mo}-${da}`;
+    } catch(e) { return str.slice(0, 10); }
 }
 function statusLabel(s) {
     const map = { approved:'승인', waiting:'대기', rejected:'거부', cancelled:'해지', expired:'만료', transferred:'양도', received:'양수', pending:'대기중' };

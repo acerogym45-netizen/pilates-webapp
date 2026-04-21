@@ -410,7 +410,69 @@ const mycomplex = {
                         <i class="fas fa-download"></i> QR 이미지 다운로드
                     </a>
                 </div>
+            </div>
+
+            <!-- SMS 알림 설정 카드 (비동기로 상태 로드) -->
+            <div class="settings-card" id="smsSettingsCard">
+                <div class="settings-card-header">
+                    <i class="fas fa-sms"></i> SMS 자동 알림 설정
+                    <span id="smsBadge" style="margin-left:8px;font-size:.75rem;padding:2px 8px;border-radius:10px;background:#e8f5e9;color:#27ae60;display:none">
+                        <i class="fas fa-check-circle"></i> 활성화
+                    </span>
+                </div>
+                <div class="settings-card-body">
+                    <p style="font-size:.875rem;color:#666;margin-bottom:16px;line-height:1.6">
+                        <i class="fas fa-info-circle" style="color:#3498db"></i>
+                        문의 답변이 등록되면 입주민 전화번호로 <strong>자동 SMS</strong>를 발송합니다.<br>
+                        <a href="https://console.solapi.com" target="_blank" style="color:#3498db">솔라피 콘솔</a>에서 발급받은 API Key를 입력하세요.
+                    </p>
+
+                    <!-- 현재 설정 상태 -->
+                    <div id="smsStatusArea" style="margin-bottom:16px;padding:10px 14px;background:#f8f9fa;border-radius:8px;font-size:.85rem">
+                        <i class="fas fa-spinner fa-spin"></i> 설정 상태 로딩 중...
+                    </div>
+
+                    <!-- 설정 폼 -->
+                    <div class="form-group">
+                        <label>솔라피 API Key <span class="req">*</span></label>
+                        <input type="text" id="smsApiKey" placeholder="예: NCSA1ABCDEF01234" autocomplete="off">
+                        <small style="color:#999">솔라피 콘솔 > 개발 > API Key 관리에서 확인</small>
+                    </div>
+                    <div class="form-group">
+                        <label>솔라피 API Secret <span class="req">*</span></label>
+                        <input type="password" id="smsApiSecret" placeholder="API Secret 입력" autocomplete="new-password">
+                    </div>
+                    <div class="form-group">
+                        <label>발신 전화번호 <span class="req">*</span></label>
+                        <input type="text" id="smsSender" placeholder="예: 0212345678 또는 01012345678">
+                        <small style="color:#999">솔라피에 등록된 발신번호를 입력하세요 (하이픈 제외)</small>
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:center;gap:10px">
+                        <label style="margin:0;display:flex;align-items:center;gap:8px;cursor:pointer">
+                            <input type="checkbox" id="smsEnabled" style="width:18px;height:18px;cursor:pointer">
+                            SMS 발송 활성화
+                        </label>
+                    </div>
+
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+                        <button class="btn-primary btn-sm" onclick="mycomplex._saveSmsSettings()">
+                            <i class="fas fa-save"></i> 설정 저장
+                        </button>
+                        <button class="btn-secondary btn-sm" onclick="mycomplex._showSmsTestModal()">
+                            <i class="fas fa-paper-plane"></i> 테스트 발송
+                        </button>
+                    </div>
+
+                    <div style="margin-top:14px;padding:10px 14px;background:#fff8e1;border-radius:8px;font-size:.8rem;color:#7d6608;line-height:1.6">
+                        <i class="fas fa-exclamation-triangle"></i> <strong>Vercel 배포 환경</strong>에서는 Vercel 대시보드 > Settings > Environment Variables에서
+                        <code>SOLAPI_API_KEY</code>, <code>SOLAPI_API_SECRET</code>, <code>SOLAPI_SENDER</code>를 설정하세요.
+                        이 폼은 현재 실행 중인 서버에 즉시 적용되며 서버 재시작 시 초기화됩니다.
+                    </div>
+                </div>
             </div>`;
+
+        // SMS 설정 상태 비동기 로드
+        setTimeout(() => mycomplex._loadSmsStatus(), 100);
     },
 
     _showAdminEditForm() {
@@ -494,6 +556,122 @@ const mycomplex = {
             showToast('비밀번호가 변경되었습니다. 다음 로그인부터 새 비밀번호를 사용하세요');
         } catch(e) {
             showToast('변경 실패: ' + e.message, 'error');
+        }
+    },
+
+    /* ─── SMS 설정 ─────────────────────────────────────────── */
+
+    /** SMS 설정 상태 로드 후 폼에 반영 */
+    async _loadSmsStatus() {
+        const area = document.getElementById('smsStatusArea');
+        const badge = document.getElementById('smsBadge');
+        if (!area) return;
+        try {
+            const res = await fetch('/api/sms/status');
+            const d = await res.json();
+            if (d.configured) {
+                area.innerHTML = `
+                    <span style="color:#27ae60"><i class="fas fa-check-circle"></i> 솔라피 API Key 설정됨</span>
+                    &nbsp;·&nbsp; 발신번호: <strong>${d.sender || '-'}</strong>
+                    &nbsp;·&nbsp; 상태: <strong>${d.enabled ? '✅ 발송 활성화' : '⛔ 발송 비활성화'}</strong>`;
+                if (d.sender) document.getElementById('smsSender').placeholder = d.sender;
+                if (d.apiKeyPreview) document.getElementById('smsApiKey').placeholder = d.apiKeyPreview + ' (변경 시 입력)';
+                if (badge) { badge.style.display = d.enabled ? 'inline' : 'none'; }
+                document.getElementById('smsEnabled').checked = d.enabled;
+            } else {
+                area.innerHTML = `<span style="color:#e67e22"><i class="fas fa-exclamation-circle"></i> SMS 미설정 — API Key를 입력하여 활성화하세요</span>`;
+                if (badge) badge.style.display = 'none';
+            }
+        } catch(e) {
+            area.innerHTML = `<span style="color:#e74c3c"><i class="fas fa-times-circle"></i> 상태 조회 실패: ${e.message}</span>`;
+        }
+    },
+
+    /** SMS 설정 저장 */
+    async _saveSmsSettings() {
+        const apiKey    = document.getElementById('smsApiKey').value.trim();
+        const apiSecret = document.getElementById('smsApiSecret').value.trim();
+        const sender    = document.getElementById('smsSender').value.trim().replace(/\D/g, '');
+        const enabled   = document.getElementById('smsEnabled').checked;
+
+        if (!sender && !apiKey) {
+            showToast('발신번호 또는 API Key를 입력하세요', 'error');
+            return;
+        }
+        if (sender && !/^0\d{9,10}$/.test(sender)) {
+            showToast('발신번호 형식이 올바르지 않습니다 (숫자만, 예: 0212345678)', 'error');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/sms/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey, apiSecret, sender, enabled }),
+            });
+            const d = await res.json();
+            if (d.success) {
+                showToast('SMS 설정이 저장되었습니다');
+                // 입력 필드 초기화 (보안)
+                document.getElementById('smsApiKey').value    = '';
+                document.getElementById('smsApiSecret').value = '';
+                await mycomplex._loadSmsStatus();
+            } else {
+                showToast('저장 실패: ' + d.error, 'error');
+            }
+        } catch(e) {
+            showToast('저장 실패: ' + e.message, 'error');
+        }
+    },
+
+    /** 테스트 SMS 발송 모달 */
+    _showSmsTestModal() {
+        const body = `
+            <p style="font-size:.875rem;color:#666;margin-bottom:16px">
+                입력한 번호로 테스트 SMS를 발송합니다. 실제 문자 비용이 발생합니다.
+            </p>
+            <div class="form-group">
+                <label>수신 전화번호 <span class="req">*</span></label>
+                <input type="text" id="testSmsPhone" placeholder="01012345678" maxlength="11">
+            </div>
+            <div class="form-group">
+                <label>수신자 이름</label>
+                <input type="text" id="testSmsName" placeholder="홍길동" value="테스트">
+            </div>`;
+        const footer = `
+            <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
+            <button class="btn-primary" onclick="mycomplex._sendTestSms()">
+                <i class="fas fa-paper-plane"></i> 발송
+            </button>`;
+        openGlobalModal('<i class="fas fa-sms"></i> SMS 테스트 발송', body, footer);
+    },
+
+    /** 테스트 SMS 실제 발송 */
+    async _sendTestSms() {
+        const phone = document.getElementById('testSmsPhone').value.trim().replace(/\D/g, '');
+        const name  = document.getElementById('testSmsName').value.trim() || '테스트';
+        if (!phone || !/^01\d{8,9}$/.test(phone)) {
+            showToast('올바른 휴대폰 번호를 입력하세요 (예: 01012345678)', 'error');
+            return;
+        }
+        const btn = document.querySelector('#globalModal .btn-primary');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 발송 중...'; }
+        try {
+            const res = await fetch('/api/sms/test', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, name }),
+            });
+            const d = await res.json();
+            closeGlobalModal();
+            if (d.success) {
+                showToast(`✅ ${d.message}`, 'success');
+            } else {
+                showToast('❌ ' + (d.error || d.message), 'error');
+            }
+        } catch(e) {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> 발송'; }
+            showToast('발송 실패: ' + e.message, 'error');
         }
     }
 };

@@ -1,3 +1,32 @@
+// ── 날짜 유틸: UTC → KST(+9h) 변환 ──────────────────────────────────────────
+/**
+ * UTC ISO 문자열을 KST 날짜 문자열로 변환 (YYYY. M. D. 형식)
+ * Supabase DB는 UTC로 저장하므로 +9시간 변환 필요
+ */
+function kstDateStr(iso) {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso.slice(0, 10);
+        const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        return `${kst.getUTCFullYear()}. ${kst.getUTCMonth()+1}. ${kst.getUTCDate()}.`;
+    } catch(e) { return iso.slice(0, 10); }
+}
+function kstDateTimeStr(iso) {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso.slice(0, 16).replace('T',' ');
+        const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        const y = kst.getUTCFullYear();
+        const mo = String(kst.getUTCMonth()+1).padStart(2,'0');
+        const da = String(kst.getUTCDate()).padStart(2,'0');
+        const h  = String(kst.getUTCHours()).padStart(2,'0');
+        const mi = String(kst.getUTCMinutes()).padStart(2,'0');
+        return `${y}-${mo}-${da} ${h}:${mi}`;
+    } catch(e) { return iso.slice(0,16).replace('T',' '); }
+}
+
 // State Management
 let formData = {};
 let signaturePad = null;
@@ -760,10 +789,12 @@ async function searchMyInquiries() {
             return;
         }
 
+        // UTC → KST(+9h) 변환하여 날짜 표시
         const fmtDate = (iso) => {
             if (!iso) return '';
             const d = new Date(iso);
-            return `${d.getFullYear()}. ${d.getMonth()+1}. ${d.getDate()}.`;
+            const kst = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+            return `${kst.getUTCFullYear()}. ${kst.getUTCMonth()+1}. ${kst.getUTCDate()}.`;
         };
 
         resultEl.innerHTML = `
@@ -978,7 +1009,7 @@ async function loadPublicInquiries() {
                         <i class="fas fa-question-circle"></i> ${escapeHtml(inq.title)}
                     </div>
                     <div class="inquiry-date">
-                        ${new Date(inq.created_at).toLocaleDateString('ko-KR')}
+                        ${kstDateStr(inq.created_at)}
                     </div>
                 </div>
                 <div class="inquiry-content">
@@ -988,7 +1019,7 @@ async function loadPublicInquiries() {
                     <div class="inquiry-reply">
                         <strong><i class="fas fa-reply"></i> 답변</strong>
                         ${escapeHtml(inq.reply)}
-                        ${inq.reply_date ? `<div style="margin-top: 8px; font-size: 12px; color: #718096;">${new Date(inq.reply_date).toLocaleDateString('ko-KR')}</div>` : ''}
+                        ${inq.reply_date ? `<div style="margin-top: 8px; font-size: 12px; color: #718096;">${kstDateStr(inq.reply_date)}</div>` : ''}
                     </div>
                 ` : '<div style="color: #718096; font-size: 14px; margin-top: 10px;"><i class="fas fa-clock"></i> 답변 대기중</div>'}
             </div>
@@ -1156,7 +1187,7 @@ async function lookupMyApplication() {
                         <span style="color:#94a3b8">동·호수</span>
                         <span>${a.dong} ${a.ho}</span>
                         <span style="color:#94a3b8">신청일</span>
-                        <span>${a.created_at ? a.created_at.slice(0,10) : '-'}</span>
+                        <span>${a.created_at ? kstDateStr(a.created_at) : '-'}</span>
                     </div>
                 </div>`).join('')}
                 <p style="font-size:.76rem;color:#9ca3af;text-align:center;margin-top:6px">
@@ -1445,7 +1476,7 @@ function displayNotices(notices) {
                     ${escapeHtml(notice.content || '')}
                 </div>
                 <div class="notice-date">
-                    <i class="fas fa-calendar"></i> ${new Date(notice.created_at).toLocaleDateString('ko-KR')}
+                    <i class="fas fa-calendar"></i> ${kstDateStr(notice.created_at)}
                 </div>
             </div>
         `;
