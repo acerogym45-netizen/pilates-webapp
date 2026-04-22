@@ -377,32 +377,56 @@ async function submitContract() {
     }
 }
 
-// 중복 신청 검사 함수 (동+호+이름+전화번호 모두 일치 시 중복)
+// 프로그램명으로 카테고리 분류 (서버 로직과 동일)
+function _getProgramCategory(programName) {
+    if (!programName) return 'group';
+    if (/1:1|개인/.test(programName)) return 'individual';
+    if (/2:1|듀엣/.test(programName)) return 'duet';
+    return 'group';
+}
+
+// 중복 신청 검사 함수 (같은 카테고리 내에서만 중복 차단)
+// 그룹 수업 수강 중이어도 개인/듀엣 레슨은 추가 신청 가능
 async function checkDuplicateApplication(contractData) {
     try {
         const complexCode = complexContext.getComplexCode();
-        const { dong, ho, name, phone } = contractData;
+        const { dong, ho, name, phone, lesson_type } = contractData;
 
-        console.log(`🔍 중복 검사: ${dong}동 ${ho}호 ${name} (${phone})`);
+        console.log(`🔍 중복 검사: ${dong}동 ${ho}호 ${name} (${phone}) → 신청 프로그램: ${lesson_type}`);
 
-        // 동+호+이름+전화번호 모두 일치하는 승인/대기 신청 조회
+        // 신청하려는 프로그램의 카테고리
+        const targetCategory = _getProgramCategory(lesson_type);
+        console.log(`📂 신청 카테고리: ${targetCategory}`);
+
+        // 동+호+이름+전화번호 일치하는 활성 신청 전체 조회
         const params = new URLSearchParams({ complexCode, dong, ho, limit: 100 });
         const response = await fetch(`/api/applications?${params}`);
         const result = await response.json();
         const contracts = result.data || [];
 
-        const duplicates = contracts.filter(c =>
+        const activeContracts = contracts.filter(c =>
             c.name  === name  &&
             c.phone === phone &&
             (c.status === 'approved' || c.status === 'waiting')
         );
 
-        if (duplicates.length > 0) {
-            console.log(`⚠️ 중복 발견: ${duplicates.length}건`);
-            return { isDuplicate: true, existing: duplicates[0] };
+        // 같은 카테고리의 신청만 중복으로 판단
+        const sameCategoryDup = activeContracts.find(c =>
+            _getProgramCategory(c.program_name) === targetCategory
+        );
+
+        if (sameCategoryDup) {
+            const categoryLabel = targetCategory === 'individual' ? '개인 레슨'
+                : targetCategory === 'duet' ? '듀엣 레슨' : '그룹 수업';
+            console.log(`⚠️ 같은 카테고리(${categoryLabel}) 중복 발견:`, sameCategoryDup.program_name);
+            return { isDuplicate: true, existing: sameCategoryDup };
         }
 
-        console.log('✅ 중복 없음');
+        if (activeContracts.length > 0) {
+            console.log(`ℹ️ 다른 카테고리 신청 ${activeContracts.length}건 있음 → 허용 (카테고리 다름)`);
+        }
+
+        console.log('✅ 중복 없음 - 신청 진행');
         return { isDuplicate: false };
 
     } catch (error) {
