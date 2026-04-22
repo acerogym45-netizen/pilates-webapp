@@ -159,27 +159,72 @@ router.post('/', async (req, res) => {
         // ── 중복 신청 체크 ─────────────────────────────────────────
         // admin_bypass=true 이면 관리자가 직접 추가하는 경우이므로 중복 체크 생략
         if (!admin_bypass) {
-            // 동 + 호 + 이름 + 전화번호가 모두 일치하는 활성 신청이 있으면 차단
-            const { data: dupCheck } = await sb
+            // 신청하려는 프로그램의 타입을 먼저 파악
+            // 개인 레슨(1:1) / 듀엣 레슨(2:1)은 그룹 레슨과 병행 수강이 가능하므로
+            // 같은 카테고리(그룹끼리, 개인끼리, 듀엣끼리) 내에서만 중복 차단
+            let targetProgramType = 'group'; // 기본값
+            {
+                let prog = null;
+                if (program_id) {
+                    const { data: p } = await sb.from('programs').select('type, name').eq('id', program_id).single();
+                    prog = p;
+                } else if (program_name && complex_id) {
+                    const { data: ps } = await sb.from('programs').select('type, name')
+                        .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
+                    prog = ps?.[0] || null;
+                }
+                // DB type 컬럼 외에 프로그램명으로도 개인/듀엣 여부 판별 (하위 호환)
+                if (prog) {
+                    if (prog.type === 'individual' || /1:1|개인/.test(prog.name)) targetProgramType = 'individual';
+                    else if (prog.type === 'duet' || /2:1|듀엣/.test(prog.name)) targetProgramType = 'duet';
+                    else targetProgramType = 'group';
+                } else {
+                    // program_name만으로 판별
+                    if (/1:1|개인/.test(program_name)) targetProgramType = 'individual';
+                    else if (/2:1|듀엣/.test(program_name)) targetProgramType = 'duet';
+                }
+            }
+
+            // 동 + 호 + 이름 + 전화번호가 모두 일치하는 활성 신청 전체 조회
+            const { data: existingApps } = await sb
                 .from('applications')
-                .select('id, program_name, status')
+                .select('id, program_name, program_id, status')
                 .eq('complex_id', complex_id)
                 .eq('dong', dong)
                 .eq('ho', ho)
                 .eq('name', name)
                 .eq('phone', phone)
-                .in('status', ['approved', 'waiting'])
-                .limit(1);
+                .in('status', ['approved', 'waiting']);
 
-            if (dupCheck && dupCheck.length > 0) {
-                return res.status(409).json({
-                    success: false,
-                    duplicate: true,
-                    error: '이미 수강 신청 내역이 있습니다. 중복 수강 희망 시 관리자에게 별도 문의하세요.',
-                    existingProgram: dupCheck[0].program_name,
-                    existingStatus: dupCheck[0].status,
-                    existingId: dupCheck[0].id
+            if (existingApps && existingApps.length > 0) {
+                // 기존 신청들의 타입 분류 (이름 기반 heuristic)
+                const isSameCategory = existingApps.some(app => {
+                    let existType = 'group';
+                    if (/1:1|개인/.test(app.program_name)) existType = 'individual';
+                    else if (/2:1|듀엣/.test(app.program_name)) existType = 'duet';
+                    return existType === targetProgramType;
                 });
+
+                if (isSameCategory) {
+                    // 같은 카테고리의 신청이 이미 존재 → 중복 차단
+                    const sameApp = existingApps.find(app => {
+                        let existType = 'group';
+                        if (/1:1|개인/.test(app.program_name)) existType = 'individual';
+                        else if (/2:1|듀엣/.test(app.program_name)) existType = 'duet';
+                        return existType === targetProgramType;
+                    });
+                    const categoryLabel = targetProgramType === 'individual' ? '개인 레슨'
+                        : targetProgramType === 'duet' ? '듀엣 레슨' : '그룹 수업';
+                    return res.status(409).json({
+                        success: false,
+                        duplicate: true,
+                        error: `이미 ${categoryLabel} 신청 내역이 있습니다. 중복 수강 희망 시 관리자에게 별도 문의하세요.`,
+                        existingProgram: sameApp.program_name,
+                        existingStatus: sameApp.status,
+                        existingId: sameApp.id
+                    });
+                }
+                // 다른 카테고리(예: 그룹 신청이 있는데 개인/듀엣 신청) → 허용 (fall-through)
             }
         }
 
