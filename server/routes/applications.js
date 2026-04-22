@@ -716,7 +716,7 @@ router.post('/:id/change-time', async (req, res) => {
         const sb = getSupabase();
         const { data: app, error: fetchErr } = await sb
             .from('applications')
-            .select('id, phone, status, program_id, program_name, preferred_time, dong, ho, name, complex_id')
+            .select('id, phone, status, program_id, program_name, preferred_time, dong, ho, name, complex_id, notes')
             .eq('id', id)
             .single();
 
@@ -809,19 +809,41 @@ router.post('/:id/change-time', async (req, res) => {
             });
         }
 
-        const oldProgramId = app.program_id;
-        const oldTime = app.preferred_time;
+        const oldProgramId   = app.program_id;
+        const oldProgramName  = app.program_name;
+        const oldTime         = app.preferred_time;
+        const changedAt       = new Date().toISOString();
 
-        // 변경 실행
+        // ── 변경 이력 notes 컬럼에 누적 저장 ───────────────────────────────
+        const changed = [];
+        if (targetProgram.name !== oldProgramName)   changed.push(`프로그램: ${oldProgramName} → ${targetProgram.name}`);
+        if (new_preferred_time !== oldTime)           changed.push(`시간대: ${oldTime} → ${new_preferred_time}`);
+
+        const changeMeta = JSON.stringify({
+            changed_at:       changedAt,
+            changed_by:       'user',
+            from_program:     oldProgramName,
+            from_time:        oldTime,
+            to_program:       targetProgram.name,
+            to_time:          new_preferred_time,
+            change_summary:   changed.join(', ')
+        });
+        const prevNotes = app.notes || '';
+        const newNotes  = prevNotes
+            ? prevNotes + '\n[변경] ' + changeMeta
+            : '[변경] ' + changeMeta;
+
+        // 변경 실행 (notes에 이력 포함)
         const { error: updateErr } = await sb
             .from('applications')
             .update({
-                program_id: targetProgramId,
-                program_name: targetProgram.name,
+                program_id:    targetProgramId,
+                program_name:  targetProgram.name,
                 preferred_time: new_preferred_time,
-                status: 'approved',
+                status:        'approved',
                 waiting_order: null,
-                updated_at: new Date().toISOString()
+                notes:         newNotes,
+                updated_at:    changedAt
             })
             .eq('id', id);
 
@@ -829,10 +851,6 @@ router.post('/:id/change-time', async (req, res) => {
 
         // 이전 슬롯에서 대기자 승급 (기존 4월 대기자 처리용으로 유지)
         await promoteWaitingApplicant(sb, oldProgramId, oldTime);
-
-        const changed = [];
-        if (targetProgramId !== app.program_id) changed.push(`프로그램: ${targetProgram.name}`);
-        if (new_preferred_time !== app.preferred_time) changed.push(`시간대: ${new_preferred_time}`);
 
         res.json({
             success: true,

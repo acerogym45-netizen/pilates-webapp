@@ -264,6 +264,23 @@ const applications = {
                 ${transferInfo}
                 <div class="detail-row"><label>신청일</label><span>${formatDate(a.created_at)}</span></div>
                 ${(() => { const cm = applications._parseCancelMeta(a.notes); return cm ? `<div class="detail-row" style="background:#fff3f3;border-radius:6px;padding:6px 10px"><label style="color:#c0392b">취소일시</label><span style="color:#c0392b;font-weight:600">${formatDate(cm.cancelled_at)}</span></div><div class="detail-row"><label>취소 유형</label><span>${cm.cancel_reason || (cm.cancel_type === 'waiting' ? '대기 취소' : '승인 신청 취소')}</span></div>` : ''; })()}
+                ${(() => {
+                    const logs = applications._parseChangeLogs(a.notes);
+                    if (!logs.length) return '';
+                    const rows = logs.map((lg, i) => `
+                        <div style="background:#f0f4ff;border-left:3px solid #4f46e5;border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:6px;font-size:.82rem">
+                            <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                                <span style="font-weight:600;color:#4f46e5"><i class="fas fa-exchange-alt" style="margin-right:4px"></i>변경 ${i+1}</span>
+                                <span style="color:#6b7280">${formatDate(lg.changed_at)}</span>
+                            </div>
+                            ${lg.from_program !== lg.to_program ? `<div style="color:#374151">프로그램: <span style="color:#991b1b">${escHtml(lg.from_program||'-')}</span> → <span style="color:#166534">${escHtml(lg.to_program||'-')}</span></div>` : ''}
+                            ${lg.from_time !== lg.to_time ? `<div style="color:#374151">시간대: <span style="color:#991b1b">${lg.from_time||'-'}</span> → <span style="color:#166534">${lg.to_time||'-'}</span></div>` : ''}
+                        </div>`).join('');
+                    return `<div class="detail-row full" style="margin-top:4px">
+                        <label style="color:#4f46e5"><i class="fas fa-history"></i> 변경 이력 (${logs.length}건)</label>
+                        <div style="margin-top:6px">${rows}</div>
+                    </div>`;
+                })()}
                 ${a.notes ? `<div class="detail-row"><label>메모</label><span style="white-space:pre-wrap;font-size:.82rem">${escHtml(a.notes)}</span></div>` : ''}
                 ${a.signature_data ? `
                 <div class="detail-row full">
@@ -627,6 +644,20 @@ const applications = {
             if (m) return JSON.parse(m[1]);
         } catch(e) {}
         return null;
+    },
+
+    // 변경 이력 전체 파싱 (notes 컬럼에서 [변경] JSON 블록들 릪 배열로 추출)
+    _parseChangeLogs(notes) {
+        if (!notes) return [];
+        const logs = [];
+        try {
+            const re = /\[변경\]\s*(\{[^}]+\})/gs;
+            let m;
+            while ((m = re.exec(notes)) !== null) {
+                try { logs.push(JSON.parse(m[1])); } catch(e) {}
+            }
+        } catch(e) {}
+        return logs;
     },
 
     deleteItem(id) {
