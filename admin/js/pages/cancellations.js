@@ -758,7 +758,7 @@ const inquiries = {
                 </div>
                 <div class="item-main">
                     <strong>${q.title}</strong>
-                    <p>${q.name} ${q.dong ? '| ' + q.dong + ' ' + q.ho : ''}</p>
+                    <p>${q.name} ${q.dong ? '| ' + q.dong + ' ' + q.ho : ''}${q.phone ? ' | <a href="tel:' + q.phone.replace(/[^\d+]/g,'') + '" onclick="event.stopPropagation()" style="color:#4f46e5;text-decoration:none;font-weight:600">' + q.phone + '</a>' : ''}</p>
                     <small>${formatDate(q.created_at)}</small>
                 </div>
                 <i class="fas fa-chevron-right item-arrow"></i>
@@ -771,6 +771,7 @@ const inquiries = {
             <div class="detail-grid">
                 <div class="detail-row"><label>이름</label><span>${q.name}</span></div>
                 ${q.dong ? `<div class="detail-row"><label>동/호수</label><span>${q.dong} ${q.ho}</span></div>` : ''}
+                ${q.phone ? `<div class="detail-row"><label>연락처</label><span><a href="tel:${q.phone.replace(/[^\d+]/g,'')}" style="color:#4f46e5;font-weight:600;text-decoration:none"><i class="fas fa-phone" style="margin-right:4px"></i>${q.phone}</a></span></div>` : ''}
                 <div class="detail-row"><label>공개</label><span>${q.is_public ? '공개' : '비공개'}</span></div>
                 <div class="detail-row full"><label>제목</label><span>${q.title}</span></div>
                 <div class="detail-row full"><label>내용</label><p style="white-space:pre-wrap">${q.content}</p></div>
