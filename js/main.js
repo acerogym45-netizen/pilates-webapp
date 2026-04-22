@@ -1068,11 +1068,11 @@ async function loadPublicInquiries() {
                 <div class="inquiry-content">
                     ${escapeHtml(inq.content)}
                 </div>
-                ${inq.reply ? `
+                ${(inq.answer && inq.answer.trim()) ? `
                     <div class="inquiry-reply">
                         <strong><i class="fas fa-reply"></i> 답변</strong>
-                        ${escapeHtml(inq.reply)}
-                        ${inq.reply_date ? `<div style="margin-top: 8px; font-size: 12px; color: #718096;">${kstDateStr(inq.reply_date)}</div>` : ''}
+                        ${escapeHtml(inq.answer)}
+                        ${inq.answered_at ? `<div style="margin-top: 8px; font-size: 12px; color: #718096;">${kstDateStr(inq.answered_at)}</div>` : ''}
                     </div>
                 ` : '<div style="color: #718096; font-size: 14px; margin-top: 10px;"><i class="fas fa-clock"></i> 답변 대기중</div>'}
             </div>
