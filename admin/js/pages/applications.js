@@ -211,7 +211,7 @@ const applications = {
                     <div class="item-main">
                         <strong>${a.dong} ${a.ho} | ${a.name}</strong>${transferBadge}${sessionsBadge}
                         <p>${a.program_name}${a.preferred_time ? ' | ' + a.preferred_time : ''}${a.monthly_fee ? ' | ₩' + parseInt(a.monthly_fee).toLocaleString() : ''}</p>
-                        <small>${a.phone} | ${formatDate(a.created_at)}${a.transfer_date ? ' | 양도일: ' + a.transfer_date : ''}</small>
+                        <small>${a.phone} | ${formatDate(a.created_at)}${a.transfer_date ? ' | 양도일: ' + a.transfer_date : ''}${(() => { const cm = applications._parseCancelMeta(a.notes); return cm ? ' | 취소: ' + formatDate(cm.cancelled_at) : ''; })()}</small>
                     </div>
                     <i class="fas fa-chevron-right item-arrow"></i>
                 </div>`;
@@ -263,7 +263,8 @@ const applications = {
                 ${a.transfer_memo ? `<div class="detail-row"><label>양도 메모</label><span>${a.transfer_memo}</span></div>` : ''}
                 ${transferInfo}
                 <div class="detail-row"><label>신청일</label><span>${formatDate(a.created_at)}</span></div>
-                ${a.notes ? `<div class="detail-row"><label>메모</label><span>${a.notes}</span></div>` : ''}
+                ${(() => { const cm = applications._parseCancelMeta(a.notes); return cm ? `<div class="detail-row" style="background:#fff3f3;border-radius:6px;padding:6px 10px"><label style="color:#c0392b">취소일시</label><span style="color:#c0392b;font-weight:600">${formatDate(cm.cancelled_at)}</span></div><div class="detail-row"><label>취소 유형</label><span>${cm.cancel_reason || (cm.cancel_type === 'waiting' ? '대기 취소' : '승인 신청 취소')}</span></div>` : ''; })()}
+                ${a.notes ? `<div class="detail-row"><label>메모</label><span style="white-space:pre-wrap;font-size:.82rem">${escHtml(a.notes)}</span></div>` : ''}
                 ${a.signature_data ? `
                 <div class="detail-row full">
                     <label>서명</label>
@@ -618,8 +619,23 @@ const applications = {
         } catch (e) { showToast('변경 실패: ' + e.message, 'error'); }
     },
 
+    // 취소 메타데이터 파싱 (notes 컬럼에서 [취소] JSON 블록 추출)
+    _parseCancelMeta(notes) {
+        if (!notes) return null;
+        try {
+            const m = notes.match(/\[취소\]\s*(\{[^}]+\})/s);
+            if (m) return JSON.parse(m[1]);
+        } catch(e) {}
+        return null;
+    },
+
     deleteItem(id) {
-        showConfirm('삭제 확인', '이 신청을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.', async () => {
+        const a = this.data.find(x => x.id === id);
+        const isCancelled = a && a.status === 'cancelled';
+        const confirmMsg = isCancelled
+            ? '⚠️ 이미 해지된 신청입니다.\n\n수강 기록 보존을 위해 삭제 대신 해지(cancelled) 상태로 유지하는 것을 권장합니다.\n\n그래도 완전히 삭제하시겠습니까?'
+            : '⚠️ 신청을 완전 삭제하면 수강 기록도 사라져 관리비 부과 근거가 없어집니다.\n\n취소 처리(해지)는 상태 변경 버튼을 이용하세요.\n\n그래도 완전히 삭제하시겠습니까?';
+        showConfirm('삭제 확인', confirmMsg, async () => {
             try {
                 await API.applications.delete(id);
                 closeGlobalModal();
@@ -630,8 +646,10 @@ const applications = {
     },
 
     exportCSV() {
-        const headers = ['신청일', '상태', '동', '호수', '이름', '전화번호', '프로그램', '희망시간', '대기순번', '월수강료', '총횟수', '잔여횟수', '양도일', '메모'];
-        const rows = this.filtered.map(a => ({
+        const headers = ['신청일', '상태', '동', '호수', '이름', '전화번호', '프로그램', '희망시간', '대기순번', '월수강료', '총횟수', '잔여횟수', '양도일', '취소일시', '메모'];
+        const rows = this.filtered.map(a => {
+            const cm = this._parseCancelMeta(a.notes);
+            return {
             '신청일': formatDate(a.created_at),
             '상태': statusLabel(a.status),
             '동': a.dong, '호수': a.ho, '이름': a.name, '전화번호': a.phone,
@@ -641,8 +659,9 @@ const applications = {
             '총횟수': a.total_sessions || '',
             '잔여횟수': a.remaining_sessions != null ? a.remaining_sessions : '',
             '양도일': a.transfer_date || '',
+            '취소일시': cm ? formatDate(cm.cancelled_at) : '',
             '메모': a.notes || ''
-        }));
+        };});
         downloadCSV(`신청목록_${new Date().toLocaleDateString('ko')}.csv`, rows, headers);
     },
 

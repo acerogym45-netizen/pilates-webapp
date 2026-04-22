@@ -393,7 +393,7 @@ router.post('/:id/cancel-waiting', async (req, res) => {
         // 해당 신청 조회
         const { data: app, error: fetchErr } = await sb
             .from('applications')
-            .select('id, phone, status, program_id, preferred_time, waiting_order')
+            .select('id, phone, status, program_id, program_name, preferred_time, waiting_order, notes')
             .eq('id', id)
             .single();
 
@@ -412,23 +412,33 @@ router.post('/:id/cancel-waiting', async (req, res) => {
             return res.status(400).json({ success: false, error: '대기 중인 신청만 취소할 수 있습니다' });
         }
 
-        // 삭제
+        // ── 삭제 대신 status='cancelled' 로 변경 (수강 기록 보존) ──
+        const cancelledAt = new Date().toISOString();
+        const cancelMeta = JSON.stringify({
+            cancelled_at: cancelledAt,
+            cancelled_by: 'user',
+            cancel_type: 'waiting',
+            cancel_reason: '입주민 대기 직접 취소'
+        });
+        const prevNotes = app.notes || '';
+        const newNotes = prevNotes
+            ? prevNotes + '\n[취소] ' + cancelMeta
+            : '[취소] ' + cancelMeta;
+
         const { error: delErr } = await sb
             .from('applications')
-            .delete()
+            .update({
+                status: 'cancelled',
+                waiting_order: null,
+                notes: newNotes,
+                updated_at: cancelledAt
+            })
             .eq('id', id);
 
-        if (delErr) throw sbErr(delErr, 'cancel-waiting DELETE');
+        if (delErr) throw sbErr(delErr, 'cancel-waiting UPDATE→cancelled');
 
-        // 삭제 후 뒤 순번 당기기
+        // 뒤 순번 당기기 (대기 취소 시 waiting_order 재정렬)
         if (app.program_id && app.preferred_time && app.waiting_order) {
-            await sb.from('applications')
-                .update({ waiting_order: sb.rpc ? undefined : null }) // handled below
-                .eq('program_id', app.program_id)
-                .eq('preferred_time', app.preferred_time)
-                .eq('status', 'waiting')
-                .gt('waiting_order', app.waiting_order);
-
             // waiting_order 재정렬: 취소된 순번보다 큰 것들 -1
             const { data: laterWaiting } = await sb
                 .from('applications')
@@ -476,7 +486,7 @@ router.post('/:id/cancel-approved', async (req, res) => {
         const sb = getSupabase();
         const { data: app, error: fetchErr } = await sb
             .from('applications')
-            .select('id, phone, status, program_id, preferred_time, dong, ho, name')
+            .select('id, phone, status, program_id, program_name, preferred_time, dong, ho, name, notes')
             .eq('id', id)
             .single();
 
@@ -495,11 +505,33 @@ router.post('/:id/cancel-approved', async (req, res) => {
             return res.status(400).json({ success: false, error: '승인된 신청만 취소할 수 있습니다 (대기 신청은 대기 취소 기능 사용)' });
         }
 
-        // 삭제
-        const { error: delErr } = await sb.from('applications').delete().eq('id', id);
-        if (delErr) throw sbErr(delErr, 'cancel-approved DELETE');
+        // ── 삭제 대신 status='cancelled' 로 변경 (수강 기록 보존) ──
+        // 이유: 취소 전까지의 수강 이력이 관리비 부과 근거로 필요
+        //       관리자 페이지 > 신청관리 > 해지 탭에서 cancelled 레코드 조회 가능
+        const cancelledAt = new Date().toISOString();
+        // notes 컬럼에 취소 메타데이터 기록 (DB 스키마 변경 없이 보존)
+        const cancelMeta = JSON.stringify({
+            cancelled_at: cancelledAt,
+            cancelled_by: 'user',
+            cancel_type: 'approved',
+            cancel_reason: '입주민 직접 취소 (20~27일 접수기간)'
+        });
+        const prevNotes = app.notes || '';
+        const newNotes = prevNotes
+            ? prevNotes + '\n[취소] ' + cancelMeta
+            : '[취소] ' + cancelMeta;
 
-        // 대기자 자동 승급
+        const { error: delErr } = await sb
+            .from('applications')
+            .update({
+                status: 'cancelled',
+                notes: newNotes,
+                updated_at: cancelledAt
+            })
+            .eq('id', id);
+        if (delErr) throw sbErr(delErr, 'cancel-approved UPDATE→cancelled');
+
+        // 대기자 자동 승급 (해당 슬롯에 대기자 있으면 승인으로 올림)
         await promoteWaitingApplicant(sb, app.program_id, app.preferred_time);
 
         res.json({ success: true, message: '신청이 취소되었습니다. 다음 달 수강은 종료됩니다.' });
@@ -769,13 +801,43 @@ router.post('/:id/change-time', async (req, res) => {
     }
 });
 
-// ── 신청 삭제 ────────────────────────────────────────────────
+// ── 신청 삭제 (관리자용) ─────────────────────────────────────
+// ?force=true 파라미터가 있을 때만 물리 삭제, 없으면 status='deleted' 소프트 삭제
 router.delete('/:id', async (req, res) => {
     try {
         const sb = getSupabase();
-        const { error } = await sb.from('applications').delete().eq('id', req.params.id);
-        if (error) throw sbErr(error, 'DELETE /applications/:id');
-        res.json({ success: true, message: '삭제되었습니다' });
+        const force = req.query.force === 'true';
+
+        if (force) {
+            // 물리 삭제 (완전히 지움 - 복구 불가)
+            const { error } = await sb.from('applications').delete().eq('id', req.params.id);
+            if (error) throw sbErr(error, 'DELETE /applications/:id (force)');
+            res.json({ success: true, message: '완전히 삭제되었습니다' });
+        } else {
+            // 소프트 삭제: status='deleted' 로 마킹 (수강 기록 보존)
+            const deletedAt = new Date().toISOString();
+            const { data: app } = await sb
+                .from('applications')
+                .select('notes')
+                .eq('id', req.params.id)
+                .single();
+            const prevNotes = (app && app.notes) || '';
+            const deleteMeta = JSON.stringify({
+                deleted_at: deletedAt,
+                deleted_by: 'admin',
+                delete_reason: '관리자 삭제'
+            });
+            const newNotes = prevNotes
+                ? prevNotes + '\n[삭제] ' + deleteMeta
+                : '[삭제] ' + deleteMeta;
+
+            const { error } = await sb
+                .from('applications')
+                .update({ status: 'cancelled', notes: newNotes, updated_at: deletedAt })
+                .eq('id', req.params.id);
+            if (error) throw sbErr(error, 'DELETE /applications/:id (soft)');
+            res.json({ success: true, message: '삭제되었습니다 (수강 기록은 해지 탭에서 확인 가능)' });
+        }
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
