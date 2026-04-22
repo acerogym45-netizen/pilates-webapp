@@ -183,36 +183,50 @@ router.post('/', async (req, res) => {
             }
         }
 
-        // 정원 확인
+        // 정원 확인 (대기 시스템 폐기: 마감 시 차단)
         let status = 'approved';
         let waitingOrder = null;
 
-        if (program_id && preferred_time) {
-            const { data: program } = await sb
-                .from('programs')
-                .select('*')
-                .eq('id', program_id)
-                .single();
+        if (preferred_time && (program_id || program_name)) {
+            // program_id 우선, 없으면 program_name으로 프로그램 조회
+            let program = null;
+            if (program_id) {
+                const { data: prog } = await sb
+                    .from('programs')
+                    .select('*')
+                    .eq('id', program_id)
+                    .single();
+                program = prog;
+            } else if (program_name && complex_id) {
+                const { data: progs } = await sb
+                    .from('programs')
+                    .select('*')
+                    .eq('complex_id', complex_id)
+                    .ilike('name', program_name)
+                    .limit(1);
+                program = progs?.[0] || null;
+            }
 
             if (program && program.type === 'group') {
-                const { count: approvedCnt } = await sb
+                // program_id로 카운트 (있을 경우) 또는 program_name으로 카운트
+                const countQuery = sb
                     .from('applications')
                     .select('*', { count: 'exact', head: true })
-                    .eq('program_id', program_id)
                     .eq('preferred_time', preferred_time)
                     .eq('status', 'approved');
 
+                const { count: approvedCnt } = program_id
+                    ? await countQuery.eq('program_id', program.id)
+                    : await countQuery.ilike('program_name', program_name);
+
                 if ((approvedCnt || 0) >= program.capacity) {
-                    status = 'waiting';
-                    const { data: lastWaiting } = await sb
-                        .from('applications')
-                        .select('waiting_order')
-                        .eq('program_id', program_id)
-                        .eq('preferred_time', preferred_time)
-                        .eq('status', 'waiting')
-                        .order('waiting_order', { ascending: false })
-                        .limit(1);
-                    waitingOrder = ((lastWaiting?.[0]?.waiting_order) || 0) + 1;
+                    // ── 대기 시스템 폐기: 정원 마감 시 신규 대기 등록 불가 ──
+                    // 4월에 접수된 기존 대기자는 DB에 유지되나 신규 접수는 차단
+                    return res.status(400).json({
+                        success: false,
+                        is_full: true,
+                        error: `선택한 시간대(${preferred_time})는 정원이 마감되었습니다. 다른 시간대를 선택해 주세요.`
+                    });
                 }
             }
         }
@@ -493,13 +507,101 @@ router.post('/:id/cancel-approved', async (req, res) => {
     }
 });
 
-// ── 입주민 시간대 변경 (접수기간 20~27일, 본인 인증) ─────────────
+// ── 변경 가능한 슬롯 조회 (입주민용) ─────────────────────────
+// GET /api/applications/:id/available-slots
+// 현재 신청자가 이동 가능한 (정원 여유 있는) 모든 프로그램+시간대 반환
+router.get('/:id/available-slots', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { phone4 } = req.query;
+
+        if (!phone4 || !/^\d{4}$/.test(phone4)) {
+            return res.status(400).json({ success: false, error: '전화번호 뒷 4자리를 입력하세요' });
+        }
+
+        const sb = getSupabase();
+
+        // 현재 신청 조회
+        const { data: app, error: fetchErr } = await sb
+            .from('applications')
+            .select('id, phone, status, program_id, preferred_time, complex_id')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !app) {
+            return res.status(404).json({ success: false, error: '신청 내역을 찾을 수 없습니다' });
+        }
+
+        // 전화번호 검증
+        const storedPhone = (app.phone || '').replace(/\D/g, '');
+        if (!storedPhone.endsWith(phone4)) {
+            return res.status(403).json({ success: false, error: '전화번호가 일치하지 않습니다' });
+        }
+
+        // 해당 단지의 모든 활성 프로그램 조회
+        const { data: programs } = await sb
+            .from('programs')
+            .select('id, name, capacity, time_slots')
+            .eq('complex_id', app.complex_id)
+            .eq('is_active', true)
+            .order('name');
+
+        if (!programs || programs.length === 0) {
+            return res.json({ success: true, data: [], current: app });
+        }
+
+        // 모든 프로그램의 시간대별 승인 인원 조회
+        const { data: allApproved } = await sb
+            .from('applications')
+            .select('program_id, preferred_time')
+            .eq('complex_id', app.complex_id)
+            .eq('status', 'approved');
+
+        // 프로그램별·시간대별 승인 카운트 맵 구성
+        const countMap = {};
+        for (const a of (allApproved || [])) {
+            const key = `${a.program_id}::${a.preferred_time}`;
+            countMap[key] = (countMap[key] || 0) + 1;
+        }
+
+        // 변경 가능 슬롯 구성
+        const result = [];
+        for (const prog of programs) {
+            const slots = Array.isArray(prog.time_slots) ? prog.time_slots : [];
+            for (const slot of slots) {
+                // 현재 신청과 동일한 프로그램+시간대면 제외
+                if (prog.id === app.program_id && slot === app.preferred_time) continue;
+
+                const key = `${prog.id}::${slot}`;
+                const approvedCnt = countMap[key] || 0;
+                const isFull = approvedCnt >= (prog.capacity || 1);
+
+                result.push({
+                    program_id: prog.id,
+                    program_name: prog.name,
+                    time: slot,
+                    capacity: prog.capacity,
+                    approved_count: approvedCnt,
+                    available: !isFull,
+                    is_full: isFull
+                });
+            }
+        }
+
+        res.json({ success: true, data: result, current: { program_id: app.program_id, preferred_time: app.preferred_time } });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 입주민 프로그램·시간대 변경 (접수기간 20~27일, 본인 인증) ────
 // POST /api/applications/:id/change-time
-// body: { phone4, new_preferred_time, complexCode }
+// body: { phone4, new_program_id, new_preferred_time }
+// ※ 대기 시스템 폐기: 정원 마감 슬롯은 변경 불가 (기존 대기자는 유지)
 router.post('/:id/change-time', async (req, res) => {
     try {
         const { id } = req.params;
-        const { phone4, new_preferred_time } = req.body;
+        const { phone4, new_program_id, new_preferred_time } = req.body;
 
         if (!phone4 || !/^\d{4}$/.test(phone4)) {
             return res.status(400).json({ success: false, error: '전화번호 뒷 4자리를 입력하세요' });
@@ -512,7 +614,7 @@ router.post('/:id/change-time', async (req, res) => {
         const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
         const dayKst = nowKst.getUTCDate();
         if (dayKst < 20 || dayKst > 27) {
-            return res.status(400).json({ success: false, error: '시간대 변경은 매월 20일~27일에만 가능합니다' });
+            return res.status(400).json({ success: false, error: '변경은 매월 20일~27일에만 가능합니다' });
         }
 
         const sb = getSupabase();
@@ -526,80 +628,95 @@ router.post('/:id/change-time', async (req, res) => {
             return res.status(404).json({ success: false, error: '신청 내역을 찾을 수 없습니다' });
         }
 
-        // 전화번호 뒷 4자리 검증
+        // 전화번호 검증
         const storedPhone = (app.phone || '').replace(/\D/g, '');
         if (!storedPhone.endsWith(phone4)) {
             return res.status(403).json({ success: false, error: '전화번호가 일치하지 않습니다' });
         }
 
-        // 승인/대기 상태만 변경 가능
-        if (!['approved', 'waiting'].includes(app.status)) {
-            return res.status(400).json({ success: false, error: '승인 또는 대기 상태의 신청만 변경할 수 있습니다' });
+        // 승인 상태만 변경 가능 (대기자는 취소 후 재신청)
+        if (app.status !== 'approved') {
+            return res.status(400).json({ success: false, error: '승인된 신청만 변경할 수 있습니다. 대기 신청은 취소 후 재신청해 주세요.' });
         }
 
-        // 같은 시간대면 불필요
-        if (app.preferred_time === new_preferred_time) {
-            return res.status(400).json({ success: false, error: '현재와 동일한 시간대입니다' });
+        // 변경할 프로그램 ID (없으면 현재 프로그램 유지)
+        const targetProgramId = new_program_id || app.program_id;
+
+        // 같은 프로그램+시간대면 불필요
+        if (targetProgramId === app.program_id && app.preferred_time === new_preferred_time) {
+            return res.status(400).json({ success: false, error: '현재와 동일한 프로그램·시간대입니다' });
         }
 
-        // 변경하려는 시간대의 정원 확인
-        const { data: program } = await sb
+        // 대상 프로그램 정원 확인
+        const { data: targetProgram } = await sb
             .from('programs')
-            .select('capacity')
-            .eq('id', app.program_id)
+            .select('id, name, capacity, time_slots, complex_id')
+            .eq('id', targetProgramId)
             .single();
 
+        if (!targetProgram) {
+            return res.status(404).json({ success: false, error: '선택한 프로그램을 찾을 수 없습니다' });
+        }
+
+        // 같은 단지의 프로그램인지 확인
+        if (targetProgram.complex_id !== app.complex_id) {
+            return res.status(400).json({ success: false, error: '다른 단지 프로그램으로는 변경할 수 없습니다' });
+        }
+
+        // 대상 시간대가 해당 프로그램의 유효한 슬롯인지 확인 (슬롯이 있는 프로그램만)
+        const validSlots = Array.isArray(targetProgram.time_slots) ? targetProgram.time_slots : [];
+        if (validSlots.length > 0 && !validSlots.includes(new_preferred_time)) {
+            return res.status(400).json({ success: false, error: '해당 프로그램에 없는 시간대입니다' });
+        }
+
+        // 정원 확인
         const { count: approvedCnt } = await sb
             .from('applications')
             .select('*', { count: 'exact', head: true })
-            .eq('program_id', app.program_id)
+            .eq('program_id', targetProgramId)
             .eq('preferred_time', new_preferred_time)
             .eq('status', 'approved');
 
-        const capacity = program?.capacity || 999;
-        const isFull = (approvedCnt || 0) >= capacity;
-
-        // 이전 시간대에서 대기자 승급 처리 (승인 상태였다면)
-        const oldTime = app.preferred_time;
-        const oldStatus = app.status;
-
-        // 시간대 변경 (정원 있으면 approved, 없으면 waiting)
-        const newStatus = isFull ? 'waiting' : 'approved';
-        let newWaitingOrder = null;
-        if (isFull) {
-            const { count: waitingCnt } = await sb
-                .from('applications')
-                .select('*', { count: 'exact', head: true })
-                .eq('program_id', app.program_id)
-                .eq('preferred_time', new_preferred_time)
-                .eq('status', 'waiting');
-            newWaitingOrder = (waitingCnt || 0) + 1;
+        const capacity = targetProgram.capacity || 1;
+        if ((approvedCnt || 0) >= capacity) {
+            return res.status(400).json({
+                success: false,
+                error: `선택한 시간대(${new_preferred_time})는 정원이 마감되었습니다. 다른 시간대를 선택해 주세요.`,
+                is_full: true
+            });
         }
 
+        const oldProgramId = app.program_id;
+        const oldTime = app.preferred_time;
+
+        // 변경 실행
         const { error: updateErr } = await sb
             .from('applications')
             .update({
+                program_id: targetProgramId,
+                program_name: targetProgram.name,
                 preferred_time: new_preferred_time,
-                status: newStatus,
-                waiting_order: newWaitingOrder,
+                status: 'approved',
+                waiting_order: null,
                 updated_at: new Date().toISOString()
             })
             .eq('id', id);
 
         if (updateErr) throw sbErr(updateErr, 'change-time UPDATE');
 
-        // 이전 시간대가 승인이었다면 대기자 승급
-        if (oldStatus === 'approved') {
-            await promoteWaitingApplicant(sb, app.program_id, oldTime);
-        }
+        // 이전 슬롯에서 대기자 승급 (기존 4월 대기자 처리용으로 유지)
+        await promoteWaitingApplicant(sb, oldProgramId, oldTime);
+
+        const changed = [];
+        if (targetProgramId !== app.program_id) changed.push(`프로그램: ${targetProgram.name}`);
+        if (new_preferred_time !== app.preferred_time) changed.push(`시간대: ${new_preferred_time}`);
 
         res.json({
             success: true,
-            message: isFull
-                ? `시간대가 변경되었습니다. 해당 시간대가 마감되어 대기(${newWaitingOrder}번)로 등록되었습니다.`
-                : `시간대가 ${new_preferred_time}(으)로 변경되었습니다.`,
-            new_status: newStatus,
-            waiting_order: newWaitingOrder
+            message: `${changed.join(', ')}(으)로 변경되었습니다.`,
+            new_status: 'approved',
+            new_program_name: targetProgram.name,
+            new_preferred_time
         });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
