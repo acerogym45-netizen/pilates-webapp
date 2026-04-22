@@ -150,18 +150,21 @@ router.post('/inquiries', async (req, res) => {
 
 /**
  * GET /api/inquiries/my
- * 본인 문의 조회 (비공개 포함) — 동, 호수, 이름, 전화번호 끝 4자리로 인증
- * query: complexId, dong, ho, name, phoneLast4
+ * 본인 문의 조회 (비공개 포함) — 동·호수·전화번호 끝 4자리로 인증 (이름 불필요)
+ * query: complexId, complexCode, dong, ho, phoneLast4
  */
 router.get('/inquiries/my', async (req, res) => {
     try {
-        const { complexId: rawComplexId, complexCode, dong, ho, name, phoneLast4 } = req.query;
-        if (!dong || !ho || !name || !phoneLast4) {
-            return res.status(400).json({ success: false, error: '동, 호수, 이름, 전화번호 끝 4자리를 모두 입력하세요' });
+        const { complexId: rawComplexId, complexCode, dong, ho, phoneLast4 } = req.query;
+        if (!dong || !ho || !phoneLast4) {
+            return res.status(400).json({ success: false, error: '동·호수·전화번호 끝 4자리를 모두 입력하세요' });
+        }
+        if (!/^\d{4}$/.test(phoneLast4.replace(/\D/g, ''))) {
+            return res.status(400).json({ success: false, error: '전화번호 끝 4자리를 숫자 4개로 입력하세요' });
         }
         const sb = getSupabase();
 
-        // complexCode → complex_id 변환 (complexes 조인 없이 eq 사용하기 위함)
+        // complexCode → complex_id 변환
         let resolvedComplexId = rawComplexId || null;
         if (!resolvedComplexId && complexCode) {
             const { data: cx } = await sb
@@ -172,12 +175,12 @@ router.get('/inquiries/my', async (req, res) => {
             if (cx) resolvedComplexId = cx.id;
         }
 
+        // 동·호수로 모든 문의 조회 (phone은 별도 필터링)
         let query = sb
             .from('inquiries')
-            .select('id, dong, ho, name, title, content, answer, is_public, is_hidden, created_at, answered_at')
+            .select('id, dong, ho, name, phone, title, content, answer, is_public, is_hidden, created_at, answered_at')
             .eq('dong', dong)
             .eq('ho', ho)
-            .eq('name', name)
             .order('created_at', { ascending: false });
 
         if (resolvedComplexId) query = query.eq('complex_id', resolvedComplexId);
@@ -185,26 +188,22 @@ router.get('/inquiries/my', async (req, res) => {
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /inquiries/my');
 
-        // 전화번호 끝 4자리 검증 (phone 컬럼 직접 비교)
-        let q2 = sb.from('inquiries')
-            .select('id, phone')
-            .eq('dong', dong).eq('ho', ho).eq('name', name);
-        if (resolvedComplexId) q2 = q2.eq('complex_id', resolvedComplexId);
-        const { data: phoneData } = await q2;
-
-        // phone 끝 4자리가 일치하는 id 셋 구성
-        const validIds = new Set(
-            (phoneData || [])
-                .filter(r => r.phone && r.phone.replace(/\D/g, '').slice(-4) === phoneLast4.replace(/\D/g, ''))
-                .map(r => r.id)
+        // 전화번호 끝 4자리로 필터링 (클라이언트 측)
+        const normalizedPhone4 = phoneLast4.replace(/\D/g, '');
+        const result = (data || []).filter(r =>
+            r.phone && r.phone.replace(/\D/g, '').slice(-4) === normalizedPhone4
         );
 
-        if (validIds.size === 0) {
-            return res.status(404).json({ success: false, error: '일치하는 문의 내역이 없습니다.\n입력 정보를 다시 확인해주세요.' });
+        if (result.length === 0) {
+            return res.status(404).json({
+                success: false,
+                error: '일치하는 문의 내역이 없습니다.\n동·호수·전화번호를 다시 확인해주세요.'
+            });
         }
 
-        const result = (data || []).filter(r => validIds.has(r.id));
-        res.json({ success: true, data: result });
+        // 응답에서 phone 필드 제거 (개인정보 보호)
+        const safeResult = result.map(({ phone: _p, ...rest }) => rest);
+        res.json({ success: true, data: safeResult });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
