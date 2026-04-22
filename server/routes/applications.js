@@ -521,10 +521,10 @@ router.get('/:id/available-slots', async (req, res) => {
 
         const sb = getSupabase();
 
-        // 현재 신청 조회
+        // 현재 신청 조회 (program_name 포함 — null program_id 대비)
         const { data: app, error: fetchErr } = await sb
             .from('applications')
-            .select('id, phone, status, program_id, preferred_time, complex_id')
+            .select('id, phone, status, program_id, program_name, preferred_time, complex_id')
             .eq('id', id)
             .single();
 
@@ -550,30 +550,48 @@ router.get('/:id/available-slots', async (req, res) => {
             return res.json({ success: true, data: [], current: app });
         }
 
-        // 모든 프로그램의 시간대별 승인 인원 조회
+        // 모든 프로그램의 시간대별 승인 인원 조회 (program_id + program_name 모두 가져옴)
         const { data: allApproved } = await sb
             .from('applications')
-            .select('program_id, preferred_time')
+            .select('program_id, program_name, preferred_time')
             .eq('complex_id', app.complex_id)
             .eq('status', 'approved');
 
+        // program name → id 역매핑 (null program_id 레코드를 name으로 연결하기 위함)
+        const nameToId = {};
+        for (const prog of programs) {
+            nameToId[prog.name] = prog.id;
+        }
+
         // 프로그램별·시간대별 승인 카운트 맵 구성
+        // program_id가 null인 경우 program_name으로 실제 program_id를 추론
         const countMap = {};
         for (const a of (allApproved || [])) {
-            const key = `${a.program_id}::${a.preferred_time}`;
+            const resolvedId = a.program_id || nameToId[a.program_name] || null;
+            if (!resolvedId || !a.preferred_time) continue;
+            const key = `${resolvedId}::${a.preferred_time}`;
             countMap[key] = (countMap[key] || 0) + 1;
         }
+
+        // 현재 신청자가 점유하고 있는 슬롯 키 (본인 제외 카운트를 위해)
+        const myProgramId = app.program_id || nameToId[app.program_name] || null;
+        const myKey = myProgramId && app.preferred_time ? `${myProgramId}::${app.preferred_time}` : null;
 
         // 변경 가능 슬롯 구성
         const result = [];
         for (const prog of programs) {
             const slots = Array.isArray(prog.time_slots) ? prog.time_slots : [];
             for (const slot of slots) {
-                // 현재 신청과 동일한 프로그램+시간대면 제외
-                if (prog.id === app.program_id && slot === app.preferred_time) continue;
+                // 현재 신청과 동일한 프로그램+시간대면 제외 (program_id 또는 name 기반 비교)
+                const isSameProg = (prog.id === app.program_id) || (prog.id === myProgramId);
+                if (isSameProg && slot === app.preferred_time) continue;
 
                 const key = `${prog.id}::${slot}`;
-                const approvedCnt = countMap[key] || 0;
+                let approvedCnt = countMap[key] || 0;
+
+                // 현재 슬롯 카운트에 본인이 포함되어 있는 경우 1 차감 (이미 위에서 제외했지만 안전장치)
+                // (이 슬롯이 본인 슬롯이 아니므로 차감 불필요 — 위 continue로 처리됨)
+
                 const isFull = approvedCnt >= (prog.capacity || 1);
 
                 result.push({
@@ -588,7 +606,7 @@ router.get('/:id/available-slots', async (req, res) => {
             }
         }
 
-        res.json({ success: true, data: result, current: { program_id: app.program_id, preferred_time: app.preferred_time } });
+        res.json({ success: true, data: result, current: { program_id: myProgramId || app.program_id, program_name: app.program_name, preferred_time: app.preferred_time } });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
@@ -620,7 +638,7 @@ router.post('/:id/change-time', async (req, res) => {
         const sb = getSupabase();
         const { data: app, error: fetchErr } = await sb
             .from('applications')
-            .select('id, phone, status, program_id, preferred_time, dong, ho, name, complex_id')
+            .select('id, phone, status, program_id, program_name, preferred_time, dong, ho, name, complex_id')
             .eq('id', id)
             .single();
 
@@ -639,23 +657,39 @@ router.post('/:id/change-time', async (req, res) => {
             return res.status(400).json({ success: false, error: '승인된 신청만 변경할 수 있습니다. 대기 신청은 취소 후 재신청해 주세요.' });
         }
 
-        // 변경할 프로그램 ID (없으면 현재 프로그램 유지)
-        const targetProgramId = new_program_id || app.program_id;
+        // 변경할 프로그램 ID (없으면 현재 프로그램 유지, program_id가 null이면 name으로 조회)
+        let targetProgramId = new_program_id || app.program_id;
 
-        // 같은 프로그램+시간대면 불필요
-        if (targetProgramId === app.program_id && app.preferred_time === new_preferred_time) {
-            return res.status(400).json({ success: false, error: '현재와 동일한 프로그램·시간대입니다' });
+        // 대상 프로그램 조회
+        let targetProgram = null;
+        if (targetProgramId) {
+            const { data: prog } = await sb
+                .from('programs')
+                .select('id, name, capacity, time_slots, complex_id')
+                .eq('id', targetProgramId)
+                .single();
+            targetProgram = prog;
         }
 
-        // 대상 프로그램 정원 확인
-        const { data: targetProgram } = await sb
-            .from('programs')
-            .select('id, name, capacity, time_slots, complex_id')
-            .eq('id', targetProgramId)
-            .single();
+        // program_id가 없으면 현재 app의 program_name으로 조회
+        if (!targetProgram && app.program_name) {
+            const { data: progs } = await sb
+                .from('programs')
+                .select('id, name, capacity, time_slots, complex_id')
+                .eq('complex_id', app.complex_id)
+                .ilike('name', app.program_name)
+                .limit(1);
+            targetProgram = progs?.[0] || null;
+            if (targetProgram) targetProgramId = targetProgram.id;
+        }
 
         if (!targetProgram) {
             return res.status(404).json({ success: false, error: '선택한 프로그램을 찾을 수 없습니다' });
+        }
+
+        // 같은 프로그램+시간대면 불필요
+        if (targetProgram.id === (app.program_id || targetProgramId) && app.preferred_time === new_preferred_time) {
+            return res.status(400).json({ success: false, error: '현재와 동일한 프로그램·시간대입니다' });
         }
 
         // 같은 단지의 프로그램인지 확인
@@ -669,13 +703,21 @@ router.post('/:id/change-time', async (req, res) => {
             return res.status(400).json({ success: false, error: '해당 프로그램에 없는 시간대입니다' });
         }
 
-        // 정원 확인
-        const { count: approvedCnt } = await sb
+        // 정원 확인: program_id 기반 카운트 + program_name 기반 카운트 (null program_id 대비)
+        const { count: cntById } = await sb
             .from('applications')
             .select('*', { count: 'exact', head: true })
             .eq('program_id', targetProgramId)
             .eq('preferred_time', new_preferred_time)
             .eq('status', 'approved');
+        const { count: cntByName } = await sb
+            .from('applications')
+            .select('*', { count: 'exact', head: true })
+            .is('program_id', null)
+            .ilike('program_name', targetProgram.name)
+            .eq('preferred_time', new_preferred_time)
+            .eq('status', 'approved');
+        const approvedCnt = (cntById || 0) + (cntByName || 0);
 
         const capacity = targetProgram.capacity || 1;
         if ((approvedCnt || 0) >= capacity) {
