@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadNotices();
     setupAdminTrigger();
     renderPeriodBanner();   // 접수·해지 기간 배너
+    initManageTabBar();     // 내 신청 취소·변경 탭바 초기화
     
     console.log('✅ Application ready');
 });
@@ -1086,6 +1087,341 @@ function setupAdminTrigger() {
 // ===== CANCELLATION FUNCTIONS =====
 
 // Show cancellation form modal (기간 체크 추가)
+
+/* ═══════════════════════════════════════════════════════════════
+   내 신청 취소·변경 탭바 초기화 (페이지 로드 시)
+   ═══════════════════════════════════════════════════════════════ */
+function initManageTabBar() {
+    const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+    const day = nowKst.getUTCDate();
+    const isOpen = day >= 20 && day <= 27;
+
+    // ① 탭바 버튼 스타일
+    const tabBtn = document.getElementById('manageTabBtn');
+    const badge  = document.getElementById('manageTabPeriodBadge');
+    if (tabBtn) {
+        if (isOpen) {
+            tabBtn.style.color = '#4f46e5';
+            tabBtn.style.borderBottomColor = '#4f46e5';
+            tabBtn.style.background = '#f5f3ff';
+        } else {
+            tabBtn.style.color = '#6b7280';
+            tabBtn.style.borderBottomColor = 'transparent';
+            tabBtn.style.background = 'transparent';
+        }
+    }
+    if (badge) badge.style.display = isOpen ? 'inline' : 'none';
+
+    // ② 헤더 버튼 배지 (20~27일 활성화 알림)
+    const headerBadge = document.getElementById('headerManageBadge');
+    if (headerBadge) headerBadge.style.display = isOpen ? 'block' : 'none';
+
+    // ③ 헤더 버튼 배경색 (기간에 따라 변경)
+    const headerBtn = document.getElementById('headerManageBtn');
+    if (headerBtn) {
+        headerBtn.style.background = isOpen ? 'linear-gradient(135deg,#4f46e5,#7c3aed)' : '#4f46e5';
+        headerBtn.style.animation = isOpen ? 'pulse 2s infinite' : 'none';
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   내 신청 취소·변경 (매월 20~27일)
+   ═══════════════════════════════════════════════════════════════ */
+function showMyManageModal() {
+    const modal = document.getElementById('myManageModal');
+    if (!modal) return;
+    // 입력 초기화
+    ['manageDong','manageHo','managePhone4'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    document.getElementById('manageResult').innerHTML = '';
+
+    // 기간 배너 표시
+    const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+    const day = nowKst.getUTCDate();
+    const banner = document.getElementById('managePeriodBanner');
+    if (banner) {
+        const isOpen = day >= 20 && day <= 27;
+        banner.innerHTML = isOpen
+            ? `<div style="background:#dcfce7;border:1px solid #22c55e;border-radius:8px;
+                           padding:10px 13px;font-size:.82rem;color:#166534;margin-bottom:8px">
+                   <i class="fas fa-calendar-check"></i>
+                   <strong> 신청 취소·변경 가능 기간입니다 (매월 20~27일)</strong>
+               </div>`
+            : `<div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;
+                           padding:10px 13px;font-size:.82rem;color:#92400e;margin-bottom:8px">
+                   <i class="fas fa-clock"></i>
+                   <strong> 신청 취소·변경은 매월 20~27일에만 가능합니다</strong><br>
+                   <span style="font-size:.78rem">현재는 조회만 가능합니다</span>
+               </div>`;
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeMyManageModal() {
+    const modal = document.getElementById('myManageModal');
+    if (modal) modal.style.display = 'none';
+}
+
+// 내 신청 목록 불러오기
+async function loadMyManageList() {
+    const dong   = document.getElementById('manageDong')?.value.trim();
+    const ho     = document.getElementById('manageHo')?.value.trim();
+    const phone4 = document.getElementById('managePhone4')?.value.trim();
+    const resultEl = document.getElementById('manageResult');
+
+    if (!dong)   { document.getElementById('manageDong').style.borderColor='#ef4444'; return; }
+    if (!ho)     { document.getElementById('manageHo').style.borderColor='#ef4444'; return; }
+    if (!phone4 || phone4.length !== 4 || !/^\d{4}$/.test(phone4)) {
+        document.getElementById('managePhone4').style.borderColor='#ef4444';
+        resultEl.innerHTML = `<p style="color:#ef4444;font-size:.83rem;text-align:center">전화번호 뒷 4자리를 숫자로 입력하세요</p>`;
+        return;
+    }
+
+    const btn = document.getElementById('manageSearchBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 조회 중...'; }
+    resultEl.innerHTML = '';
+
+    try {
+        const complexCode = complexContext?.getComplexCode?.() || '';
+        const res = await fetch(`/api/applications/my?complexCode=${encodeURIComponent(complexCode)}&dong=${encodeURIComponent(dong)}&ho=${encodeURIComponent(ho)}&phone4=${encodeURIComponent(phone4)}`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '조회 실패');
+
+        const list = (data.data || []).filter(a => a.status === 'approved' || a.status === 'waiting');
+
+        // 전체 데이터 저장 (시간대 변경 시 재사용)
+        window._manageAppList = data.data || [];
+
+        if (!list.length) {
+            resultEl.innerHTML = `
+                <div style="text-align:center;padding:20px 0;color:#6b7280">
+                    <i class="fas fa-search" style="font-size:2rem;opacity:.3;display:block;margin-bottom:8px"></i>
+                    <p style="font-size:.87rem">승인·대기 신청 내역이 없습니다.<br>
+                    <small style="color:#9ca3af">동·호수·전화번호를 다시 확인해 주세요</small></p>
+                </div>`;
+            return;
+        }
+
+        const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+        const dayKst = nowKst.getUTCDate();
+        const isOpen = dayKst >= 20 && dayKst <= 27;
+
+        const fmtTime = t => {
+            if (!t) return '-';
+            const [h] = t.split(':').map(Number);
+            if (isNaN(h)) return t;
+            return `${h < 12 ? '오전' : '오후'} ${h === 0 ? 12 : h > 12 ? h - 12 : h}시`;
+        };
+
+        // 현재 저장된 조회 정보 (취소/변경 시 재사용)
+        window._managePhone4 = phone4;
+
+        resultEl.innerHTML = `
+            <div style="border-top:1px solid #f0f0f0;padding-top:12px">
+                <div style="font-size:.8rem;color:#6b7280;margin-bottom:10px;font-weight:600">
+                    <i class="fas fa-list"></i> ${list.length}건의 신청 내역
+                </div>
+                ${list.map(a => {
+                    const isWaiting = a.status === 'waiting';
+                    const statusBg  = isWaiting ? '#fef3c7' : '#dcfce7';
+                    const statusCol = isWaiting ? '#92400e' : '#166534';
+                    const statusTxt = isWaiting ? `⏳ 대기 ${a.waiting_order || ''}번` : '✅ 승인';
+                    return `
+                    <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;
+                                padding:12px 14px;margin-bottom:10px">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                            <span style="font-weight:700;font-size:.92rem;color:#1e293b">
+                                ${a.program_name || '프로그램 정보 없음'}
+                            </span>
+                            <span style="font-size:.75rem;font-weight:700;padding:3px 8px;border-radius:20px;
+                                         background:${statusBg};color:${statusCol}">
+                                ${statusTxt}
+                            </span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:.82rem;color:#475569;margin-bottom:10px">
+                            <span style="color:#94a3b8">시간대</span>
+                            <span style="font-weight:600;color:#0f172a">${fmtTime(a.preferred_time)} (${a.preferred_time || '-'})</span>
+                            <span style="color:#94a3b8">동·호수</span>
+                            <span>${a.dong} ${a.ho}</span>
+                            <span style="color:#94a3b8">신청일</span>
+                            <span>${a.created_at ? kstDateStr(a.created_at) : '-'}</span>
+                        </div>
+                        ${isOpen ? `
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                            ${!isWaiting ? `
+                            <button onclick="openChangeTimeModal('${a.id}','${(a.program_name||'').replace(/'/g,"\\'")}','${a.preferred_time||''}')"
+                                    style="padding:8px;background:#eff6ff;border:1.5px solid #3b82f6;
+                                           color:#1d4ed8;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer">
+                                <i class="fas fa-clock"></i> 시간대 변경
+                            </button>` : '<div></div>'}
+                            <button onclick="confirmCancelApplication('${a.id}','${(a.program_name||'').replace(/'/g,"\\'")}','${a.status}')"
+                                    style="padding:8px;background:#fef2f2;border:1.5px solid #ef4444;
+                                           color:#ef4444;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer">
+                                <i class="fas fa-times-circle"></i> ${isWaiting ? '대기 취소' : '신청 취소'}
+                            </button>
+                        </div>` : `
+                        <div style="text-align:center;font-size:.78rem;color:#9ca3af;padding:4px 0">
+                            <i class="fas fa-lock"></i> 취소·변경은 매월 20~27일에 가능합니다
+                        </div>`}
+                    </div>`;
+                }).join('')}
+                <p style="font-size:.76rem;color:#9ca3af;text-align:center;margin-top:4px">
+                    <i class="fas fa-lock" style="font-size:.7rem"></i>
+                    개인정보 보호를 위해 일부 정보는 가려져 있습니다
+                </p>
+            </div>`;
+    } catch(e) {
+        resultEl.innerHTML = `<p style="color:#ef4444;font-size:.83rem;text-align:center;padding:12px 0">
+            <i class="fas fa-exclamation-circle"></i> ${e.message}</p>`;
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-search"></i> 내 신청 내역 불러오기'; }
+    }
+}
+
+// 신청 취소 확인 (대기/승인 모두)
+async function confirmCancelApplication(appId, programName, status) {
+    const isWaiting = (status === 'waiting');
+    const phone4 = window._managePhone4;
+    if (!phone4) { alert('먼저 전화번호를 입력하여 조회해 주세요.'); return; }
+
+    const confirmed = confirm(
+        `[${programName}] ${isWaiting ? '대기 신청' : '수강 신청'}을 취소하시겠습니까?\n\n` +
+        (isWaiting ? '취소하면 대기 순번이 제거됩니다.' : '취소하면 다음 달 수강이 종료됩니다.\n다시 신청하려면 접수 기간(20~27일)에 신청하세요.')
+    );
+    if (!confirmed) return;
+
+    try {
+        const endpoint = isWaiting ? 'cancel-waiting' : 'cancel-approved';
+        const res = await fetch(`/api/applications/${appId}/${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone4 })
+        });
+        const data = await res.json();
+        if (!data.success) { alert('취소 실패: ' + (data.error || '알 수 없는 오류')); return; }
+        alert(`✅ ${data.message}`);
+        loadMyManageList(); // 목록 새로고침
+    } catch(e) {
+        alert('오류 발생: ' + e.message);
+    }
+}
+
+// 시간대 변경 모달 열기
+function openChangeTimeModal(appId, programName, currentTime) {
+    const phone4 = window._managePhone4;
+    if (!phone4) { alert('먼저 전화번호를 입력하여 조회해 주세요.'); return; }
+
+    // 해당 프로그램의 시간대 목록 가져오기
+    _openChangeTimeModalImpl(appId, programName, currentTime, phone4);
+}
+
+async function _openChangeTimeModalImpl(appId, programName, currentTime, phone4) {
+    // 시간대 목록: 저장된 앱 데이터에서 program_id를 찾아 programs API로 조회
+    let timeSlots = [];
+    try {
+        const complexCode = complexContext?.getComplexCode?.() || '';
+        // 저장된 앱 목록에서 program_id 찾기
+        const appData = (window._manageAppList || []).find(a => a.id === appId);
+        const programId = appData?.program_id;
+
+        const url = programId
+            ? `/api/programs?complexCode=${encodeURIComponent(complexCode)}&is_active=true`
+            : `/api/programs?complexCode=${encodeURIComponent(complexCode)}&is_active=true`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const programs = data.data || [];
+
+        // program_id 우선, 없으면 programName으로 매칭
+        let prog = programId ? programs.find(p => p.id === programId) : null;
+        if (!prog) prog = programs.find(p => p.name === programName || programName.includes(p.name) || (p.name && programName && p.name.replace(/\s/g,'') === programName.replace(/\s/g,'')));
+        if (prog && prog.time_slots) {
+            timeSlots = Array.isArray(prog.time_slots) ? prog.time_slots : [prog.time_slots];
+        }
+    } catch(e) { console.warn('time_slots 조회 오류:', e); }
+
+    // 모달 생성
+    const existing = document.getElementById('changeTimeModal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'changeTimeModal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
+
+    const slotsHtml = timeSlots.length > 0
+        ? timeSlots.filter(t => t !== currentTime).map(t => {
+            const fmtT = (() => {
+                const [h] = t.split(':').map(Number);
+                return isNaN(h) ? t : `${h < 12 ? '오전' : '오후'} ${h === 0 ? 12 : h > 12 ? h - 12 : h}시 (${t})`;
+            })();
+            return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid #e5e7eb;
+                                  border-radius:8px;cursor:pointer;margin-bottom:6px;font-size:.88rem"
+                          onmouseover="this.style.borderColor='#4f46e5'" onmouseout="this.style.borderColor='#e5e7eb'">
+                        <input type="radio" name="newTime" value="${t}" style="accent-color:#4f46e5">
+                        ${fmtT}
+                    </label>`;
+        }).join('')
+        : `<p style="color:#6b7280;font-size:.85rem;text-align:center;padding:10px 0">
+               시간대 정보를 불러올 수 없습니다.<br>직접 원하는 시간을 입력해 주세요.
+           </p>
+           <input type="time" id="manualTimeInput"
+               style="width:100%;padding:9px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem">`;
+
+    modal.innerHTML = `
+        <div style="background:#fff;border-radius:16px;width:100%;max-width:400px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+            <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;padding:15px 18px;
+                        display:flex;align-items:center;justify-content:space-between">
+                <span style="font-weight:700"><i class="fas fa-clock"></i> 시간대 변경</span>
+                <button onclick="document.getElementById('changeTimeModal').remove()"
+                        style="background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div style="padding:16px 18px">
+                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;
+                            padding:10px;margin-bottom:14px;font-size:.82rem;color:#1e40af">
+                    <strong>${programName}</strong><br>
+                    현재 시간대: <strong>${currentTime}</strong><br>
+                    <span style="font-size:.77rem;color:#6b7280">※ 변경 후 정원 초과 시 대기로 등록됩니다</span>
+                </div>
+                <div style="max-height:220px;overflow-y:auto">${slotsHtml}</div>
+                <button onclick="_doChangeTime('${appId}','${phone4}')"
+                        style="width:100%;margin-top:14px;padding:11px;border:none;border-radius:9px;
+                               background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;
+                               font-size:.93rem;font-weight:700;cursor:pointer">
+                    <i class="fas fa-check"></i> 시간대 변경 확정
+                </button>
+            </div>
+        </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+async function _doChangeTime(appId, phone4) {
+    const selected = document.querySelector('input[name="newTime"]:checked');
+    const manualInput = document.getElementById('manualTimeInput');
+    const newTime = selected ? selected.value : (manualInput ? manualInput.value : '');
+
+    if (!newTime) { alert('변경할 시간대를 선택하세요'); return; }
+
+    try {
+        const res = await fetch(`/api/applications/${appId}/change-time`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone4, new_preferred_time: newTime })
+        });
+        const data = await res.json();
+        if (!data.success) { alert('변경 실패: ' + (data.error || '알 수 없는 오류')); return; }
+        document.getElementById('changeTimeModal')?.remove();
+        alert(`✅ ${data.message}`);
+        loadMyManageList(); // 목록 새로고침
+    } catch(e) {
+        alert('오류 발생: ' + e.message);
+    }
+}
+
 // ===== 내 신청 조회 =====
 function showMyLookupModal() {
     const modal = document.getElementById('myLookupModal');
@@ -1130,10 +1466,10 @@ async function lookupMyApplication() {
 
         if (!data.success) throw new Error(data.error || '조회 실패');
 
-        const list = (data.data || []).filter(a => a.status === 'approved');
+        const list = (data.data || []).filter(a => a.status === 'approved' || a.status === 'waiting');
 
         if (!list.length) {
-            // 승인 건 없음
+            // 승인/대기 건 없음
             result.innerHTML = `
                 <div style="text-align:center;padding:20px 0;color:#6b7280">
                     <i class="fas fa-search" style="font-size:2rem;opacity:.3;display:block;margin-bottom:8px"></i>
@@ -1145,7 +1481,7 @@ async function lookupMyApplication() {
 
         // 상태 라벨
         const statusLabel = s => ({
-            approved:'승인', pending:'대기', waiting:'대기', rejected:'거부'
+            approved:'승인', pending:'대기', waiting:'대기 중', rejected:'거부'
         }[s] || s);
 
         const statusColor = s => ({
@@ -1163,13 +1499,17 @@ async function lookupMyApplication() {
             return `${period} ${h12}시`;
         };
 
+        const approvedList = list.filter(a => a.status === 'approved');
+        const waitingList  = list.filter(a => a.status === 'waiting');
+
         result.innerHTML = `
             <div style="border-top:1px solid #f0f0f0;padding-top:12px">
+                ${approvedList.length > 0 ? `
                 <div style="font-size:.8rem;color:#6b7280;margin-bottom:10px;font-weight:600">
                     <i class="fas fa-check-circle" style="color:#059669"></i>
-                    ${list.length}건의 승인된 신청 내역
+                    ${approvedList.length}건의 승인된 신청 내역
                 </div>
-                ${list.map(a => `
+                ${approvedList.map(a => `
                 <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;
                             padding:12px 14px;margin-bottom:8px">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
@@ -1189,7 +1529,48 @@ async function lookupMyApplication() {
                         <span style="color:#94a3b8">신청일</span>
                         <span>${a.created_at ? kstDateStr(a.created_at) : '-'}</span>
                     </div>
-                </div>`).join('')}
+                </div>`).join('')}` : ''}
+
+                ${waitingList.length > 0 ? `
+                <div style="font-size:.8rem;color:#d97706;margin:${approvedList.length > 0 ? '12px' : '0'} 0 10px;font-weight:600">
+                    <i class="fas fa-clock"></i>
+                    ${waitingList.length}건의 대기 신청 내역
+                </div>
+                ${waitingList.map(a => `
+                <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;
+                            padding:12px 14px;margin-bottom:8px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <span style="font-weight:700;font-size:.92rem;color:#1e293b">
+                            ${a.program_name || '프로그램 정보 없음'}
+                        </span>
+                        <span style="font-size:.75rem;font-weight:700;padding:3px 8px;border-radius:20px;
+                                     background:#fef3c720;color:#d97706;border:1px solid #fde68a">
+                            <i class="fas fa-clock" style="font-size:.68rem"></i> 대기 ${a.waiting_order ? a.waiting_order + '번' : ''}
+                        </span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:.82rem;color:#475569;margin-bottom:10px">
+                        <span style="color:#94a3b8">시간대</span>
+                        <span style="font-weight:600;color:#0f172a">${fmtTime(a.preferred_time)}</span>
+                        <span style="color:#94a3b8">동·호수</span>
+                        <span>${a.dong} ${a.ho}</span>
+                        <span style="color:#94a3b8">신청일</span>
+                        <span>${a.created_at ? kstDateStr(a.created_at) : '-'}</span>
+                    </div>
+                    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:7px;padding:8px 10px;margin-bottom:10px;font-size:.78rem;color:#92400e;line-height:1.5">
+                        <i class="fas fa-info-circle"></i>
+                        대기 중이면 다른 프로그램 신청이 제한됩니다.<br>
+                        더 이상 대기를 원하지 않으시면 아래 버튼으로 취소하세요.
+                    </div>
+                    <button onclick="cancelWaitingApplication('${a.id}', '${(a.program_name||'').replace(/'/g,'')}')"
+                            style="width:100%;padding:8px;background:#fff;border:1.5px solid #ef4444;
+                                   color:#ef4444;border-radius:8px;font-size:.83rem;font-weight:600;
+                                   cursor:pointer;transition:background .15s"
+                            onmouseover="this.style.background='#fef2f2'"
+                            onmouseout="this.style.background='#fff'">
+                        <i class="fas fa-times-circle"></i> 대기 신청 취소
+                    </button>
+                </div>`).join('')}` : ''}
+
                 <p style="font-size:.76rem;color:#9ca3af;text-align:center;margin-top:6px">
                     <i class="fas fa-lock" style="font-size:.7rem"></i>
                     개인정보 보호를 위해 일부 정보는 가려져 있습니다
@@ -1200,6 +1581,39 @@ async function lookupMyApplication() {
             <i class="fas fa-exclamation-circle"></i> ${e.message}</p>`;
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-search"></i> 조회하기'; }
+    }
+}
+
+// ===== 입주민 대기 신청 취소 =====
+async function cancelWaitingApplication(appId, programName) {
+    // 확인 모달 (confirm 대신 커스텀 UI)
+    const phone4 = prompt(
+        `[${programName}] 대기 신청을 취소하시겠습니까?\n\n본인 확인을 위해 전화번호 뒷 4자리를 입력해 주세요.`
+    );
+    if (phone4 === null) return; // 취소 클릭
+    if (!phone4 || !/^\d{4}$/.test(phone4.trim())) {
+        alert('전화번호 뒷 4자리(숫자)를 올바르게 입력해 주세요.');
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/applications/${appId}/cancel-waiting`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone4: phone4.trim() })
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+            alert('취소 실패: ' + (data.error || '알 수 없는 오류'));
+            return;
+        }
+
+        alert(`[${programName}] 대기 신청이 취소되었습니다.\n이제 다른 프로그램에 신청할 수 있습니다.`);
+        // 결과 새로고침
+        lookupMyApplication();
+    } catch (e) {
+        alert('오류가 발생했습니다: ' + e.message);
     }
 }
 
