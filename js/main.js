@@ -139,6 +139,7 @@ function handlePage1Submit(e) {
         name: document.getElementById('name').value.trim(),
         phone: document.getElementById('phone').value.trim(),
         lesson_type: lessonType,
+        program_id: selectedOption ? (selectedOption.dataset.programId || null) : null,
         preferred_time: preferredTime,
         agreement: document.getElementById('agreement').checked
     };
@@ -316,6 +317,7 @@ async function submitContract() {
             ho: contractData.ho,
             name: contractData.name,
             phone: contractData.phone,
+            program_id: contractData.program_id || null,   // 정원 체크용 program_id
             program_name: contractData.lesson_type,
             preferred_time: contractData.preferred_time,
             signature_name: contractData.signature,        // 서버 필드명
@@ -344,16 +346,20 @@ async function submitContract() {
             return;
         }
 
+        // 정원 마감 오류 (400 + is_full)
+        if (response.status === 400 && result.is_full) {
+            console.warn('⛔ 정원 마감으로 신청 차단');
+            showFullCapacityModal(contractData, result.error);
+            return;
+        }
+
         if (response.ok && result.success) {
             console.log('✅ Application submitted:', result);
             contractData.status = result.data?.status || 'approved';
             contractData.waiting_order = result.data?.waiting_order;
             
-            if (contractData.status === 'waiting') {
-                showWaitingListModal(contractData);
-            } else {
-                showSuccessNotificationModal(contractData);
-            }
+            // 대기 시스템 폐기: status가 waiting이어도 일반 성공으로 처리
+            showSuccessNotificationModal(contractData);
         } else {
             const errorMsg = result.error || `Failed: ${response.status} ${response.statusText}`;
             console.error('❌ Submit failed:', errorMsg);
@@ -968,6 +974,31 @@ function showWaitingListModal(contractData) {
     modal.classList.add('active');
 }
 
+// 정원 마감 안내 모달 (대기 시스템 폐기 후)
+function showFullCapacityModal(contractData, errorMsg) {
+    const modal = document.getElementById('successNotificationModal');
+    const content = document.getElementById('successNotificationContent');
+
+    content.innerHTML = `
+        <div style="text-align:center;">
+            <i class="fas fa-ban" style="font-size:48px;color:#ef4444;margin-bottom:15px;"></i>
+            <h3 style="color:#ef4444;margin-bottom:10px;">정원 마감</h3>
+        </div>
+        <p><strong>프로그램:</strong> ${contractData.lesson_type || ''}</p>
+        <p><strong>희망 시간:</strong> ${contractData.preferred_time || ''}</p>
+        <div style="background:#fef2f2;padding:15px;border-radius:8px;margin-top:16px;border-left:4px solid #ef4444;">
+            <p style="margin:0;color:#991b1b;font-size:.93rem;">
+                <i class="fas fa-exclamation-triangle"></i> <strong>신청 불가 안내</strong><br><br>
+                ${errorMsg || '선택하신 시간대가 정원 마감되어 신청이 불가합니다.'}<br><br>
+                다른 요일 또는 시간대를 선택하여 다시 신청해 주세요.<br>
+                <span style="font-size:.85rem;color:#b91c1c;">※ 대기 접수는 현재 운영되지 않습니다.</span>
+            </p>
+        </div>
+    `;
+
+    modal.classList.add('active');
+}
+
 // Load public inquiries
 async function loadPublicInquiries() {
     try {
@@ -1219,6 +1250,23 @@ async function loadMyManageList() {
         // 현재 저장된 조회 정보 (취소/변경 시 재사용)
         window._managePhone4 = phone4;
 
+        // 승인된 신청의 available-slots 미리 조회 (변경 가능 슬롯 정보 표시용)
+        const approvedList = list.filter(a => a.status === 'approved');
+        const slotsMap = {}; // appId -> { availableCount, totalCount }
+        if (isOpen && approvedList.length > 0) {
+            await Promise.all(approvedList.map(async a => {
+                try {
+                    const r = await fetch(`/api/applications/${a.id}/available-slots?phone4=${encodeURIComponent(phone4)}`);
+                    const d = await r.json();
+                    if (d.success && d.data) {
+                        const availCnt = d.data.filter(s => s.available).length;
+                        const totalCnt = d.data.length;
+                        slotsMap[a.id] = { availableCount: availCnt, totalCount: totalCnt };
+                    }
+                } catch(_) { /* 조회 실패 시 무시 */ }
+            }));
+        }
+
         resultEl.innerHTML = `
             <div style="border-top:1px solid #f0f0f0;padding-top:12px">
                 <div style="font-size:.8rem;color:#6b7280;margin-bottom:10px;font-weight:600">
@@ -1229,6 +1277,23 @@ async function loadMyManageList() {
                     const statusBg  = isWaiting ? '#fef3c7' : '#dcfce7';
                     const statusCol = isWaiting ? '#92400e' : '#166534';
                     const statusTxt = isWaiting ? `⏳ 대기 ${a.waiting_order || ''}번` : '✅ 승인';
+
+                    // 변경 가능 슬롯 정보
+                    const slotInfo = slotsMap[a.id];
+                    const hasAvailSlots = slotInfo && slotInfo.availableCount > 0;
+                    const changeBtnStyle = !isWaiting
+                        ? (hasAvailSlots
+                            ? 'padding:8px;background:#eff6ff;border:1.5px solid #3b82f6;color:#1d4ed8;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer'
+                            : 'padding:8px;background:#f3f4f6;border:1.5px solid #d1d5db;color:#9ca3af;border-radius:8px;font-size:.8rem;font-weight:600;cursor:not-allowed;opacity:.7')
+                        : '';
+                    const changeBtnLabel = !isWaiting
+                        ? (slotInfo
+                            ? (hasAvailSlots
+                                ? `<i class="fas fa-exchange-alt"></i> 변경 <span style="font-size:.72rem;background:#3b82f6;color:#fff;padding:1px 5px;border-radius:8px;margin-left:2px">${slotInfo.availableCount}석</span>`
+                                : '<i class="fas fa-ban"></i> 변경불가 <span style="font-size:.72rem">모두 마감</span>')
+                            : '<i class="fas fa-exchange-alt"></i> 요일·시간 변경')
+                        : '';
+
                     return `
                     <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;
                                 padding:12px 14px;margin-bottom:10px">
@@ -1252,10 +1317,9 @@ async function loadMyManageList() {
                         ${isOpen ? `
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
                             ${!isWaiting ? `
-                            <button onclick="openChangeTimeModal('${a.id}','${(a.program_name||'').replace(/'/g,"\\'")}','${a.preferred_time||''}')"
-                                    style="padding:8px;background:#eff6ff;border:1.5px solid #3b82f6;
-                                           color:#1d4ed8;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer">
-                                <i class="fas fa-clock"></i> 시간대 변경
+                            <button onclick="${hasAvailSlots || !slotInfo ? `openChangeTimeModal('${a.id}','${(a.program_name||'').replace(/'/g,"\\'")}','${a.preferred_time||''}')` : 'void(0)'}"
+                                    style="${changeBtnStyle}">
+                                ${changeBtnLabel}
                             </button>` : '<div></div>'}
                             <button onclick="confirmCancelApplication('${a.id}','${(a.program_name||'').replace(/'/g,"\\'")}','${a.status}')"
                                     style="padding:8px;background:#fef2f2;border:1.5px solid #ef4444;
@@ -1310,114 +1374,177 @@ async function confirmCancelApplication(appId, programName, status) {
 }
 
 // 시간대 변경 모달 열기
+// ─── 프로그램·시간대 변경 모달 (전면 개편) ───────────────────────
+// available-slots API로 변경 가능 슬롯을 조회하여 선택 UI 제공
+// 정원 마감 슬롯은 표시만 되고 선택 불가
 function openChangeTimeModal(appId, programName, currentTime) {
     const phone4 = window._managePhone4;
     if (!phone4) { alert('먼저 전화번호를 입력하여 조회해 주세요.'); return; }
-
-    // 해당 프로그램의 시간대 목록 가져오기
     _openChangeTimeModalImpl(appId, programName, currentTime, phone4);
 }
 
 async function _openChangeTimeModalImpl(appId, programName, currentTime, phone4) {
-    // 시간대 목록: 저장된 앱 데이터에서 program_id를 찾아 programs API로 조회
-    let timeSlots = [];
-    try {
-        const complexCode = complexContext?.getComplexCode?.() || '';
-        // 저장된 앱 목록에서 program_id 찾기
-        const appData = (window._manageAppList || []).find(a => a.id === appId);
-        const programId = appData?.program_id;
-
-        const url = programId
-            ? `/api/programs?complexCode=${encodeURIComponent(complexCode)}&is_active=true`
-            : `/api/programs?complexCode=${encodeURIComponent(complexCode)}&is_active=true`;
-        const res = await fetch(url);
-        const data = await res.json();
-        const programs = data.data || [];
-
-        // program_id 우선, 없으면 programName으로 매칭
-        let prog = programId ? programs.find(p => p.id === programId) : null;
-        if (!prog) prog = programs.find(p => p.name === programName || programName.includes(p.name) || (p.name && programName && p.name.replace(/\s/g,'') === programName.replace(/\s/g,'')));
-        if (prog && prog.time_slots) {
-            timeSlots = Array.isArray(prog.time_slots) ? prog.time_slots : [prog.time_slots];
-        }
-    } catch(e) { console.warn('time_slots 조회 오류:', e); }
-
-    // 모달 생성
+    // 로딩 모달 먼저 표시
     const existing = document.getElementById('changeTimeModal');
     if (existing) existing.remove();
 
     const modal = document.createElement('div');
     modal.id = 'changeTimeModal';
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px';
-
-    const slotsHtml = timeSlots.length > 0
-        ? timeSlots.filter(t => t !== currentTime).map(t => {
-            const fmtT = (() => {
-                const [h] = t.split(':').map(Number);
-                return isNaN(h) ? t : `${h < 12 ? '오전' : '오후'} ${h === 0 ? 12 : h > 12 ? h - 12 : h}시 (${t})`;
-            })();
-            return `<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid #e5e7eb;
-                                  border-radius:8px;cursor:pointer;margin-bottom:6px;font-size:.88rem"
-                          onmouseover="this.style.borderColor='#4f46e5'" onmouseout="this.style.borderColor='#e5e7eb'">
-                        <input type="radio" name="newTime" value="${t}" style="accent-color:#4f46e5">
-                        ${fmtT}
-                    </label>`;
-        }).join('')
-        : `<p style="color:#6b7280;font-size:.85rem;text-align:center;padding:10px 0">
-               시간대 정보를 불러올 수 없습니다.<br>직접 원하는 시간을 입력해 주세요.
-           </p>
-           <input type="time" id="manualTimeInput"
-               style="width:100%;padding:9px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem">`;
-
     modal.innerHTML = `
-        <div style="background:#fff;border-radius:16px;width:100%;max-width:400px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="background:#fff;border-radius:16px;width:100%;max-width:460px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.3)">
             <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;padding:15px 18px;
                         display:flex;align-items:center;justify-content:space-between">
-                <span style="font-weight:700"><i class="fas fa-clock"></i> 시간대 변경</span>
+                <span style="font-weight:700"><i class="fas fa-exchange-alt"></i> 프로그램·시간대 변경</span>
                 <button onclick="document.getElementById('changeTimeModal').remove()"
                         style="background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
-            <div style="padding:16px 18px">
-                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;
-                            padding:10px;margin-bottom:14px;font-size:.82rem;color:#1e40af">
-                    <strong>${programName}</strong><br>
-                    현재 시간대: <strong>${currentTime}</strong><br>
-                    <span style="font-size:.77rem;color:#6b7280">※ 변경 후 정원 초과 시 대기로 등록됩니다</span>
-                </div>
-                <div style="max-height:220px;overflow-y:auto">${slotsHtml}</div>
-                <button onclick="_doChangeTime('${appId}','${phone4}')"
-                        style="width:100%;margin-top:14px;padding:11px;border:none;border-radius:9px;
-                               background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;
-                               font-size:.93rem;font-weight:700;cursor:pointer">
-                    <i class="fas fa-check"></i> 시간대 변경 확정
-                </button>
+            <div id="changeTimeBody" style="padding:20px;text-align:center;color:#6b7280">
+                <i class="fas fa-spinner fa-spin" style="font-size:1.5rem"></i>
+                <p style="margin-top:8px;font-size:.88rem">변경 가능한 시간대를 불러오는 중...</p>
             </div>
         </div>`;
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+    try {
+        // available-slots API 호출
+        const res = await fetch(`/api/applications/${appId}/available-slots?phone4=${encodeURIComponent(phone4)}`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '조회 실패');
+
+        const slots = data.data || [];
+        const fmtTime = t => {
+            if (!t) return t;
+            const [h] = t.split(':').map(Number);
+            if (isNaN(h)) return t;
+            return `${h < 12 ? '오전' : '오후'} ${h === 0 ? 12 : h > 12 ? h - 12 : h}시`;
+        };
+
+        // 프로그램별로 그룹핑
+        const grouped = {};
+        for (const s of slots) {
+            if (!grouped[s.program_id]) grouped[s.program_id] = { name: s.program_name, slots: [] };
+            grouped[s.program_id].slots.push(s);
+        }
+
+        const availableCount = slots.filter(s => s.available).length;
+
+        let slotsHtml = '';
+        if (slots.length === 0) {
+            slotsHtml = `<div style="text-align:center;padding:20px 0;color:#6b7280">
+                <i class="fas fa-calendar-times" style="font-size:2rem;opacity:.4;display:block;margin-bottom:8px"></i>
+                <p style="font-size:.87rem">변경 가능한 슬롯이 없습니다</p>
+            </div>`;
+        } else {
+            slotsHtml = Object.entries(grouped).map(([progId, group]) => {
+                const slotItems = group.slots.map(s => {
+                    const isCurrent = (progId === (data.current?.program_id) && s.time === currentTime);
+                    if (isCurrent) return '';  // 현재 슬롯은 표시 안함
+
+                    if (s.is_full) {
+                        return `
+                        <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;
+                                    border:1.5px solid #f3f4f6;border-radius:8px;margin-bottom:5px;
+                                    background:#f9fafb;opacity:.6;cursor:not-allowed">
+                            <div style="width:16px;height:16px;border-radius:50%;border:2px solid #d1d5db;flex-shrink:0"></div>
+                            <span style="flex:1;font-size:.85rem;color:#9ca3af">${fmtTime(s.time)} (${s.time})</span>
+                            <span style="font-size:.72rem;background:#fee2e2;color:#dc2626;padding:2px 7px;border-radius:10px;font-weight:600;flex-shrink:0">
+                                마감 ${s.approved_count}/${s.capacity}
+                            </span>
+                        </div>`;
+                    }
+
+                    return `
+                    <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;
+                                  border:1.5px solid #e5e7eb;border-radius:8px;cursor:pointer;margin-bottom:5px;
+                                  transition:all .15s;background:#fff"
+                           onmouseover="this.style.borderColor='#3b82f6';this.style.background='#eff6ff'"
+                           onmouseout="this.style.borderColor='#e5e7eb';this.style.background='#fff'">
+                        <input type="radio" name="newSlot"
+                               value="${s.time}" data-program-id="${progId}"
+                               style="accent-color:#3b82f6;flex-shrink:0">
+                        <span style="flex:1;font-size:.85rem;font-weight:600;color:#1e293b">
+                            ${fmtTime(s.time)} <span style="font-weight:400;color:#64748b">(${s.time})</span>
+                        </span>
+                        <span style="font-size:.72rem;background:#dcfce7;color:#15803d;padding:2px 7px;border-radius:10px;font-weight:600;flex-shrink:0">
+                            여유 ${s.capacity - s.approved_count}석
+                        </span>
+                    </label>`;
+                }).join('');
+
+                if (!slotItems.trim()) return '';
+
+                return `
+                <div style="margin-bottom:12px">
+                    <div style="font-size:.78rem;font-weight:700;color:#4f46e5;margin-bottom:6px;
+                                padding:4px 8px;background:#ede9fe;border-radius:6px;display:inline-block">
+                        <i class="fas fa-calendar-week"></i> ${group.name}
+                    </div>
+                    ${slotItems}
+                </div>`;
+            }).join('');
+        }
+
+        document.getElementById('changeTimeBody').innerHTML = `
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;
+                        padding:10px 12px;margin-bottom:14px;font-size:.82rem;color:#1e40af">
+                <i class="fas fa-info-circle"></i>
+                <strong>현재:</strong> ${programName} · ${fmtTime(currentTime)} (${currentTime})<br>
+                <span style="font-size:.77rem;color:#64748b;margin-top:3px;display:block">
+                    ✅ 변경 가능 ${availableCount}개 슬롯 · 🔴 마감 슬롯은 선택 불가
+                </span>
+            </div>
+            <div style="max-height:300px;overflow-y:auto;padding-right:2px">${slotsHtml}</div>
+            <button onclick="_doChangeTime('${appId}','${phone4}')"
+                    style="width:100%;margin-top:14px;padding:11px;border:none;border-radius:9px;
+                           background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;
+                           font-size:.93rem;font-weight:700;cursor:pointer">
+                <i class="fas fa-check"></i> 변경 확정
+            </button>`;
+
+    } catch(e) {
+        document.getElementById('changeTimeBody').innerHTML = `
+            <div style="text-align:center;padding:16px;color:#ef4444">
+                <i class="fas fa-exclamation-circle" style="font-size:1.5rem"></i>
+                <p style="margin-top:8px;font-size:.88rem">${e.message}</p>
+                <button onclick="document.getElementById('changeTimeModal').remove()"
+                        style="margin-top:12px;padding:7px 16px;background:#f3f4f6;border:none;
+                               border-radius:7px;cursor:pointer;font-size:.85rem">닫기</button>
+            </div>`;
+    }
 }
 
 async function _doChangeTime(appId, phone4) {
-    const selected = document.querySelector('input[name="newTime"]:checked');
-    const manualInput = document.getElementById('manualTimeInput');
-    const newTime = selected ? selected.value : (manualInput ? manualInput.value : '');
+    const selected = document.querySelector('input[name="newSlot"]:checked');
+    if (!selected) { alert('변경할 시간대를 선택하세요'); return; }
 
-    if (!newTime) { alert('변경할 시간대를 선택하세요'); return; }
+    const newTime = selected.value;
+    const newProgramId = selected.dataset.programId;
+
+    // 확정 버튼 로딩 상태
+    const btn = document.querySelector('#changeTimeModal button:last-of-type');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 처리 중...'; }
 
     try {
         const res = await fetch(`/api/applications/${appId}/change-time`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone4, new_preferred_time: newTime })
+            body: JSON.stringify({ phone4, new_program_id: newProgramId, new_preferred_time: newTime })
         });
         const data = await res.json();
-        if (!data.success) { alert('변경 실패: ' + (data.error || '알 수 없는 오류')); return; }
+        if (!data.success) {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> 변경 확정'; }
+            alert('변경 실패: ' + (data.error || '알 수 없는 오류'));
+            return;
+        }
         document.getElementById('changeTimeModal')?.remove();
         alert(`✅ ${data.message}`);
-        loadMyManageList(); // 목록 새로고침
+        loadMyManageList();
     } catch(e) {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> 변경 확정'; }
         alert('오류 발생: ' + e.message);
     }
 }
