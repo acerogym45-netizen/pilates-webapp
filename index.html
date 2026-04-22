@@ -65,28 +65,57 @@
         <!-- 📅 접수 기간 안내 배너 (동적 표시) -->
         <div id="periodBanner" style="display:none"></div>
 
-        <!-- 퀵 액션 버튼 -->
-        <div class="quick-actions">
-            <button class="quick-btn" onclick="showCurriculumModal()">
-                <i class="fas fa-calendar-alt"></i>
-                <span>커리큘럼</span>
-            </button>
-            <button class="quick-btn" onclick="openInstructorsModal()">
-                <i class="fas fa-user-tie"></i>
-                <span>강사 소개</span>
-            </button>
-            <button class="quick-btn" onclick="scrollToNotices()">
-                <i class="fas fa-bullhorn"></i>
-                <span>공지사항</span>
-            </button>
-            <button class="quick-btn" onclick="showInquiryForm()">
-                <i class="fas fa-pen"></i>
-                <span>문의하기</span>
-            </button>
-            <button class="quick-btn" onclick="showMyInquiryModal()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff">
-                <i class="fas fa-search"></i>
-                <span>내 문의 조회</span>
-            </button>
+        <!-- 퀵 액션 버튼 (3행 구성) -->
+        <div class="quick-actions-wrap">
+
+            <!-- 1행: 내 문의 조회 (단독 전체 너비) -->
+            <div class="quick-row quick-row--single">
+                <button class="quick-btn quick-btn--inquiry-main" onclick="showMyInquiryModal()">
+                    <i class="fas fa-search"></i>
+                    <span>내 문의 조회</span>
+                </button>
+            </div>
+
+            <!-- 2행: 커리큘럼 / 강사 소개 / 공지사항 / 문의하기 -->
+            <div class="quick-row quick-row--four">
+                <button class="quick-btn" onclick="showCurriculumModal()">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>커리큘럼</span>
+                </button>
+                <button class="quick-btn" onclick="openInstructorsModal()">
+                    <i class="fas fa-user-tie"></i>
+                    <span>강사 소개</span>
+                </button>
+                <button class="quick-btn" onclick="scrollToNotices()">
+                    <i class="fas fa-bullhorn"></i>
+                    <span>공지사항</span>
+                </button>
+                <button class="quick-btn" onclick="showInquiryForm()">
+                    <i class="fas fa-pen"></i>
+                    <span>문의하기</span>
+                </button>
+            </div>
+
+            <!-- 3행: 내 문의 조회 / 내 신청 조회·취소·변경 / 환불 신청 / 해지 신청 -->
+            <div class="quick-row quick-row--four">
+                <button class="quick-btn quick-btn--accent" onclick="showMyInquiryModal()">
+                    <i class="fas fa-search"></i>
+                    <span>내 문의 조회</span>
+                </button>
+                <button class="quick-btn quick-btn--accent" onclick="showMyManageModal()">
+                    <i class="fas fa-list-check"></i>
+                    <span>내 신청 조회·취소·변경</span>
+                </button>
+                <button class="quick-btn quick-btn--accent" onclick="showRefundRequestModal()">
+                    <i class="fas fa-won-sign"></i>
+                    <span>환불 신청</span>
+                </button>
+                <button class="quick-btn quick-btn--accent" onclick="showCancellationForm()">
+                    <i class="fas fa-file-signature"></i>
+                    <span>해지 신청</span>
+                </button>
+            </div>
+
         </div>
 
         <!-- 공지사항 -->

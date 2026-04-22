@@ -124,22 +124,63 @@ button { font-family: inherit; cursor: pointer; }
 /* ════════════════════════════════════════════════
    퀵 액션 바
 ════════════════════════════════════════════════ */
-.quick-actions {
-    display: grid; grid-template-columns: repeat(4,1fr);
+/* ── 퀵액션 래퍼 ── */
+.quick-actions-wrap {
     background: var(--surface);
     border-bottom: 1px solid var(--border);
-    padding: 6px 8px;
+    padding: 4px 8px 6px;
+    display: flex; flex-direction: column; gap: 2px;
 }
+/* 각 행 */
+.quick-row {
+    display: grid;
+    gap: 2px;
+}
+.quick-row--single {
+    grid-template-columns: 1fr;
+}
+.quick-row--four {
+    grid-template-columns: repeat(4,1fr);
+}
+/* 기본 버튼 */
 .quick-btn {
     display: flex; flex-direction: column; align-items: center;
-    gap: 5px; padding: 10px 4px;
+    justify-content: center;
+    gap: 4px; padding: 8px 3px;
     border: none; background: none;
-    color: var(--brand); font-size: .68rem; font-weight: 700;
+    color: var(--brand); font-size: .63rem; font-weight: 700;
     border-radius: 10px; letter-spacing: .01em;
     transition: background var(--tr);
+    cursor: pointer;
+    word-break: keep-all; text-align: center; line-height: 1.2;
 }
 .quick-btn:hover { background: var(--brand-light); }
-.quick-btn i { font-size: 1.15rem; }
+.quick-btn i { font-size: 1.1rem; }
+/* 1행: 내 문의 조회 와이드 버튼 */
+.quick-btn--inquiry-main {
+    flex-direction: row; justify-content: center;
+    gap: 8px; padding: 10px 12px;
+    background: linear-gradient(135deg,#4f46e5,#7c3aed);
+    color: #fff; font-size: .82rem;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(79,70,229,.25);
+}
+.quick-btn--inquiry-main:hover {
+    background: linear-gradient(135deg,#4338ca,#6d28d9);
+    color: #fff;
+}
+.quick-btn--inquiry-main i { font-size: 1rem; }
+/* 3행: 액센트 버튼 (보라 계열 연한 배경) */
+.quick-btn--accent {
+    background: #f0eeff;
+    color: #4f46e5;
+    border: 1px solid #d4d0fa;
+    border-radius: 10px;
+}
+.quick-btn--accent:hover {
+    background: #e0dbff;
+    color: #3730a3;
+}
 
 /* ════════════════════════════════════════════════
    카드 섹션
@@ -665,7 +706,7 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
    반응형
 ════════════════════════════════════════════════ */
 @media (max-width: 400px) {
-    .quick-actions { grid-template-columns: repeat(2,1fr); }
+    .quick-row--four { grid-template-columns: repeat(2,1fr); }
     .form-row      { grid-template-columns: 1fr; }
     .btn-group     { flex-direction: column; }
     .header        { padding: 14px 16px; }
