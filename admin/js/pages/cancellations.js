@@ -582,7 +582,7 @@ const cancellations = {
             '이름': c.name,
             '동': c.dong,
             '호수': c.ho,
-            '전화번호': c.phone || '',
+            '전화번호': fmtPhone(c.phone),
             '프로그램': c.program_name || '',
             '해지처리날짜': c.termination_date || '',
             '수강횟수': c.attended_sessions ?? '',
@@ -825,7 +825,7 @@ const inquiries = {
         const rows = this.data.map(q => ({
             '등록일': formatDate(q.created_at),
             '이름': q.name, '동': q.dong || '', '호수': q.ho || '',
-            '전화번호': q.phone || '', '제목': q.title, '내용': q.content,
+            '전화번호': fmtPhone(q.phone), '제목': q.title, '내용': q.content,
             '답변 여부': q.is_answered ? '답변완료' : '미답변', '답변': q.answer || ''
         }));
         downloadCSV(`문의목록_${new Date().toLocaleDateString('ko')}.csv`, rows, headers);
