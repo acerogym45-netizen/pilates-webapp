@@ -197,10 +197,19 @@ const cancellations = {
     },
 
     showDetail(id) {
+        try {
         const c = this.data.find(x => x.id === id);
-        if (!c) return;
+        if (!c) {
+            // data에 없으면 전체 목록 재조회 후 재시도
+            this.load(this.currentStatus).then(() => {
+                const c2 = this.data.find(x => x.id === id);
+                if (c2) this.showDetail(id);
+                else showToast('항목을 찾을 수 없습니다. 목록을 새로고침해 주세요.', 'error');
+            });
+            return;
+        }
         const isRefund = (c.request_type === 'refund');
-        const applyDate = (!isRefund) ? this.calcApplyMonth(c.created_at) : null;
+        const applyDate = (!isRefund) ? this.calcApplyMonth(c.created_at) : '';  // null → '' 방어
 
         // reason 파싱 (환불)
         let reasonDisplay = c.reason || '-';
@@ -305,6 +314,45 @@ const cancellations = {
                 </div>`;
         }
 
+        // 관리비 부과 정보 표시 (해지 승인 건) — body 구성 전에 먼저 계산
+        let billingSection = '';
+        if (!isRefund && c.status === 'approved') {
+            const hasBilling = c.billing_amount > 0 || c.termination_month;
+            billingSection = `
+                <div class="detail-row full" style="background:${hasBilling ? '#f0fdf4' : '#fafafa'};
+                     border:1.5px solid ${hasBilling ? '#22c55e' : '#e5e7eb'};
+                     border-radius:8px;padding:12px;margin-top:4px">
+                    <label style="color:${hasBilling ? '#15803d' : '#6b7280'};font-weight:700;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
+                        <span><i class="fas fa-won-sign"></i> 관리비 부과 정보</span>
+                        <button onclick="cancellations.showBillingModal('${c.id}')"
+                                style="background:#4f46e5;color:#fff;border:none;padding:4px 10px;border-radius:5px;
+                                       font-size:.75rem;cursor:pointer;font-weight:600">
+                            <i class="fas fa-edit"></i> ${hasBilling ? '수정' : '입력'}
+                        </button>
+                    </label>
+                    ${hasBilling ? `
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.82rem">
+                        <div>📅 해지처리월: <strong>${c.termination_month || '-'}</strong></div>
+                        <div>📆 해지날짜: <strong>${c.termination_date || '-'}</strong></div>
+                        <div>🏃 수강횟수: <strong>${c.attended_sessions ?? '-'}회</strong></div>
+                        <div>📚 총수업횟수: <strong>${c.total_sessions_in_month ?? '-'}회</strong></div>
+                        <div>💰 단가: <strong>₩${(c.session_fee || 0).toLocaleString()}</strong></div>
+                        <div style="color:#dc2626;font-weight:700">🧾 청구금액: <strong>₩${(c.billing_amount || 0).toLocaleString()}</strong></div>
+                    </div>
+                    ${c.billing_memo ? `<div style="margin-top:6px;font-size:.8rem;color:#6b7280">메모: ${c.billing_memo}</div>` : ''}
+                    <div style="margin-top:6px">
+                        <span style="background:${c.billing_processed ? '#dcfce7' : '#fee2e2'};
+                               color:${c.billing_processed ? '#15803d' : '#dc2626'};
+                               padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600">
+                            ${c.billing_processed ? '✅ 청구완료' : '⏳ 미청구'}
+                        </span>
+                    </div>` : `
+                    <div style="color:#9ca3af;font-size:.82rem;text-align:center;padding:8px 0">
+                        <i class="fas fa-edit"></i> 수강 횟수와 단가를 입력하면 관리비가 자동 계산됩니다
+                    </div>`}
+                </div>`;
+        }
+
         const body = `
             <div class="detail-grid">
                 <div class="detail-row">
@@ -351,45 +399,6 @@ const cancellations = {
                 ${c.processed_at ? `<div class="detail-row"><label>처리일</label><span>${formatDate(c.processed_at)}</span></div>` : ''}
             </div>`;
 
-        // 관리비 부과 정보 표시 (해지 승인 건)
-        let billingSection = '';
-        if (!isRefund && c.status === 'approved') {
-            const hasBilling = c.billing_amount > 0 || c.termination_month;
-            billingSection = `
-                <div class="detail-row full" style="background:${hasBilling ? '#f0fdf4' : '#fafafa'};
-                     border:1.5px solid ${hasBilling ? '#22c55e' : '#e5e7eb'};
-                     border-radius:8px;padding:12px;margin-top:4px">
-                    <label style="color:${hasBilling ? '#15803d' : '#6b7280'};font-weight:700;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
-                        <span><i class="fas fa-won-sign"></i> 관리비 부과 정보</span>
-                        <button onclick="cancellations.showBillingModal('${c.id}')"
-                                style="background:#4f46e5;color:#fff;border:none;padding:4px 10px;border-radius:5px;
-                                       font-size:.75rem;cursor:pointer;font-weight:600">
-                            <i class="fas fa-edit"></i> ${hasBilling ? '수정' : '입력'}
-                        </button>
-                    </label>
-                    ${hasBilling ? `
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:.82rem">
-                        <div>📅 해지처리월: <strong>${c.termination_month || '-'}</strong></div>
-                        <div>📆 해지날짜: <strong>${c.termination_date || '-'}</strong></div>
-                        <div>🏃 수강횟수: <strong>${c.attended_sessions ?? '-'}회</strong></div>
-                        <div>📚 총수업횟수: <strong>${c.total_sessions_in_month ?? '-'}회</strong></div>
-                        <div>💰 단가: <strong>₩${(c.session_fee || 0).toLocaleString()}</strong></div>
-                        <div style="color:#dc2626;font-weight:700">🧾 청구금액: <strong>₩${(c.billing_amount || 0).toLocaleString()}</strong></div>
-                    </div>
-                    ${c.billing_memo ? `<div style="margin-top:6px;font-size:.8rem;color:#6b7280">메모: ${c.billing_memo}</div>` : ''}
-                    <div style="margin-top:6px">
-                        <span style="background:${c.billing_processed ? '#dcfce7' : '#fee2e2'};
-                               color:${c.billing_processed ? '#15803d' : '#dc2626'};
-                               padding:2px 8px;border-radius:10px;font-size:.75rem;font-weight:600">
-                            ${c.billing_processed ? '✅ 청구완료' : '⏳ 미청구'}
-                        </span>
-                    </div>` : `
-                    <div style="color:#9ca3af;font-size:.82rem;text-align:center;padding:8px 0">
-                        <i class="fas fa-edit"></i> 수강 횟수와 단가를 입력하면 관리비가 자동 계산됩니다
-                    </div>`}
-                </div>`;
-        }
-
         const footer = `
             <div class="modal-btn-group" style="flex-wrap:wrap;gap:6px">
                 ${c.status === 'pending' ? `
@@ -409,6 +418,10 @@ const cancellations = {
             ? '<i class="fas fa-file-invoice-dollar"></i> 환불 신청 상세'
             : '<i class="fas fa-times-circle"></i> 해지 신청 상세';
         openGlobalModal(title, body, footer);
+        } catch(err) {
+            console.error('[cancellations] showDetail 오류:', err);
+            alert('상세 정보를 표시하는 중 오류가 발생했습니다: ' + err.message);
+        }
     },
 
     async updateStatus(id, status) {
@@ -544,9 +557,18 @@ const cancellations = {
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
     },
 
-    /** 해지 관리비 현황 내보내기 (CSV) */
-    exportBillingCSV() {
-        const cancelList = this.data.filter(c => c.request_type !== 'refund' && c.status === 'approved');
+    /** 해지 관리비 현황 내보내기 (CSV) — 현재 탭이 cancel이어야 의미 있음 */
+    async exportBillingCSV() {
+        // 현재 탭이 refund면 cancel 탭 데이터를 별도로 조회
+        let cancelList;
+        if (this.currentTab !== 'cancel') {
+            try {
+                const res = await API.cancellations.list({ complexId: getEffectiveComplexId(), request_type: 'cancel', status: 'approved' });
+                cancelList = (res.data || []).filter(c => c.request_type !== 'refund');
+            } catch(e) { showToast('데이터 조회 실패: ' + e.message, 'error'); return; }
+        } else {
+            cancelList = this.data.filter(c => c.request_type !== 'refund' && c.status === 'approved');
+        }
         if (!cancelList.length) { showToast('승인된 해지 건이 없습니다', 'error'); return; }
 
         const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);

@@ -37,9 +37,15 @@
             <div class="header-actions">
                 <!-- pageTitle: main.js에서 텍스트 변경용, 화면엔 보이지 않음 -->
                 <span id="pageTitle" style="display:none">필라테스 레슨 신청서</span>
-                <div style="display:flex;gap:6px">
-                    <button class="btn-ghost" onclick="showMyInquiryModal()" style="font-size:.82rem;padding:6px 10px">
-                        <i class="fas fa-search"></i> 내 문의
+                <div style="display:flex;gap:6px;align-items:center">
+                    <button class="btn-ghost" id="headerManageBtn" onclick="showMyManageModal()" style="font-size:.82rem;padding:6px 10px;background:#4f46e5;color:#fff;border-radius:8px;position:relative">
+                        <i class="fas fa-edit"></i> 취소·변경
+                        <span id="headerManageBadge" style="display:none;position:absolute;top:-4px;right:-4px;
+                              background:#ef4444;color:#fff;font-size:.6rem;border-radius:50%;
+                              width:14px;height:14px;line-height:14px;text-align:center;font-weight:700">●</span>
+                    </button>
+                    <button class="btn-ghost" onclick="showMyLookupModal()" style="font-size:.82rem;padding:6px 10px">
+                        <i class="fas fa-search"></i> 내 신청
                     </button>
                     <button class="btn-ghost" onclick="showInquiryForm()">
                         <i class="fas fa-comments"></i> 문의
@@ -53,6 +59,41 @@
             <div class="progress-step active" data-step="1"><div class="step-number">1</div></div>
             <div class="progress-line"></div>
             <div class="progress-step" data-step="2"><div class="step-number">2</div></div>
+        </div>
+
+        <!-- ★ 내 신청 취소/변경 탭바 (헤더 바로 아래 고정) -->
+        <div id="myManageTabBar" style="background:#fff;border-bottom:2px solid #e5e7eb;padding:0;display:flex;align-items:stretch;overflow-x:auto;-webkit-overflow-scrolling:touch;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.06)">
+            <button onclick="showMyManageModal()" id="manageTabBtn"
+                style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:none;
+                       background:transparent;font-size:.85rem;font-weight:600;color:#6b7280;
+                       cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;
+                       transition:all .2s;flex-shrink:0">
+                <i class="fas fa-edit"></i>
+                <span>내 신청 취소·변경</span>
+                <span id="manageTabPeriodBadge" style="display:none;font-size:.68rem;padding:1px 6px;
+                      border-radius:10px;background:#4f46e5;color:#fff;font-weight:700">20~27일</span>
+            </button>
+            <button onclick="showMyLookupModal()"
+                style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:none;
+                       background:transparent;font-size:.85rem;font-weight:600;color:#6b7280;
+                       cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;
+                       transition:all .2s;flex-shrink:0">
+                <i class="fas fa-search"></i> 내 신청 조회
+            </button>
+            <button onclick="showCancellationForm()"
+                style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:none;
+                       background:transparent;font-size:.85rem;font-weight:600;color:#6b7280;
+                       cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;
+                       transition:all .2s;flex-shrink:0">
+                <i class="fas fa-times-circle"></i> 해지 신청
+            </button>
+            <button onclick="showRefundRequestModal()"
+                style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:none;
+                       background:transparent;font-size:.85rem;font-weight:600;color:#6b7280;
+                       cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent;
+                       transition:all .2s;flex-shrink:0">
+                <i class="fas fa-file-invoice"></i> 환불 신청
+            </button>
         </div>
 
         <!-- 📅 접수 기간 안내 배너 (동적 표시) -->
@@ -79,6 +120,10 @@
             <button class="quick-btn" onclick="showMyLookupModal()">
                 <i class="fas fa-search"></i>
                 <span>내 신청 조회</span>
+            </button>
+            <button class="quick-btn" onclick="showMyManageModal()" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff">
+                <i class="fas fa-edit"></i>
+                <span>신청 취소·변경</span>
             </button>
             <button class="quick-btn" onclick="showRefundRequestModal()">
                 <i class="fas fa-file-invoice"></i>
@@ -807,9 +852,72 @@
         <img class="image-modal-content" id="modalImage" alt="">
     </div>
 
+    <!-- ★ 내 신청 취소/변경 모달 (매월 20~27일) -->
+    <div id="myManageModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+         z-index:9999;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto">
+        <div style="background:#fff;border-radius:16px;width:100%;max-width:480px;overflow:hidden;
+                    box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto">
+            <!-- 헤더 -->
+            <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:16px 18px;
+                        display:flex;align-items:center;justify-content:space-between">
+                <span style="font-weight:700;font-size:1rem">
+                    <i class="fas fa-edit"></i> 내 신청 취소 · 변경
+                </span>
+                <button onclick="closeMyManageModal()" style="background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <!-- 기간 안내 배너 -->
+            <div id="managePeriodBanner" style="padding:12px 18px 0"></div>
+            <!-- 바디 -->
+            <div style="padding:14px 18px 18px">
+                <!-- 본인 확인 입력 -->
+                <div id="manageInputSection">
+                    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;
+                                padding:10px 13px;margin-bottom:14px;font-size:.82rem;color:#1e40af;line-height:1.6">
+                        <i class="fas fa-info-circle"></i>
+                        동·호수와 전화번호 뒷 4자리를 입력하면<br>
+                        나의 신청 내역을 조회하고 <strong>취소 또는 시간대 변경</strong>을 할 수 있습니다.
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                        <div>
+                            <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">동 <span style="color:#ef4444">*</span></label>
+                            <input type="text" id="manageDong" placeholder="예: 101" inputmode="numeric"
+                                style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem;outline:none"
+                                oninput="this.style.borderColor='#d1d5db'">
+                        </div>
+                        <div>
+                            <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">호수 <span style="color:#ef4444">*</span></label>
+                            <input type="text" id="manageHo" placeholder="예: 1001" inputmode="numeric"
+                                style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem;outline:none"
+                                oninput="this.style.borderColor='#d1d5db'">
+                        </div>
+                    </div>
+                    <div style="margin-bottom:14px">
+                        <label style="font-size:.82rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
+                            전화번호 뒷 4자리 <span style="color:#ef4444">*</span>
+                        </label>
+                        <input type="text" id="managePhone4" placeholder="예: 1234" maxlength="4" inputmode="numeric"
+                            style="width:100%;box-sizing:border-box;padding:9px 11px;border:1.5px solid #d1d5db;border-radius:8px;font-size:.9rem;outline:none"
+                            oninput="this.style.borderColor='#d1d5db'"
+                            onkeydown="if(event.key==='Enter') loadMyManageList()">
+                    </div>
+                    <button onclick="loadMyManageList()" id="manageSearchBtn"
+                        style="width:100%;padding:11px;border:none;border-radius:9px;
+                               background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;
+                               font-size:.93rem;font-weight:700;cursor:pointer">
+                        <i class="fas fa-search"></i> 내 신청 내역 불러오기
+                    </button>
+                </div>
+                <!-- 결과 영역 -->
+                <div id="manageResult" style="margin-top:14px"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- 내 신청 조회 모달 -->
     <div id="myLookupModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
-         z-index:9999;display:none;align-items:center;justify-content:center;padding:16px">
+         z-index:9999;align-items:center;justify-content:center;padding:16px">
         <div style="background:#fff;border-radius:16px;width:100%;max-width:440px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.2)">
             <!-- 헤더 -->
             <div style="background:var(--color-primary,#4f46e5);color:#fff;padding:16px 18px;

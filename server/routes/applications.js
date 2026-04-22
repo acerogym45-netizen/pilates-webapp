@@ -361,6 +361,251 @@ router.post('/:id/transfer', async (req, res) => {
     }
 });
 
+// ── 입주민 대기 취소 (본인 인증 포함) ─────────────────────────
+// POST /api/applications/:id/cancel-waiting
+// body: { phone4 }  ← 전화번호 뒷 4자리
+router.post('/:id/cancel-waiting', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { phone4 } = req.body;
+
+        if (!phone4 || !/^\d{4}$/.test(phone4)) {
+            return res.status(400).json({ success: false, error: '전화번호 뒷 4자리를 입력하세요' });
+        }
+
+        const sb = getSupabase();
+
+        // 해당 신청 조회
+        const { data: app, error: fetchErr } = await sb
+            .from('applications')
+            .select('id, phone, status, program_id, preferred_time, waiting_order')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !app) {
+            return res.status(404).json({ success: false, error: '신청 내역을 찾을 수 없습니다' });
+        }
+
+        // 전화번호 뒷 4자리 검증
+        const storedPhone = (app.phone || '').replace(/\D/g, '');
+        if (!storedPhone.endsWith(phone4)) {
+            return res.status(403).json({ success: false, error: '전화번호가 일치하지 않습니다' });
+        }
+
+        // 대기 상태인지 확인
+        if (app.status !== 'waiting') {
+            return res.status(400).json({ success: false, error: '대기 중인 신청만 취소할 수 있습니다' });
+        }
+
+        // 삭제
+        const { error: delErr } = await sb
+            .from('applications')
+            .delete()
+            .eq('id', id);
+
+        if (delErr) throw sbErr(delErr, 'cancel-waiting DELETE');
+
+        // 삭제 후 뒤 순번 당기기
+        if (app.program_id && app.preferred_time && app.waiting_order) {
+            await sb.from('applications')
+                .update({ waiting_order: sb.rpc ? undefined : null }) // handled below
+                .eq('program_id', app.program_id)
+                .eq('preferred_time', app.preferred_time)
+                .eq('status', 'waiting')
+                .gt('waiting_order', app.waiting_order);
+
+            // waiting_order 재정렬: 취소된 순번보다 큰 것들 -1
+            const { data: laterWaiting } = await sb
+                .from('applications')
+                .select('id, waiting_order')
+                .eq('program_id', app.program_id)
+                .eq('preferred_time', app.preferred_time)
+                .eq('status', 'waiting')
+                .gt('waiting_order', app.waiting_order)
+                .order('waiting_order', { ascending: true });
+
+            if (laterWaiting && laterWaiting.length > 0) {
+                for (const w of laterWaiting) {
+                    await sb.from('applications')
+                        .update({ waiting_order: w.waiting_order - 1 })
+                        .eq('id', w.id);
+                }
+            }
+        }
+
+        res.json({ success: true, message: '대기 신청이 취소되었습니다' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 입주민 승인 신청 취소 (접수기간 20~27일, 본인 인증) ─────────
+// POST /api/applications/:id/cancel-approved
+// body: { phone4, complexCode }
+router.post('/:id/cancel-approved', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { phone4, complexCode } = req.body;
+
+        if (!phone4 || !/^\d{4}$/.test(phone4)) {
+            return res.status(400).json({ success: false, error: '전화번호 뒷 4자리를 입력하세요' });
+        }
+
+        // 접수기간(매월 20~27일) 체크
+        const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+        const dayKst = nowKst.getUTCDate();
+        if (dayKst < 20 || dayKst > 27) {
+            return res.status(400).json({ success: false, error: '신청 취소는 매월 20일~27일에만 가능합니다' });
+        }
+
+        const sb = getSupabase();
+        const { data: app, error: fetchErr } = await sb
+            .from('applications')
+            .select('id, phone, status, program_id, preferred_time, dong, ho, name')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !app) {
+            return res.status(404).json({ success: false, error: '신청 내역을 찾을 수 없습니다' });
+        }
+
+        // 전화번호 뒷 4자리 검증
+        const storedPhone = (app.phone || '').replace(/\D/g, '');
+        if (!storedPhone.endsWith(phone4)) {
+            return res.status(403).json({ success: false, error: '전화번호가 일치하지 않습니다' });
+        }
+
+        // 승인 상태만 취소 가능
+        if (app.status !== 'approved') {
+            return res.status(400).json({ success: false, error: '승인된 신청만 취소할 수 있습니다 (대기 신청은 대기 취소 기능 사용)' });
+        }
+
+        // 삭제
+        const { error: delErr } = await sb.from('applications').delete().eq('id', id);
+        if (delErr) throw sbErr(delErr, 'cancel-approved DELETE');
+
+        // 대기자 자동 승급
+        await promoteWaitingApplicant(sb, app.program_id, app.preferred_time);
+
+        res.json({ success: true, message: '신청이 취소되었습니다. 다음 달 수강은 종료됩니다.' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 입주민 시간대 변경 (접수기간 20~27일, 본인 인증) ─────────────
+// POST /api/applications/:id/change-time
+// body: { phone4, new_preferred_time, complexCode }
+router.post('/:id/change-time', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { phone4, new_preferred_time } = req.body;
+
+        if (!phone4 || !/^\d{4}$/.test(phone4)) {
+            return res.status(400).json({ success: false, error: '전화번호 뒷 4자리를 입력하세요' });
+        }
+        if (!new_preferred_time) {
+            return res.status(400).json({ success: false, error: '변경할 시간대를 선택하세요' });
+        }
+
+        // 접수기간(매월 20~27일) 체크
+        const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+        const dayKst = nowKst.getUTCDate();
+        if (dayKst < 20 || dayKst > 27) {
+            return res.status(400).json({ success: false, error: '시간대 변경은 매월 20일~27일에만 가능합니다' });
+        }
+
+        const sb = getSupabase();
+        const { data: app, error: fetchErr } = await sb
+            .from('applications')
+            .select('id, phone, status, program_id, preferred_time, dong, ho, name, complex_id')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !app) {
+            return res.status(404).json({ success: false, error: '신청 내역을 찾을 수 없습니다' });
+        }
+
+        // 전화번호 뒷 4자리 검증
+        const storedPhone = (app.phone || '').replace(/\D/g, '');
+        if (!storedPhone.endsWith(phone4)) {
+            return res.status(403).json({ success: false, error: '전화번호가 일치하지 않습니다' });
+        }
+
+        // 승인/대기 상태만 변경 가능
+        if (!['approved', 'waiting'].includes(app.status)) {
+            return res.status(400).json({ success: false, error: '승인 또는 대기 상태의 신청만 변경할 수 있습니다' });
+        }
+
+        // 같은 시간대면 불필요
+        if (app.preferred_time === new_preferred_time) {
+            return res.status(400).json({ success: false, error: '현재와 동일한 시간대입니다' });
+        }
+
+        // 변경하려는 시간대의 정원 확인
+        const { data: program } = await sb
+            .from('programs')
+            .select('capacity')
+            .eq('id', app.program_id)
+            .single();
+
+        const { count: approvedCnt } = await sb
+            .from('applications')
+            .select('*', { count: 'exact', head: true })
+            .eq('program_id', app.program_id)
+            .eq('preferred_time', new_preferred_time)
+            .eq('status', 'approved');
+
+        const capacity = program?.capacity || 999;
+        const isFull = (approvedCnt || 0) >= capacity;
+
+        // 이전 시간대에서 대기자 승급 처리 (승인 상태였다면)
+        const oldTime = app.preferred_time;
+        const oldStatus = app.status;
+
+        // 시간대 변경 (정원 있으면 approved, 없으면 waiting)
+        const newStatus = isFull ? 'waiting' : 'approved';
+        let newWaitingOrder = null;
+        if (isFull) {
+            const { count: waitingCnt } = await sb
+                .from('applications')
+                .select('*', { count: 'exact', head: true })
+                .eq('program_id', app.program_id)
+                .eq('preferred_time', new_preferred_time)
+                .eq('status', 'waiting');
+            newWaitingOrder = (waitingCnt || 0) + 1;
+        }
+
+        const { error: updateErr } = await sb
+            .from('applications')
+            .update({
+                preferred_time: new_preferred_time,
+                status: newStatus,
+                waiting_order: newWaitingOrder,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', id);
+
+        if (updateErr) throw sbErr(updateErr, 'change-time UPDATE');
+
+        // 이전 시간대가 승인이었다면 대기자 승급
+        if (oldStatus === 'approved') {
+            await promoteWaitingApplicant(sb, app.program_id, oldTime);
+        }
+
+        res.json({
+            success: true,
+            message: isFull
+                ? `시간대가 변경되었습니다. 해당 시간대가 마감되어 대기(${newWaitingOrder}번)로 등록되었습니다.`
+                : `시간대가 ${new_preferred_time}(으)로 변경되었습니다.`,
+            new_status: newStatus,
+            waiting_order: newWaitingOrder
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // ── 신청 삭제 ────────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
     try {
