@@ -208,10 +208,11 @@ router.post('/', async (req, res) => {
             }
 
             if (program && program.type === 'group') {
-                // program_id로 카운트 (있을 경우) 또는 program_name으로 카운트
+                // 반드시 같은 단지(complex_id) 내에서만 카운트 — 다른 단지 데이터 섞임 방지
                 const countQuery = sb
                     .from('applications')
                     .select('*', { count: 'exact', head: true })
+                    .eq('complex_id', program.complex_id)
                     .eq('preferred_time', preferred_time)
                     .eq('status', 'approved');
 
@@ -704,15 +705,18 @@ router.post('/:id/change-time', async (req, res) => {
         }
 
         // 정원 확인: program_id 기반 카운트 + program_name 기반 카운트 (null program_id 대비)
+        // 같은 단지(complex_id) 내 정원 확인 — 다른 단지 데이터가 섞이지 않도록 반드시 complex_id 필터 포함
         const { count: cntById } = await sb
             .from('applications')
             .select('*', { count: 'exact', head: true })
+            .eq('complex_id', targetProgram.complex_id)
             .eq('program_id', targetProgramId)
             .eq('preferred_time', new_preferred_time)
             .eq('status', 'approved');
         const { count: cntByName } = await sb
             .from('applications')
             .select('*', { count: 'exact', head: true })
+            .eq('complex_id', targetProgram.complex_id)
             .is('program_id', null)
             .ilike('program_name', targetProgram.name)
             .eq('preferred_time', new_preferred_time)
