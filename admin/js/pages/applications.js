@@ -652,7 +652,7 @@ const applications = {
             return {
             '신청일': formatDate(a.created_at),
             '상태': statusLabel(a.status),
-            '동': a.dong, '호수': a.ho, '이름': a.name, '전화번호': a.phone,
+            '동': a.dong, '호수': a.ho, '이름': a.name, '전화번호': fmtPhone(a.phone),
             '프로그램': a.program_name, '희망시간': a.preferred_time || '',
             '대기순번': a.status === 'waiting' ? (a._waitingOrder || '') : '',
             '월수강료': a.monthly_fee || '',

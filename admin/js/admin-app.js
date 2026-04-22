@@ -440,6 +440,19 @@ async function pickComplexForCreate(callback) {
     } catch(e) { showToast('단지 목록 로드 실패: ' + e.message, 'error'); }
 }
 
+// ── 전화번호 포맷 (숫자 → 010-xxxx-xxxx) ────────────────────────────────────
+// 엑셀이 숫자로 자동변환하지 않도록 하이픈 포함 문자열로 반환
+function fmtPhone(phone) {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+    // 11자리: 010-xxxx-xxxx
+    if (digits.length === 11) return `${digits.slice(0,3)}-${digits.slice(3,7)}-${digits.slice(7)}`;
+    // 10자리: 010-xxx-xxxx 또는 02-xxxx-xxxx
+    if (digits.length === 10) return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+    // 그 외: 원본 반환 (이미 하이픈 있으면 그대로)
+    return phone;
+}
+
 // ── CSV 다운로드 ──────────────────────────────────────────────────────────────
 function downloadCSV(filename, rows, headers) {
     const BOM = '\uFEFF';
