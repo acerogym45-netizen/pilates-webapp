@@ -232,6 +232,7 @@ button { font-family: inherit; cursor: pointer; }
     color: var(--text-sub); margin-bottom: 5px;
 }
 .required { color: var(--danger); }
+.inquiry-phone-notice { margin-top:5px; font-size:.78rem; color:#e67e22; font-weight:500; }
 
 input[type=text], input[type=tel], input[type=date],
 input[type=password], textarea, select {

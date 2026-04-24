@@ -887,15 +887,29 @@ async function searchMyInquiries() {
 
 async function submitInquiry(e) {
     e.preventDefault();
-    
+
+    const name    = document.getElementById('inquiryName').value.trim();
+    const phone   = document.getElementById('inquiryPhone').value.trim();
+    const title   = document.getElementById('inquiryTitle').value.trim();
+    const content = document.getElementById('inquiryContent').value.trim();
+
+    if (!name)  { alert('이름을 입력해주세요.'); return; }
+    if (!phone) { alert('전화번호를 입력해주세요.'); return; }
+    if (!/^01[0-9]{1}-?\d{3,4}-?\d{4}$/.test(phone.replace(/\s/g, ''))) {
+        alert('전화번호 형식이 올바르지 않습니다.\n예) 010-1234-5678');
+        return;
+    }
+    if (!title)   { alert('제목을 입력해주세요.'); return; }
+    if (!content) { alert('내용을 입력해주세요.'); return; }
+
     const inquiryData = {
         complex_id: complexContext.getComplexId(),
         dong: document.getElementById('inquiryDong').value,
         ho: document.getElementById('inquiryHo').value,
-        name: document.getElementById('inquiryName').value,
-        phone: document.getElementById('inquiryPhone').value,
-        title: document.getElementById('inquiryTitle').value,
-        content: document.getElementById('inquiryContent').value,
+        name,
+        phone,
+        title,
+        content,
         is_public: document.getElementById('inquiryPublic')?.checked ?? true,
         status: '대기중',
         created_at: new Date().getTime()
