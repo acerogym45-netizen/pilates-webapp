@@ -334,6 +334,42 @@ router.put('/:id', async (req, res) => {
         if (transfer_memo !== undefined)      updates.transfer_memo = transfer_memo;
         if (transfer_date !== undefined)      updates.transfer_date = transfer_date;
 
+        // ── 관리자 편집 변경 이력 자동 기록 ──────────────────────────
+        const editedAt = new Date().toISOString();
+        const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+        const userAgent = req.headers['user-agent'] || 'unknown';
+        const changedFields = [];
+
+        if (program_name !== undefined && program_name !== current.program_name)
+            changedFields.push(`프로그램: ${current.program_name} → ${program_name}`);
+        if (preferred_time !== undefined && preferred_time !== current.preferred_time)
+            changedFields.push(`시간대: ${current.preferred_time} → ${preferred_time}`);
+        if (status !== undefined && status !== current.status)
+            changedFields.push(`상태: ${current.status} → ${status}`);
+        if (dong !== undefined && dong !== current.dong)
+            changedFields.push(`동: ${current.dong} → ${dong}`);
+        if (ho !== undefined && ho !== current.ho)
+            changedFields.push(`호수: ${current.ho} → ${ho}`);
+        if (monthly_fee !== undefined && monthly_fee !== current.monthly_fee)
+            changedFields.push(`월수강료: ${current.monthly_fee} → ${monthly_fee}`);
+        if (remaining_sessions !== undefined && remaining_sessions !== current.remaining_sessions)
+            changedFields.push(`잔여횟수: ${current.remaining_sessions} → ${remaining_sessions}`);
+        if (total_sessions !== undefined && total_sessions !== current.total_sessions)
+            changedFields.push(`총횟수: ${current.total_sessions} → ${total_sessions}`);
+
+        // 변경된 필드가 있으면 무조건 notes에 [수정] 이력 추가
+        if (changedFields.length > 0) {
+            const editMeta = JSON.stringify({
+                edited_at: editedAt,
+                edited_by: 'admin',
+                ip: clientIp,
+                user_agent: userAgent,
+                changes: changedFields
+            });
+            const prevNotes = notes !== undefined ? notes : (current.notes || '');
+            updates.notes = prevNotes ? `${prevNotes}\n[수정] ${editMeta}` : `[수정] ${editMeta}`;
+        }
+
         const { data: updated, error } = await sb
             .from('applications')
             .update(updates)
