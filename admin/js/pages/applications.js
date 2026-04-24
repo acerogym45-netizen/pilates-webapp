@@ -274,24 +274,33 @@ const applications = {
                     if (!allLogs.length) return '';
                     const rows = allLogs.map((lg, i) => {
                         if (lg._type === 'change') {
-                            return `<div style="background:#f0f4ff;border-left:3px solid #4f46e5;border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:6px;font-size:.82rem">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:3px">
-                                    <span style="font-weight:600;color:#4f46e5"><i class="fas fa-exchange-alt" style="margin-right:4px"></i>변경 ${i+1}</span>
-                                    <span style="color:#6b7280">${formatDate(lg.changed_at)}</span>
+                            const dateStr = new Date(lg.changed_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+                            const lines = [];
+                            if (lg.from_program !== lg.to_program) lines.push(`프로그램을 <b style="color:#991b1b">${escHtml(lg.from_program||'-')}</b>에서 <b style="color:#166534">${escHtml(lg.to_program||'-')}</b>으로 변경`);
+                            if (lg.from_time !== lg.to_time) lines.push(`시간대를 <b style="color:#991b1b">${lg.from_time||'-'}</b>에서 <b style="color:#166534">${lg.to_time||'-'}</b>으로 변경`);
+                            return `<div style="background:#f0f4ff;border-left:3px solid #4f46e5;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:.83rem">
+                                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                                    <span style="font-weight:600;color:#4f46e5"><i class="fas fa-exchange-alt" style="margin-right:4px"></i>변경 이력 ${i+1}</span>
+                                    <span style="color:#6b7280;font-size:.78rem">${dateStr}</span>
                                 </div>
-                                ${lg.from_program !== lg.to_program ? `<div style="color:#374151">프로그램: <span style="color:#991b1b">${escHtml(lg.from_program||'-')}</span> → <span style="color:#166534">${escHtml(lg.to_program||'-')}</span></div>` : ''}
-                                ${lg.from_time !== lg.to_time ? `<div style="color:#374151">시간대: <span style="color:#991b1b">${lg.from_time||'-'}</span> → <span style="color:#166534">${lg.to_time||'-'}</span></div>` : ''}
+                                <div style="color:#374151;line-height:1.7">${lines.join('<br>')}</div>
                             </div>`;
                         } else {
-                            // [수정] 이력
-                            const changes = Array.isArray(lg.changes) ? lg.changes.join(', ') : '';
-                            return `<div style="background:#fff7ed;border-left:3px solid #ea580c;border-radius:0 6px 6px 0;padding:6px 10px;margin-bottom:6px;font-size:.82rem">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                            // [수정] 이력 — 자연어로 표시
+                            const dateStr = new Date(lg.edited_at).toLocaleString('ko-KR', {timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+                            const changes = Array.isArray(lg.changes) ? lg.changes : [];
+                            const ua = (lg.user_agent || '');
+                            const isMobile = /iPhone|Android|Mobile/i.test(ua);
+                            const device = isMobile ? '📱 모바일' : (ua ? '🖥️ PC' : '알 수 없음');
+                            const ipStr = lg.ip && lg.ip !== 'unknown' ? lg.ip : '알 수 없음';
+                            const changeLines = changes.map(c => `• ${escHtml(c)}`).join('<br>');
+                            return `<div style="background:#fff7ed;border-left:3px solid #ea580c;border-radius:0 6px 6px 0;padding:8px 12px;margin-bottom:6px;font-size:.83rem">
+                                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
                                     <span style="font-weight:600;color:#ea580c"><i class="fas fa-user-edit" style="margin-right:4px"></i>관리자 수정 ${i+1}</span>
-                                    <span style="color:#6b7280">${formatDate(lg.edited_at)}</span>
+                                    <span style="color:#6b7280;font-size:.78rem">${dateStr}</span>
                                 </div>
-                                <div style="color:#374151">${escHtml(changes)}</div>
-                                <div style="color:#9ca3af;font-size:.75rem;margin-top:2px">IP: ${escHtml(lg.ip||'unknown')} | ${escHtml((lg.user_agent||'').substring(0,60))}</div>
+                                <div style="color:#374151;line-height:1.8">${changeLines || '(변경 항목 없음)'}</div>
+                                <div style="color:#9ca3af;font-size:.76rem;margin-top:4px;border-top:1px solid #fed7aa;padding-top:4px">${device} &nbsp;|&nbsp; IP: ${escHtml(ipStr)}</div>
                             </div>`;
                         }
                     }).join('');
@@ -300,7 +309,16 @@ const applications = {
                         <div style="margin-top:6px">${rows}</div>
                     </div>`;
                 })()}
-                ${a.notes ? `<div class="detail-row"><label>메모</label><span style="white-space:pre-wrap;font-size:.82rem">${escHtml(a.notes)}</span></div>` : ''}
+${(() => {
+                    // [수정],[변경],[취소],[삭제] JSON 블록 제거 후 순수 메모 텍스트만 표시
+                    const cleanNotes = (a.notes || '')
+                        .replace(/\[수정\]\s*\{[\s\S]*?\}(?=\n\[|\n?$)/g, '')
+                        .replace(/\[변경\]\s*\{[\s\S]*?\}(?=\n\[|\n?$)/g, '')
+                        .replace(/\[취소\]\s*\{[\s\S]*?\}(?=\n\[|\n?$)/g, '')
+                        .replace(/\[삭제\]\s*\{[\s\S]*?\}(?=\n\[|\n?$)/g, '')
+                        .trim();
+                    return cleanNotes ? `<div class="detail-row"><label>메모</label><span style="white-space:pre-wrap;font-size:.82rem">${escHtml(cleanNotes)}</span></div>` : '';
+                })()}
                 ${a.signature_data ? `
                 <div class="detail-row full">
                     <label>서명</label>
