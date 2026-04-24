@@ -82,13 +82,11 @@ async function sendInquiryAnswerSms({ phone, name, title, answer, complexName })
         return { success: false, error: '솔라피 서비스 초기화 실패' };
     }
 
-    // SMS 본문 (90바이트 이내 = SMS, 초과 = LMS 자동 전환)
     const sender = process.env.SOLAPI_SENDER;
     const complex = complexName ? `[${complexName}] ` : '';
-    const shortTitle = title.length > 15 ? title.substring(0, 15) + '...' : title;
 
-    // 문자 내용 (간결하게)
-    const text = `${complex}${name}님의 문의에 답변이 등록되었습니다.\n\n문의: ${shortTitle}\n\n답변 내용은 입주민 페이지 > 문의조회에서 확인하실 수 있습니다.`;
+    // 문자 내용
+    const text = `${complex}${name}님의 문의에 답변이 등록되었습니다.\n\n문의 제목 : ${title}\n\n답변 내용은 입주민 페이지 > [내 문의조회]에서 확인하실 수 있습니다.`;
 
     try {
         console.log(`[SMS] 발송 시도: ${normalizedPhone} (${name})`);

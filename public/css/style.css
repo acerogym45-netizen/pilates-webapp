@@ -120,6 +120,7 @@ body {
 .form-group:last-child { margin-bottom:0; }
 .form-group label { display:block; font-size:.85rem; font-weight:600; color:var(--color-text); margin-bottom:5px; }
 .required { color:var(--color-danger); }
+.inquiry-phone-notice { margin-top:5px; font-size:.78rem; color:#e67e22; font-weight:500; }
 
 input[type=text], input[type=tel], input[type=date], input[type=password], textarea, select {
     width:100%; padding:11px 14px; border:1.5px solid var(--color-border);
