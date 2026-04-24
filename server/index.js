@@ -12,6 +12,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const path = require('path');
+const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 
 // ── 라우터 import ─────────────────────────────────────────────────────────────
@@ -23,6 +24,46 @@ const uploadRouter        = require('./routes/upload');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// ── 접근 로그 설정 ────────────────────────────────────────────────────────────
+const ACCESS_LOG_PATH = path.join(__dirname, '../logs/access.log');
+try { fs.mkdirSync(path.dirname(ACCESS_LOG_PATH), { recursive: true }); } catch(e) {}
+
+// ── 접근 로그 미들웨어 (IP, User-Agent, 요청 본문 기록) ──────────────────────
+app.use((req, res, next) => {
+    const start = Date.now();
+    const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const referer = req.headers['referer'] || '';
+
+    res.on('finish', () => {
+        // POST/PUT/DELETE 또는 /api/applications 관련 요청만 기록
+        const isWrite = ['POST','PUT','DELETE','PATCH'].includes(req.method);
+        const isAppApi = req.path.startsWith('/api/applications') || req.path.startsWith('/api/programs');
+        if (!isWrite && !isAppApi) return;
+
+        const duration = Date.now() - start;
+        const now = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+        const body = req.body ? JSON.stringify(req.body).substring(0, 500) : '';
+        const line = JSON.stringify({
+            time: now,
+            method: req.method,
+            path: req.url,
+            status: res.statusCode,
+            ip: clientIp,
+            ua: userAgent,
+            referer,
+            duration_ms: duration,
+            body
+        });
+        try {
+            fs.appendFileSync(ACCESS_LOG_PATH, line + '\n');
+        } catch(e) {
+            // 로그 기록 실패해도 요청은 계속 처리
+        }
+    });
+    next();
+});
 
 // ── 미들웨어 ──────────────────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -41,17 +82,16 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 
 // ── 정적 파일 ─────────────────────────────────────────────────────────────────
-// upload.js 의 UPLOAD_DIR 과 반드시 동일하게 절대경로로 설정
 const uploadDir = process.env.UPLOAD_DIR
     ? path.resolve(process.env.UPLOAD_DIR)
     : path.resolve(__dirname, '../public/uploads');
 app.use('/uploads', express.static(uploadDir));
-// Vercel(/tmp) 환경 폴백: /tmp/refund-docs 도 /uploads/refund-docs 로 서빙
+// Vercel(/tmp) 환경 폴백
 const tmpRefundDir = '/tmp/refund-docs';
-if (!require('fs').existsSync(tmpRefundDir)) {
-    try { require('fs').mkdirSync(tmpRefundDir, { recursive: true }); } catch(e) {}
+if (!fs.existsSync(tmpRefundDir)) {
+    try { fs.mkdirSync(tmpRefundDir, { recursive: true }); } catch(e) {}
 }
-app.use('/uploads/refund-docs', require('express').static(tmpRefundDir));
+app.use('/uploads/refund-docs', express.static(tmpRefundDir));
 app.use('/admin', express.static(path.join(__dirname, '../admin')));
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -92,14 +132,12 @@ app.use((err, req, res, next) => {
 
 // ── 서버 시작 ─────────────────────────────────────────────────────────────────
 async function startServer() {
-    // Supabase 연결 확인
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
         console.warn('⚠️  SUPABASE_URL / SUPABASE_KEY 미설정');
         console.warn('   .env 파일에 추가하거나 Vercel 환경변수를 설정하세요');
-        console.warn('   supabase-setup.sql을 Supabase SQL Editor에서 실행하세요');
     } else {
         console.log('✅ Supabase 연결 설정 확인됨:', supabaseUrl.replace(/https:\/\/([^.]+).*/, 'https://$1.supabase.co'));
     }
