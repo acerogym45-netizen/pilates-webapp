@@ -63,6 +63,7 @@ const API = (() => {
             feeCalc:        (d) => req('POST', '/applications/fee-calc', d),
             programSummary: (p) => req('GET',  `/applications/program-summary${qs(p)}`),
             feeSettlement:  (p) => req('GET',  `/applications/fee-settlement${qs(p)}`),
+            bulkSessions:   (d) => req('PUT',  '/applications/bulk-sessions', d),
         },
 
         // ─── 해지 ────────────────────────────────────────
