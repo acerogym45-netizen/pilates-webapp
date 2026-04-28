@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v2.4 프로그램/시간대/동 세분 필터 */
+/** 신청 관리 페이지 - v2.5 프로그램 현황 패널 + 관리비 정산 */
 const applications = {
     data: [],
     filtered: [],
@@ -19,6 +19,9 @@ const applications = {
                     <button class="btn-fee btn-sm" onclick="applications.showFeeCalc()" style="background:#f39c12;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
                         <i class="fas fa-calculator"></i> 관리비 계산기
                     </button>
+                    <button class="btn-sm" onclick="applications.showSettlement()" style="background:#8e44ad;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
+                        <i class="fas fa-won-sign"></i> 수강료 정산
+                    </button>
                     <button class="btn-secondary btn-sm" onclick="applications.showImportModal()">
                         <i class="fas fa-upload"></i> 가져오기
                     </button>
@@ -28,6 +31,24 @@ const applications = {
                     <button class="btn-secondary btn-sm" onclick="applications.render()">
                         <i class="fas fa-sync"></i>
                     </button>
+                </div>
+            </div>
+
+            <!-- ▼ 프로그램 현황 패널 (접이식) -->
+            <div id="programStatusPanel" style="margin-bottom:12px;border:1px solid #e0e0e0;border-radius:10px;overflow:hidden">
+                <div onclick="applications.toggleStatusPanel()"
+                     style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:#f8f9fa;cursor:pointer;user-select:none">
+                    <span style="font-weight:600;font-size:.9rem;color:#2c3e50">
+                        <i class="fas fa-chart-bar" style="color:#3498db;margin-right:6px"></i>
+                        프로그램 현황
+                        <span id="statusPanelBadge" style="font-size:.78rem;color:#666;font-weight:400;margin-left:6px"></span>
+                    </span>
+                    <span id="statusPanelChevron" style="color:#888;font-size:.85rem">
+                        <i class="fas fa-chevron-down"></i>
+                    </span>
+                </div>
+                <div id="statusPanelBody" style="display:none;padding:12px 16px;background:#fff">
+                    <div class="loading-mini"><i class="fas fa-spinner fa-spin"></i> 로딩 중...</div>
                 </div>
             </div>
 
@@ -75,6 +96,7 @@ const applications = {
             </div>`;
 
         await this.load();
+        this.loadProgramStatus(); // 프로그램 현황 패널 비동기 로드
     },
 
     async load() {
@@ -93,7 +115,233 @@ const applications = {
         }
     },
 
-    /** 세분 필터 드롭다운 옵션 구성 */
+    // ══════════════════════════════════════════════════
+    //  프로그램 현황 패널
+    // ══════════════════════════════════════════════════
+    _statusPanelOpen: false,
+
+    toggleStatusPanel() {
+        this._statusPanelOpen = !this._statusPanelOpen;
+        const body    = document.getElementById('statusPanelBody');
+        const chevron = document.getElementById('statusPanelChevron');
+        if (!body) return;
+        body.style.display = this._statusPanelOpen ? 'block' : 'none';
+        if (chevron) chevron.innerHTML = this._statusPanelOpen
+            ? '<i class="fas fa-chevron-up"></i>'
+            : '<i class="fas fa-chevron-down"></i>';
+        if (this._statusPanelOpen && body.querySelector('.loading-mini')) {
+            this.loadProgramStatus();
+        }
+    },
+
+    async loadProgramStatus() {
+        const body  = document.getElementById('statusPanelBody');
+        const badge = document.getElementById('statusPanelBadge');
+        if (!body) return;
+        try {
+            const params = {};
+            const cid = getEffectiveComplexId();
+            if (cid) params.complexId = cid;
+            const res = await API.applications.programSummary(params);
+            const list = res.data || [];
+
+            // 뱃지: 총 승인 인원 합산
+            const totalApproved = list.reduce((s, p) => s + p.total_approved, 0);
+            const totalWaiting  = list.reduce((s, p) => s + p.total_waiting, 0);
+            if (badge) badge.textContent = `승인 ${totalApproved}명 · 대기 ${totalWaiting}명`;
+
+            if (!list.length) {
+                body.innerHTML = '<p style="color:#999;font-size:.85rem;text-align:center;padding:12px 0">등록된 활성 프로그램이 없습니다</p>';
+                return;
+            }
+
+            body.innerHTML = `
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+                    ${list.map(prog => {
+                        const slotRows = (prog.slot_summary || []).map(s => {
+                            const pct = prog.capacity > 0 ? Math.round(s.approved / prog.capacity * 100) : 0;
+                            const barColor = s.isFull ? '#e74c3c' : pct >= 80 ? '#e67e22' : '#27ae60';
+                            return `
+                                <div style="margin-bottom:8px">
+                                    <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px">
+                                        <span style="color:#555">${s.slot}</span>
+                                        <span style="font-weight:600;color:${barColor}">
+                                            ${s.approved}/${s.capacity}
+                                            ${s.isFull ? ' <span style="color:#e74c3c;font-size:.75rem">마감</span>' : ` <span style="color:#27ae60;font-size:.75rem">여유 ${s.available}</span>`}
+                                            ${s.waiting > 0 ? ` <span style="color:#f39c12;font-size:.75rem">대기 ${s.waiting}</span>` : ''}
+                                        </span>
+                                    </div>
+                                    <div style="height:6px;background:#eee;border-radius:3px;overflow:hidden">
+                                        <div style="height:100%;width:${Math.min(pct,100)}%;background:${barColor};border-radius:3px;transition:width .3s"></div>
+                                    </div>
+                                </div>`;
+                        }).join('');
+
+                        const noSlot = !prog.slot_summary || prog.slot_summary.length === 0;
+                        const feeText = prog.estimated_monthly_fee > 0
+                            ? `<span style="font-size:.78rem;color:#8e44ad;font-weight:600">₩${prog.estimated_monthly_fee.toLocaleString()}/월</span>`
+                            : '';
+
+                        return `
+                            <div style="border:1px solid #e8ecef;border-radius:8px;padding:12px;background:#fff">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                                    <span style="font-weight:700;font-size:.88rem;color:#2c3e50">${prog.program_name}</span>
+                                    ${feeText}
+                                </div>
+                                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                                    <span style="font-size:.78rem;background:#e8f4fd;color:#2980b9;border-radius:4px;padding:2px 8px">승인 ${prog.total_approved}</span>
+                                    ${prog.total_waiting > 0 ? `<span style="font-size:.78rem;background:#fef9e7;color:#f39c12;border-radius:4px;padding:2px 8px">대기 ${prog.total_waiting}</span>` : ''}
+                                    ${prog.total_cancelled > 0 ? `<span style="font-size:.78rem;background:#fdedec;color:#c0392b;border-radius:4px;padding:2px 8px">해지 ${prog.total_cancelled}</span>` : ''}
+                                </div>
+                                ${noSlot
+                                    ? `<p style="color:#aaa;font-size:.78rem;margin:0">시간대 정보 없음</p>`
+                                    : slotRows
+                                }
+                            </div>`;
+                    }).join('')}
+                </div>
+                <div style="margin-top:10px;text-align:right">
+                    <button onclick="applications.loadProgramStatus()" style="font-size:.78rem;background:none;border:1px solid #ddd;border-radius:4px;padding:3px 10px;cursor:pointer;color:#666">
+                        <i class="fas fa-sync-alt"></i> 새로고침
+                    </button>
+                </div>`;
+        } catch (e) {
+            if (body) body.innerHTML = `<p style="color:#e74c3c;font-size:.83rem">현황 로드 실패: ${e.message}</p>`;
+        }
+    },
+
+    // ══════════════════════════════════════════════════
+    //  수강료 정산 모달
+    // ══════════════════════════════════════════════════
+    async showSettlement() {
+        openGlobalModal('<i class="fas fa-won-sign"></i> 수강료 정산 현황',
+            '<div class="loading-mini" style="padding:30px 0;text-align:center"><i class="fas fa-spinner fa-spin"></i> 불러오는 중...</div>',
+            `<button class="btn-secondary" onclick="closeGlobalModal()">닫기</button>
+             <button class="btn-primary" onclick="applications._exportSettlementCSV()" style="background:#8e44ad">
+                <i class="fas fa-download"></i> CSV 내보내기
+             </button>`
+        );
+        try {
+            const params = {};
+            const cid = getEffectiveComplexId();
+            if (cid) params.complexId = cid;
+            const res = await API.applications.feeSettlement(params);
+            const list = res.data || [];
+            const sum  = res.summary || {};
+            this._settlementData = list;
+
+            // 프로그램별 그룹
+            const byProg = {};
+            list.forEach(a => {
+                const k = a.program_name || '(미분류)';
+                if (!byProg[k]) byProg[k] = [];
+                byProg[k].push(a);
+            });
+
+            const tableRows = Object.entries(byProg).map(([prog, members]) => {
+                const progFee = members.filter(a => a.monthly_fee).reduce((s, a) => s + parseInt(a.monthly_fee || 0), 0);
+                const rows = members.map(a => `
+                    <tr style="font-size:.82rem">
+                        <td style="padding:5px 8px">${a.dong} ${a.ho}</td>
+                        <td style="padding:5px 8px">${a.name}</td>
+                        <td style="padding:5px 8px;color:#666">${a.preferred_time || '-'}</td>
+                        <td style="padding:5px 8px;text-align:right;font-weight:600;color:${a.monthly_fee ? '#2c3e50' : '#e74c3c'}">
+                            ${a.monthly_fee ? '₩' + parseInt(a.monthly_fee).toLocaleString() : '<span style="color:#e74c3c">미입력</span>'}
+                        </td>
+                        <td style="padding:5px 8px;text-align:center;color:#888;font-size:.78rem">
+                            ${a.total_sessions != null ? a.total_sessions + '회' : '-'}
+                        </td>
+                        <td style="padding:5px 8px;text-align:center;color:#2980b9;font-size:.78rem">
+                            ${a.remaining_sessions != null ? a.remaining_sessions + '회' : '-'}
+                        </td>
+                    </tr>`).join('');
+
+                return `
+                    <tr style="background:#f0f4ff">
+                        <td colspan="3" style="padding:6px 8px;font-weight:700;font-size:.85rem;color:#3a3a8c">
+                            <i class="fas fa-dumbbell" style="margin-right:5px"></i>${prog}
+                            <span style="font-size:.78rem;color:#666;font-weight:400;margin-left:6px">${members.length}명</span>
+                        </td>
+                        <td style="padding:6px 8px;text-align:right;font-weight:700;color:#8e44ad">
+                            ${progFee > 0 ? '₩' + progFee.toLocaleString() : '-'}
+                        </td>
+                        <td colspan="2" style="padding:6px 8px;font-size:.75rem;color:#888;text-align:center">총 횟수 / 잔여 횟수</td>
+                    </tr>
+                    ${rows}`;
+            }).join('');
+
+            const html = `
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+                    <div style="background:#e8f4fd;border-radius:8px;padding:10px;text-align:center">
+                        <div style="font-size:1.4rem;font-weight:700;color:#2980b9">${sum.total_approved}</div>
+                        <div style="font-size:.78rem;color:#666">전체 수강생</div>
+                    </div>
+                    <div style="background:#e8f8f0;border-radius:8px;padding:10px;text-align:center">
+                        <div style="font-size:1.4rem;font-weight:700;color:#27ae60">${sum.has_fee}</div>
+                        <div style="font-size:.78rem;color:#666">수강료 입력</div>
+                    </div>
+                    <div style="background:#fdf3f3;border-radius:8px;padding:10px;text-align:center">
+                        <div style="font-size:1.4rem;font-weight:700;color:#e74c3c">${sum.no_fee}</div>
+                        <div style="font-size:.78rem;color:#666">수강료 미입력</div>
+                    </div>
+                    <div style="background:#f5eeff;border-radius:8px;padding:10px;text-align:center">
+                        <div style="font-size:1.2rem;font-weight:700;color:#8e44ad">₩${(sum.total_monthly_fee||0).toLocaleString()}</div>
+                        <div style="font-size:.78rem;color:#666">월 수강료 합계</div>
+                    </div>
+                </div>
+                ${sum.no_fee > 0 ? `
+                <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:.82rem;color:#7d5000">
+                    <i class="fas fa-exclamation-triangle" style="margin-right:5px"></i>
+                    수강료가 입력되지 않은 수강생이 <strong>${sum.no_fee}명</strong> 있습니다.
+                    각 신청 상세 → 수정에서 <b>월 수강료</b>를 입력하면 정산에 포함됩니다.
+                </div>` : ''}
+                <div style="max-height:420px;overflow-y:auto;border:1px solid #e8ecef;border-radius:6px">
+                    <table style="width:100%;border-collapse:collapse">
+                        <thead style="position:sticky;top:0;background:#f8f9fa;z-index:1">
+                            <tr style="font-size:.82rem;color:#555">
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">동/호수</th>
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">이름</th>
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">시간대</th>
+                                <th style="padding:7px 8px;text-align:right;font-weight:600">월 수강료</th>
+                                <th style="padding:7px 8px;text-align:center;font-weight:600">총 횟수</th>
+                                <th style="padding:7px 8px;text-align:center;font-weight:600">잔여</th>
+                            </tr>
+                        </thead>
+                        <tbody>${tableRows}</tbody>
+                    </table>
+                </div>`;
+
+            const modalBody = document.querySelector('#globalModal .modal-body');
+            if (modalBody) modalBody.innerHTML = html;
+        } catch (e) {
+            const modalBody = document.querySelector('#globalModal .modal-body');
+            if (modalBody) modalBody.innerHTML = `<p style="color:#e74c3c">데이터 로드 실패: ${e.message}</p>`;
+        }
+    },
+
+    _settlementData: [],
+    _exportSettlementCSV() {
+        if (!this._settlementData || !this._settlementData.length) {
+            showToast('데이터가 없습니다', 'error'); return;
+        }
+        const headers = ['프로그램', '동', '호수', '이름', '전화번호', '시간대', '월수강료', '총횟수', '잔여횟수', '신청일'];
+        const rows = this._settlementData.map(a => ({
+            '프로그램': a.program_name || '',
+            '동': a.dong || '',
+            '호수': a.ho || '',
+            '이름': a.name || '',
+            '전화번호': fmtPhone(a.phone || ''),
+            '시간대': a.preferred_time || '',
+            '월수강료': a.monthly_fee || '',
+            '총횟수': a.total_sessions || '',
+            '잔여횟수': a.remaining_sessions != null ? a.remaining_sessions : '',
+            '신청일': formatDate(a.created_at)
+        }));
+        downloadCSV(`수강료정산_${new Date().toLocaleDateString('ko')}.csv`, rows, headers);
+        showToast('CSV 다운로드 완료', 'success');
+    },
+
+
     _buildDetailFilterOptions() {
         const programs = [...new Set(this.data.map(a => a.program_name).filter(Boolean))].sort();
         const times    = [...new Set(this.data.map(a => a.preferred_time).filter(Boolean))].sort();

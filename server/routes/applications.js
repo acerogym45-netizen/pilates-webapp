@@ -81,6 +81,128 @@ router.get('/my', async (req, res) => {
     }
 });
 
+// ── 프로그램별 현황 요약 (program-summary는 /:id보다 먼저 선언) ──
+router.get('/program-summary', async (req, res) => {
+    try {
+        const { complexId, complexCode } = req.query;
+        const sb = getSupabase();
+
+        // 프로그램 목록 조회
+        let progQuery = sb.from('programs').select('id, name, capacity, time_slots, is_active');
+        if (complexId)   progQuery = progQuery.eq('complex_id', complexId);
+        if (complexCode) {
+            const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
+            if (cx) progQuery = progQuery.eq('complex_id', cx.id);
+        }
+        progQuery = progQuery.eq('is_active', true).order('display_order').order('name');
+        const { data: programs, error: progErr } = await progQuery;
+        if (progErr) throw sbErr(progErr, 'program-summary: programs');
+
+        // 전체 신청 데이터 한 번에 조회 (프로그램ID 기준)
+        const programIds = (programs || []).map(p => p.id);
+        if (!programIds.length) return res.json({ success: true, data: [] });
+
+        const { data: apps, error: appErr } = await sb
+            .from('applications')
+            .select('program_id, program_name, preferred_time, status, monthly_fee, dong, ho, name, phone')
+            .in('program_id', programIds);
+        if (appErr) throw sbErr(appErr, 'program-summary: applications');
+
+        // 프로그램별 집계
+        const appsByProg = {};
+        (apps || []).forEach(a => {
+            const pid = a.program_id;
+            if (!appsByProg[pid]) appsByProg[pid] = [];
+            appsByProg[pid].push(a);
+        });
+
+        const result = (programs || []).map(prog => {
+            const progApps = appsByProg[prog.id] || [];
+            const slots    = Array.isArray(prog.time_slots) ? prog.time_slots : [];
+            const capacity = prog.capacity || 6;
+
+            const approved  = progApps.filter(a => a.status === 'approved');
+            const waiting   = progApps.filter(a => a.status === 'waiting');
+            const cancelled = progApps.filter(a => a.status === 'cancelled');
+
+            // 시간대별 정원 현황
+            const slotSummary = slots.map(slot => {
+                const slotApproved = approved.filter(a => a.preferred_time === slot).length;
+                const slotWaiting  = waiting.filter(a => a.preferred_time === slot).length;
+                return {
+                    slot,
+                    approved: slotApproved,
+                    waiting: slotWaiting,
+                    capacity,
+                    available: Math.max(0, capacity - slotApproved),
+                    isFull: slotApproved >= capacity
+                };
+            });
+
+            // 총 예상 월 수강료 (approved 중 monthly_fee 있는 항목만)
+            const totalMonthlyFee = approved
+                .filter(a => a.monthly_fee)
+                .reduce((sum, a) => sum + parseInt(a.monthly_fee || 0), 0);
+
+            return {
+                program_id: prog.id,
+                program_name: prog.name,
+                capacity,
+                total_approved: approved.length,
+                total_waiting: waiting.length,
+                total_cancelled: cancelled.length,
+                slot_summary: slotSummary,
+                estimated_monthly_fee: totalMonthlyFee
+            };
+        });
+
+        res.json({ success: true, data: result });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 수강료 정산 현황 (fee-settlement는 /:id보다 먼저 선언) ────
+router.get('/fee-settlement', async (req, res) => {
+    try {
+        const { complexId, complexCode } = req.query;
+        const sb = getSupabase();
+
+        let query = sb
+            .from('applications')
+            .select('id, dong, ho, name, phone, program_name, preferred_time, status, monthly_fee, total_sessions, remaining_sessions, created_at, updated_at')
+            .eq('status', 'approved');
+
+        if (complexId) {
+            query = query.eq('complex_id', complexId);
+        } else if (complexCode) {
+            const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
+            if (cx) query = query.eq('complex_id', cx.id);
+        }
+
+        query = query.order('program_name').order('dong').order('ho');
+        const { data, error } = await query;
+        if (error) throw sbErr(error, 'fee-settlement');
+
+        const totalFee    = (data || []).filter(a => a.monthly_fee).reduce((s, a) => s + parseInt(a.monthly_fee || 0), 0);
+        const hasFee      = (data || []).filter(a => a.monthly_fee).length;
+        const noFee       = (data || []).filter(a => !a.monthly_fee).length;
+
+        res.json({
+            success: true,
+            data: data || [],
+            summary: {
+                total_approved: (data || []).length,
+                has_fee: hasFee,
+                no_fee: noFee,
+                total_monthly_fee: totalFee
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // ── 관리비 계산 (fee-calc는 /:id보다 먼저 선언) ──────────────
 router.post('/fee-calc', (req, res) => {
     try {
