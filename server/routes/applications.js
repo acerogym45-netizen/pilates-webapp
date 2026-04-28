@@ -237,29 +237,34 @@ router.get('/fee-settlement', async (req, res) => {
         const { data, error } = await query;
         if (error) throw sbErr(error, 'fee-settlement');
 
-        // 수강료 자동 매핑 + 부과금액 계산 (total_sessions - remaining_sessions = 수강횟수)
+        // 수강료 자동 매핑 + 부과금액 계산
+        // attended_sessions(수강횟수) = total - remaining
+        // 부과금액 = 수강횟수 × 회당가(수강료 ÷ 총횟수)
         const enriched = (data || []).map(a => {
             const effectiveFee = a.monthly_fee
                 ? parseInt(a.monthly_fee)
                 : (priceMap[a.program_name] || null);
             // 수강 횟수 = 총횟수 - 잔여횟수
-            const total    = a.total_sessions   != null ? parseInt(a.total_sessions)   : null;
+            const total     = a.total_sessions     != null ? parseInt(a.total_sessions)     : null;
             const remaining = a.remaining_sessions != null ? parseInt(a.remaining_sessions) : null;
-            const attended = (total != null && remaining != null) ? Math.max(0, total - remaining) : null;
-            // 부과 금액: attended 기준, 없으면 전액
+            const attended  = (total != null && remaining != null) ? Math.max(0, total - remaining) : null;
+            // 회당가 = 수강료 ÷ 총횟수
+            // 부과금액 = 수강횟수 × 회당가  (총횟수·수강횟수 모두 있을 때만 계산, 없으면 수강료 전액)
             let billingAmount = null;
-            if (effectiveFee && total) {
-                const perSession = Math.round(effectiveFee / total);
-                billingAmount = attended != null ? attended * perSession : effectiveFee;
+            let perSession    = null;
+            if (effectiveFee && total && total > 0) {
+                perSession    = Math.round(effectiveFee / total);
+                billingAmount = attended != null ? Math.max(0, attended) * perSession : effectiveFee;
             } else if (effectiveFee) {
                 billingAmount = effectiveFee;
             }
             return {
                 ...a,
-                attended_sessions: attended,           // 계산된 수강 횟수
-                effective_fee: effectiveFee,
-                fee_source: a.monthly_fee ? 'manual' : (priceMap[a.program_name] ? 'program' : 'none'),
-                billing_amount: billingAmount
+                attended_sessions: attended,   // 수강 횟수 (total - remaining)
+                per_session_fee:   perSession, // 회당가 (수강료 ÷ 총횟수)
+                effective_fee:     effectiveFee,
+                fee_source:        a.monthly_fee ? 'manual' : (priceMap[a.program_name] ? 'program' : 'none'),
+                billing_amount:    billingAmount  // 수강횟수 × 회당가
             };
         });
 
