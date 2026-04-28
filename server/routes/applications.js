@@ -87,72 +87,83 @@ router.get('/program-summary', async (req, res) => {
         const { complexId, complexCode } = req.query;
         const sb = getSupabase();
 
-        // 프로그램 목록 조회
-        let progQuery = sb.from('programs').select('id, name, capacity, time_slots, is_active');
-        if (complexId)   progQuery = progQuery.eq('complex_id', complexId);
-        if (complexCode) {
+        // 단지 ID 해석
+        let cxId = complexId;
+        if (!cxId && complexCode) {
             const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
-            if (cx) progQuery = progQuery.eq('complex_id', cx.id);
+            if (cx) cxId = cx.id;
         }
-        progQuery = progQuery.eq('is_active', true).order('display_order').order('name');
-        const { data: programs, error: progErr } = await progQuery;
+
+        // 활성 프로그램 목록 조회
+        let progQuery = sb.from('programs').select('id, name, capacity, time_slots, price, display_order').eq('is_active', true);
+        if (cxId) progQuery = progQuery.eq('complex_id', cxId);
+        progQuery = progQuery.order('display_order').order('name');
+        const { data: rawPrograms, error: progErr } = await progQuery;
         if (progErr) throw sbErr(progErr, 'program-summary: programs');
 
-        // 전체 신청 데이터 한 번에 조회 (프로그램ID 기준)
-        const programIds = (programs || []).map(p => p.id);
-        if (!programIds.length) return res.json({ success: true, data: [] });
+        // ─── 중복 프로그램명 dedup: 같은 이름이면 첫 번째 것만 대표로 사용 ───
+        // (동일 이름 프로그램이 여러 개인 경우 ID 목록을 합쳐서 집계)
+        const progMap = {}; // name → { representative, ids[], slots(Set) }
+        (rawPrograms || []).forEach(p => {
+            const slots = Array.isArray(p.time_slots) ? p.time_slots : [];
+            if (!progMap[p.name]) {
+                progMap[p.name] = {
+                    representative: p,
+                    ids: [p.id],
+                    slots: new Set(slots)
+                };
+            } else {
+                progMap[p.name].ids.push(p.id);
+                slots.forEach(s => progMap[p.name].slots.add(s));
+            }
+        });
+        const programs = Object.values(progMap);
 
+        const allIds = programs.flatMap(g => g.ids);
+        if (!allIds.length) return res.json({ success: true, data: [] });
+
+        // 신청 데이터 한 번에 조회
         const { data: apps, error: appErr } = await sb
             .from('applications')
-            .select('program_id, program_name, preferred_time, status, monthly_fee, dong, ho, name, phone')
-            .in('program_id', programIds);
+            .select('program_id, preferred_time, status')
+            .in('program_id', allIds);
         if (appErr) throw sbErr(appErr, 'program-summary: applications');
 
-        // 프로그램별 집계
-        const appsByProg = {};
-        (apps || []).forEach(a => {
-            const pid = a.program_id;
-            if (!appsByProg[pid]) appsByProg[pid] = [];
-            appsByProg[pid].push(a);
-        });
-
-        const result = (programs || []).map(prog => {
-            const progApps = appsByProg[prog.id] || [];
-            const slots    = Array.isArray(prog.time_slots) ? prog.time_slots : [];
+        // 프로그램 그룹별 집계
+        const result = programs.map(grp => {
+            const prog     = grp.representative;
             const capacity = prog.capacity || 6;
+            const slots    = [...grp.slots].sort();
+            const progApps = apps.filter(a => grp.ids.includes(a.program_id));
 
             const approved  = progApps.filter(a => a.status === 'approved');
             const waiting   = progApps.filter(a => a.status === 'waiting');
             const cancelled = progApps.filter(a => a.status === 'cancelled');
 
-            // 시간대별 정원 현황
+            // 시간대별 정원 현황 (여유 = capacity - 승인수)
             const slotSummary = slots.map(slot => {
                 const slotApproved = approved.filter(a => a.preferred_time === slot).length;
                 const slotWaiting  = waiting.filter(a => a.preferred_time === slot).length;
+                const available    = Math.max(0, capacity - slotApproved);
                 return {
                     slot,
                     approved: slotApproved,
                     waiting: slotWaiting,
                     capacity,
-                    available: Math.max(0, capacity - slotApproved),
+                    available,
                     isFull: slotApproved >= capacity
                 };
             });
 
-            // 총 예상 월 수강료 (approved 중 monthly_fee 있는 항목만)
-            const totalMonthlyFee = approved
-                .filter(a => a.monthly_fee)
-                .reduce((sum, a) => sum + parseInt(a.monthly_fee || 0), 0);
-
             return {
-                program_id: prog.id,
+                program_id:   prog.id,
                 program_name: prog.name,
+                program_price: prog.price || 0,
                 capacity,
-                total_approved: approved.length,
-                total_waiting: waiting.length,
+                total_approved:  approved.length,
+                total_waiting:   waiting.length,
                 total_cancelled: cancelled.length,
-                slot_summary: slotSummary,
-                estimated_monthly_fee: totalMonthlyFee
+                slot_summary:    slotSummary
             };
         });
 
@@ -168,34 +179,74 @@ router.get('/fee-settlement', async (req, res) => {
         const { complexId, complexCode } = req.query;
         const sb = getSupabase();
 
-        let query = sb
-            .from('applications')
-            .select('id, dong, ho, name, phone, program_name, preferred_time, status, monthly_fee, total_sessions, remaining_sessions, created_at, updated_at')
-            .eq('status', 'approved');
-
-        if (complexId) {
-            query = query.eq('complex_id', complexId);
-        } else if (complexCode) {
+        // 단지 ID 해석
+        let cxId = complexId;
+        if (!cxId && complexCode) {
             const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
-            if (cx) query = query.eq('complex_id', cx.id);
+            if (cx) cxId = cx.id;
         }
 
+        // 프로그램 price 맵 (program_name → price)
+        let priceMap = {};
+        {
+            let pq = sb.from('programs').select('name, price').eq('is_active', true);
+            if (cxId) pq = pq.eq('complex_id', cxId);
+            const { data: progs } = await pq;
+            (progs || []).forEach(p => {
+                if (p.price && !priceMap[p.name]) priceMap[p.name] = parseInt(p.price);
+            });
+        }
+
+        // 승인된 수강생 조회
+        let query = sb
+            .from('applications')
+            .select('id, program_id, dong, ho, name, phone, program_name, preferred_time, status, monthly_fee, total_sessions, remaining_sessions, created_at')
+            .eq('status', 'approved');
+        if (cxId) query = query.eq('complex_id', cxId);
         query = query.order('program_name').order('dong').order('ho');
+
         const { data, error } = await query;
         if (error) throw sbErr(error, 'fee-settlement');
 
-        const totalFee    = (data || []).filter(a => a.monthly_fee).reduce((s, a) => s + parseInt(a.monthly_fee || 0), 0);
-        const hasFee      = (data || []).filter(a => a.monthly_fee).length;
-        const noFee       = (data || []).filter(a => !a.monthly_fee).length;
+        // 수강료 자동 매핑 + 부과금액 계산 (total_sessions - remaining_sessions = 수강횟수)
+        const enriched = (data || []).map(a => {
+            const effectiveFee = a.monthly_fee
+                ? parseInt(a.monthly_fee)
+                : (priceMap[a.program_name] || null);
+            // 수강 횟수 = 총횟수 - 잔여횟수
+            const total    = a.total_sessions   != null ? parseInt(a.total_sessions)   : null;
+            const remaining = a.remaining_sessions != null ? parseInt(a.remaining_sessions) : null;
+            const attended = (total != null && remaining != null) ? Math.max(0, total - remaining) : null;
+            // 부과 금액: attended 기준, 없으면 전액
+            let billingAmount = null;
+            if (effectiveFee && total) {
+                const perSession = Math.round(effectiveFee / total);
+                billingAmount = attended != null ? attended * perSession : effectiveFee;
+            } else if (effectiveFee) {
+                billingAmount = effectiveFee;
+            }
+            return {
+                ...a,
+                attended_sessions: attended,           // 계산된 수강 횟수
+                effective_fee: effectiveFee,
+                fee_source: a.monthly_fee ? 'manual' : (priceMap[a.program_name] ? 'program' : 'none'),
+                billing_amount: billingAmount
+            };
+        });
+
+        const totalBilling = enriched.reduce((s, a) => s + (a.billing_amount || 0), 0);
+        const hasFee       = enriched.filter(a => a.effective_fee).length;
+        const noFee        = enriched.filter(a => !a.effective_fee).length;
 
         res.json({
             success: true,
-            data: data || [],
+            data: enriched,
             summary: {
-                total_approved: (data || []).length,
-                has_fee: hasFee,
-                no_fee: noFee,
-                total_monthly_fee: totalFee
+                total_approved:     enriched.length,
+                has_fee:            hasFee,
+                no_fee:             noFee,
+                total_billing:      totalBilling,
+                price_map:          priceMap
             }
         });
     } catch (e) {

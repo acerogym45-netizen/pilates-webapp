@@ -239,72 +239,89 @@ const applications = {
             });
 
             const tableRows = Object.entries(byProg).map(([prog, members]) => {
-                const progFee = members.filter(a => a.monthly_fee).reduce((s, a) => s + parseInt(a.monthly_fee || 0), 0);
-                const rows = members.map(a => `
-                    <tr style="font-size:.82rem">
-                        <td style="padding:5px 8px">${a.dong} ${a.ho}</td>
-                        <td style="padding:5px 8px">${a.name}</td>
-                        <td style="padding:5px 8px;color:#666">${a.preferred_time || '-'}</td>
-                        <td style="padding:5px 8px;text-align:right;font-weight:600;color:${a.monthly_fee ? '#2c3e50' : '#e74c3c'}">
-                            ${a.monthly_fee ? '₩' + parseInt(a.monthly_fee).toLocaleString() : '<span style="color:#e74c3c">미입력</span>'}
-                        </td>
-                        <td style="padding:5px 8px;text-align:center;color:#888;font-size:.78rem">
-                            ${a.total_sessions != null ? a.total_sessions + '회' : '-'}
-                        </td>
-                        <td style="padding:5px 8px;text-align:center;color:#2980b9;font-size:.78rem">
-                            ${a.remaining_sessions != null ? a.remaining_sessions + '회' : '-'}
-                        </td>
-                    </tr>`).join('');
+                const progBilling = members.reduce((s, a) => s + (a.billing_amount || 0), 0);
+                const rows = members.map(a => {
+                    const feeColor = a.fee_source === 'manual' ? '#2c3e50'
+                                   : a.fee_source === 'program' ? '#2980b9'
+                                   : '#e74c3c';
+                    const feeLabel = a.effective_fee
+                        ? `<span style="color:${feeColor}">₩${parseInt(a.effective_fee).toLocaleString()}
+                            ${a.fee_source === 'program' ? '<sup style="font-size:.7rem;color:#7f8c8d">(기본)</sup>' : ''}</span>`
+                        : `<span style="color:#e74c3c;font-weight:600">미입력</span>`;
+                    // 총횟수/수강횟수
+                    const sessionsLabel = a.total_sessions != null
+                        ? `${a.total_sessions}회 / ${a.attended_sessions != null ? a.attended_sessions + '회' : '-'}`
+                        : '-';
+                    // 부과 금액
+                    const billingLabel = a.billing_amount != null
+                        ? `<strong style="color:#8e44ad">₩${parseInt(a.billing_amount).toLocaleString()}</strong>`
+                        : '<span style="color:#aaa">-</span>';
+                    return `
+                    <tr style="font-size:.82rem;border-bottom:1px solid #f0f0f0">
+                        <td style="padding:5px 8px;white-space:nowrap">${a.dong} ${a.ho}</td>
+                        <td style="padding:5px 8px;white-space:nowrap">${a.name}</td>
+                        <td style="padding:5px 8px;color:#555;white-space:nowrap">${fmtPhone(a.phone||'')}</td>
+                        <td style="padding:5px 8px;color:#666;font-size:.78rem">${a.program_name}${a.preferred_time ? ' ' + a.preferred_time : ''}</td>
+                        <td style="padding:5px 8px;text-align:center;color:#555;font-size:.78rem">${sessionsLabel}</td>
+                        <td style="padding:5px 8px;text-align:right">${feeLabel}</td>
+                        <td style="padding:5px 8px;text-align:right">${billingLabel}</td>
+                    </tr>`;
+                }).join('');
 
                 return `
                     <tr style="background:#f0f4ff">
-                        <td colspan="3" style="padding:6px 8px;font-weight:700;font-size:.85rem;color:#3a3a8c">
+                        <td colspan="4" style="padding:7px 8px;font-weight:700;font-size:.85rem;color:#3a3a8c">
                             <i class="fas fa-dumbbell" style="margin-right:5px"></i>${prog}
                             <span style="font-size:.78rem;color:#666;font-weight:400;margin-left:6px">${members.length}명</span>
                         </td>
-                        <td style="padding:6px 8px;text-align:right;font-weight:700;color:#8e44ad">
-                            ${progFee > 0 ? '₩' + progFee.toLocaleString() : '-'}
+                        <td colspan="2" style="padding:7px 8px;font-size:.75rem;color:#888;text-align:center">총횟수 / 수강횟수</td>
+                        <td style="padding:7px 8px;text-align:right;font-weight:700;color:#8e44ad">
+                            ${progBilling > 0 ? '₩' + progBilling.toLocaleString() : '-'}
                         </td>
-                        <td colspan="2" style="padding:6px 8px;font-size:.75rem;color:#888;text-align:center">총 횟수 / 잔여 횟수</td>
                     </tr>
                     ${rows}`;
             }).join('');
 
             const html = `
-                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
                     <div style="background:#e8f4fd;border-radius:8px;padding:10px;text-align:center">
                         <div style="font-size:1.4rem;font-weight:700;color:#2980b9">${sum.total_approved}</div>
                         <div style="font-size:.78rem;color:#666">전체 수강생</div>
                     </div>
                     <div style="background:#e8f8f0;border-radius:8px;padding:10px;text-align:center">
                         <div style="font-size:1.4rem;font-weight:700;color:#27ae60">${sum.has_fee}</div>
-                        <div style="font-size:.78rem;color:#666">수강료 입력</div>
+                        <div style="font-size:.78rem;color:#666">수강료 확인</div>
                     </div>
                     <div style="background:#fdf3f3;border-radius:8px;padding:10px;text-align:center">
                         <div style="font-size:1.4rem;font-weight:700;color:#e74c3c">${sum.no_fee}</div>
-                        <div style="font-size:.78rem;color:#666">수강료 미입력</div>
+                        <div style="font-size:.78rem;color:#666">수강료 미설정</div>
                     </div>
                     <div style="background:#f5eeff;border-radius:8px;padding:10px;text-align:center">
-                        <div style="font-size:1.2rem;font-weight:700;color:#8e44ad">₩${(sum.total_monthly_fee||0).toLocaleString()}</div>
-                        <div style="font-size:.78rem;color:#666">월 수강료 합계</div>
+                        <div style="font-size:1.1rem;font-weight:700;color:#8e44ad">₩${(sum.total_billing||0).toLocaleString()}</div>
+                        <div style="font-size:.78rem;color:#666">부과 금액 합계</div>
                     </div>
                 </div>
+                <div style="background:#e8f4fd;border:1px solid #b3d7f5;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:.8rem;color:#1a5276">
+                    <i class="fas fa-info-circle"></i>
+                    <span style="color:#2980b9;font-weight:600">(기본)</span> 표시: 프로그램 관리에 설정된 기본 수강료 자동 적용 |
+                    개인 수정값 우선 적용됩니다.
+                </div>
                 ${sum.no_fee > 0 ? `
-                <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:.82rem;color:#7d5000">
-                    <i class="fas fa-exclamation-triangle" style="margin-right:5px"></i>
-                    수강료가 입력되지 않은 수강생이 <strong>${sum.no_fee}명</strong> 있습니다.
-                    각 신청 상세 → 수정에서 <b>월 수강료</b>를 입력하면 정산에 포함됩니다.
+                <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:.8rem;color:#7d5000">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    수강료가 미설정된 수강생 <strong>${sum.no_fee}명</strong> — 프로그램 관리에서 기본 수강료 입력 또는 신청 수정에서 직접 입력하세요.
                 </div>` : ''}
-                <div style="max-height:420px;overflow-y:auto;border:1px solid #e8ecef;border-radius:6px">
+                <div style="max-height:400px;overflow-y:auto;border:1px solid #e8ecef;border-radius:6px">
                     <table style="width:100%;border-collapse:collapse">
                         <thead style="position:sticky;top:0;background:#f8f9fa;z-index:1">
-                            <tr style="font-size:.82rem;color:#555">
-                                <th style="padding:7px 8px;text-align:left;font-weight:600">동/호수</th>
+                            <tr style="font-size:.8rem;color:#555">
+                                <th style="padding:7px 8px;text-align:left;font-weight:600;white-space:nowrap">동/호수</th>
                                 <th style="padding:7px 8px;text-align:left;font-weight:600">이름</th>
-                                <th style="padding:7px 8px;text-align:left;font-weight:600">시간대</th>
-                                <th style="padding:7px 8px;text-align:right;font-weight:600">월 수강료</th>
-                                <th style="padding:7px 8px;text-align:center;font-weight:600">총 횟수</th>
-                                <th style="padding:7px 8px;text-align:center;font-weight:600">잔여</th>
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">전화번호</th>
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">수강 프로그램</th>
+                                <th style="padding:7px 8px;text-align:center;font-weight:600;white-space:nowrap">총횟수/수강횟수</th>
+                                <th style="padding:7px 8px;text-align:right;font-weight:600">수강료</th>
+                                <th style="padding:7px 8px;text-align:right;font-weight:600">부과금액</th>
                             </tr>
                         </thead>
                         <tbody>${tableRows}</tbody>
@@ -324,18 +341,19 @@ const applications = {
         if (!this._settlementData || !this._settlementData.length) {
             showToast('데이터가 없습니다', 'error'); return;
         }
-        const headers = ['프로그램', '동', '호수', '이름', '전화번호', '시간대', '월수강료', '총횟수', '잔여횟수', '신청일'];
+        const headers = ['프로그램', '동', '호수', '이름', '전화번호', '시간대', '수강료', '총횟수', '수강횟수', '부과금액', '수강료출처'];
         const rows = this._settlementData.map(a => ({
-            '프로그램': a.program_name || '',
-            '동': a.dong || '',
-            '호수': a.ho || '',
-            '이름': a.name || '',
-            '전화번호': fmtPhone(a.phone || ''),
-            '시간대': a.preferred_time || '',
-            '월수강료': a.monthly_fee || '',
-            '총횟수': a.total_sessions || '',
-            '잔여횟수': a.remaining_sessions != null ? a.remaining_sessions : '',
-            '신청일': formatDate(a.created_at)
+            '프로그램':   a.program_name || '',
+            '동':         a.dong || '',
+            '호수':       a.ho || '',
+            '이름':       a.name || '',
+            '전화번호':   fmtPhone(a.phone || ''),
+            '시간대':     a.preferred_time || '',
+            '수강료':     a.effective_fee || '',
+            '총횟수':     a.total_sessions || '',
+            '수강횟수':   a.attended_sessions != null ? a.attended_sessions : '',
+            '부과금액':   a.billing_amount != null ? a.billing_amount : '',
+            '수강료출처': a.fee_source === 'manual' ? '직접입력' : a.fee_source === 'program' ? '프로그램기본값' : '미설정'
         }));
         downloadCSV(`수강료정산_${new Date().toLocaleDateString('ko')}.csv`, rows, headers);
         showToast('CSV 다운로드 완료', 'success');
