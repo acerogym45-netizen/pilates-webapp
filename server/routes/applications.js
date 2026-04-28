@@ -94,24 +94,27 @@ router.get('/program-summary', async (req, res) => {
             if (cx) cxId = cx.id;
         }
 
-        // 활성 프로그램 목록 조회
-        let progQuery = sb.from('programs').select('id, name, capacity, time_slots, price, display_order').eq('is_active', true);
-        if (cxId) progQuery = progQuery.eq('complex_id', cxId);
-        progQuery = progQuery.order('display_order').order('name');
-        const { data: rawPrograms, error: progErr } = await progQuery;
+        // ── cxId 없으면 빈 배열 반환 (단지 미선택 시 혼합 방지) ──────────────
+        if (!cxId) {
+            return res.json({ success: true, data: [], warning: '단지를 선택해주세요' });
+        }
+
+        // 활성 프로그램 목록 조회 (해당 단지만)
+        const { data: rawPrograms, error: progErr } = await sb
+            .from('programs')
+            .select('id, name, capacity, time_slots, price, display_order')
+            .eq('is_active', true)
+            .eq('complex_id', cxId)          // ← 단지 필터 필수
+            .order('display_order')
+            .order('name');
         if (progErr) throw sbErr(progErr, 'program-summary: programs');
 
-        // ─── 중복 프로그램명 dedup: 같은 이름이면 첫 번째 것만 대표로 사용 ───
-        // (동일 이름 프로그램이 여러 개인 경우 ID 목록을 합쳐서 집계)
+        // ─── 중복 프로그램명 dedup (같은 단지 내 동일 이름만) ───────────────
         const progMap = {}; // name → { representative, ids[], slots(Set) }
         (rawPrograms || []).forEach(p => {
             const slots = Array.isArray(p.time_slots) ? p.time_slots : [];
             if (!progMap[p.name]) {
-                progMap[p.name] = {
-                    representative: p,
-                    ids: [p.id],
-                    slots: new Set(slots)
-                };
+                progMap[p.name] = { representative: p, ids: [p.id], slots: new Set(slots) };
             } else {
                 progMap[p.name].ids.push(p.id);
                 slots.forEach(s => progMap[p.name].slots.add(s));
@@ -123,25 +126,27 @@ router.get('/program-summary', async (req, res) => {
         const allNames = programs.map(g => g.representative.name);
         if (!allIds.length && !allNames.length) return res.json({ success: true, data: [] });
 
-        // 신청 데이터 한 번에 조회
-        // NOTE: 많은 신청 건이 program_id=NULL이므로 program_name으로도 매칭
+        // 신청 데이터 조회 — 반드시 해당 단지(cxId)만
         let appsById = [], appsByName = [];
 
         if (allIds.length) {
             const { data, error: e1 } = await sb
                 .from('applications')
                 .select('id, program_id, program_name, preferred_time, status')
-                .in('program_id', allIds);
+                .in('program_id', allIds)
+                .eq('complex_id', cxId);     // ← 단지 필터 필수
             if (e1) throw sbErr(e1, 'program-summary: applications by id');
             appsById = data || [];
         }
 
         if (allNames.length) {
+            // program_id가 NULL인 신청(구 데이터)은 단지+프로그램명으로 매칭
             const { data, error: e2 } = await sb
                 .from('applications')
                 .select('id, program_id, program_name, preferred_time, status')
                 .in('program_name', allNames)
-                .is('program_id', null);   // program_id가 NULL인 것만 (중복 방지)
+                .is('program_id', null)
+                .eq('complex_id', cxId);     // ← 단지 필터 필수
             if (e2) throw sbErr(e2, 'program-summary: applications by name');
             appsByName = data || [];
         }
@@ -155,7 +160,6 @@ router.get('/program-summary', async (req, res) => {
             const prog     = grp.representative;
             const capacity = prog.capacity || 6;
             const slots    = [...grp.slots].sort();
-            // program_id 일치 OR (program_id null이고 program_name 일치)
             const progApps = apps.filter(a =>
                 grp.ids.includes(a.program_id) ||
                 (a.program_id == null && a.program_name === prog.name)
@@ -165,34 +169,33 @@ router.get('/program-summary', async (req, res) => {
             const waiting   = progApps.filter(a => a.status === 'waiting');
             const cancelled = progApps.filter(a => a.status === 'cancelled');
 
-            // 시간대별 정원 현황 (여유 = capacity - 승인수, 초과시 exceeded 플래그)
             const slotSummary = slots.map(slot => {
                 const slotApproved = approved.filter(a => a.preferred_time === slot).length;
                 const slotWaiting  = waiting.filter(a => a.preferred_time === slot).length;
-                const exceeded     = slotApproved > capacity;          // 정원 초과
+                const exceeded     = slotApproved > capacity;
                 const available    = Math.max(0, capacity - slotApproved);
                 return {
                     slot,
-                    approved:  slotApproved,
-                    waiting:   slotWaiting,
+                    approved:    slotApproved,
+                    waiting:     slotWaiting,
                     capacity,
                     available,
-                    exceeded,                                           // 초과 여부
-                    exceeded_by: exceeded ? slotApproved - capacity : 0, // 초과 인원수
-                    isFull: slotApproved >= capacity
+                    exceeded,
+                    exceeded_by: exceeded ? slotApproved - capacity : 0,
+                    isFull:      slotApproved >= capacity
                 };
             });
 
             return {
-                program_id:   prog.id,
-                program_name: prog.name,
-                program_price: prog.price || 0,
+                program_id:            prog.id,
+                program_name:          prog.name,
+                program_price:         prog.price || 0,
                 estimated_monthly_fee: prog.price || 0,
                 capacity,
-                total_approved:  approved.length,
-                total_waiting:   waiting.length,
-                total_cancelled: cancelled.length,
-                slot_summary:    slotSummary
+                total_approved:        approved.length,
+                total_waiting:         waiting.length,
+                total_cancelled:       cancelled.length,
+                slot_summary:          slotSummary
             };
         });
 
@@ -215,12 +218,21 @@ router.get('/fee-settlement', async (req, res) => {
             if (cx) cxId = cx.id;
         }
 
-        // 프로그램 price 맵 (program_name → price)
+        // ── cxId 없으면 빈 배열 반환 (단지 미선택 시 혼합 방지) ──────────────
+        if (!cxId) {
+            return res.json({
+                success: true, data: [],
+                summary: { total_approved: 0, has_fee: 0, no_fee: 0, total_billing: 0, price_map: {} },
+                warning: '단지를 선택해주세요'
+            });
+        }
+
+        // 프로그램 price 맵 (해당 단지만)
         let priceMap = {};
         {
-            let pq = sb.from('programs').select('name, price').eq('is_active', true);
-            if (cxId) pq = pq.eq('complex_id', cxId);
-            const { data: progs } = await pq;
+            const { data: progs } = await sb
+                .from('programs').select('name, price')
+                .eq('is_active', true).eq('complex_id', cxId);  // ← 단지 필터 필수
             (progs || []).forEach(p => {
                 if (p.price && !priceMap[p.name]) priceMap[p.name] = parseInt(p.price);
             });
