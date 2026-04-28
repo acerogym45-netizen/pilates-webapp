@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v2.6 정산 횟수 직접 입력 탭 + 여유 계산 버그 수정 */
+/** 신청 관리 페이지 - v2.7 여유 계산 로직 정확성 개선 + 정산 탭 전화번호 열 */
 const applications = {
     data: [],
     filtered: [],
@@ -159,15 +159,20 @@ const applications = {
                 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
                     ${list.map(prog => {
                         const slotRows = (prog.slot_summary || []).map(s => {
-                            const pct = prog.capacity > 0 ? Math.round(s.approved / prog.capacity * 100) : 0;
-                            const barColor = s.isFull ? '#e74c3c' : pct >= 80 ? '#e67e22' : '#27ae60';
+                            // s.capacity를 기준으로 퍼센트 계산 (슬롯별 정원)
+                            const cap = s.capacity || prog.capacity || 6;
+                            const pct = cap > 0 ? Math.round(s.approved / cap * 100) : 0;
+                            // available = capacity - approved (음수 불가, 서버에서 Math.max(0,...) 처리됨)
+                            const available = typeof s.available === 'number' ? s.available : Math.max(0, cap - s.approved);
+                            const isFull = s.isFull || available === 0;
+                            const barColor = isFull ? '#e74c3c' : pct >= 80 ? '#e67e22' : '#27ae60';
                             return `
                                 <div style="margin-bottom:8px">
                                     <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px">
                                         <span style="color:#555">${s.slot}</span>
                                         <span style="font-weight:600;color:${barColor}">
-                                            ${s.approved}/${s.capacity}
-                                            ${s.isFull ? ' <span style="color:#e74c3c;font-size:.75rem">마감</span>' : ` <span style="color:#27ae60;font-size:.75rem">여유 ${s.available}</span>`}
+                                            ${s.approved}/${cap}
+                                            ${isFull ? ' <span style="color:#e74c3c;font-size:.75rem">마감</span>' : ` <span style="color:#27ae60;font-size:.75rem">여유 ${available}</span>`}
                                             ${s.waiting > 0 ? ` <span style="color:#f39c12;font-size:.75rem">대기 ${s.waiting}</span>` : ''}
                                         </span>
                                     </div>
