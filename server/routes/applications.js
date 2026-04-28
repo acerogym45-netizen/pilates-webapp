@@ -165,17 +165,20 @@ router.get('/program-summary', async (req, res) => {
             const waiting   = progApps.filter(a => a.status === 'waiting');
             const cancelled = progApps.filter(a => a.status === 'cancelled');
 
-            // 시간대별 정원 현황 (여유 = capacity - 승인수)
+            // 시간대별 정원 현황 (여유 = capacity - 승인수, 초과시 exceeded 플래그)
             const slotSummary = slots.map(slot => {
                 const slotApproved = approved.filter(a => a.preferred_time === slot).length;
                 const slotWaiting  = waiting.filter(a => a.preferred_time === slot).length;
+                const exceeded     = slotApproved > capacity;          // 정원 초과
                 const available    = Math.max(0, capacity - slotApproved);
                 return {
                     slot,
-                    approved: slotApproved,
-                    waiting: slotWaiting,
+                    approved:  slotApproved,
+                    waiting:   slotWaiting,
                     capacity,
                     available,
+                    exceeded,                                           // 초과 여부
+                    exceeded_by: exceeded ? slotApproved - capacity : 0, // 초과 인원수
                     isFull: slotApproved >= capacity
                 };
             });
