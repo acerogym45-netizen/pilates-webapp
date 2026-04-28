@@ -119,22 +119,47 @@ router.get('/program-summary', async (req, res) => {
         });
         const programs = Object.values(progMap);
 
-        const allIds = programs.flatMap(g => g.ids);
-        if (!allIds.length) return res.json({ success: true, data: [] });
+        const allIds   = programs.flatMap(g => g.ids);
+        const allNames = programs.map(g => g.representative.name);
+        if (!allIds.length && !allNames.length) return res.json({ success: true, data: [] });
 
         // 신청 데이터 한 번에 조회
-        const { data: apps, error: appErr } = await sb
-            .from('applications')
-            .select('program_id, preferred_time, status')
-            .in('program_id', allIds);
-        if (appErr) throw sbErr(appErr, 'program-summary: applications');
+        // NOTE: 많은 신청 건이 program_id=NULL이므로 program_name으로도 매칭
+        let appsById = [], appsByName = [];
+
+        if (allIds.length) {
+            const { data, error: e1 } = await sb
+                .from('applications')
+                .select('id, program_id, program_name, preferred_time, status')
+                .in('program_id', allIds);
+            if (e1) throw sbErr(e1, 'program-summary: applications by id');
+            appsById = data || [];
+        }
+
+        if (allNames.length) {
+            const { data, error: e2 } = await sb
+                .from('applications')
+                .select('id, program_id, program_name, preferred_time, status')
+                .in('program_name', allNames)
+                .is('program_id', null);   // program_id가 NULL인 것만 (중복 방지)
+            if (e2) throw sbErr(e2, 'program-summary: applications by name');
+            appsByName = data || [];
+        }
+
+        // 두 쿼리 결과 병합 (id 기준 중복 제거)
+        const seen = new Set(appsById.map(a => a.id));
+        const apps = [...appsById, ...appsByName.filter(a => !seen.has(a.id))];
 
         // 프로그램 그룹별 집계
         const result = programs.map(grp => {
             const prog     = grp.representative;
             const capacity = prog.capacity || 6;
             const slots    = [...grp.slots].sort();
-            const progApps = apps.filter(a => grp.ids.includes(a.program_id));
+            // program_id 일치 OR (program_id null이고 program_name 일치)
+            const progApps = apps.filter(a =>
+                grp.ids.includes(a.program_id) ||
+                (a.program_id == null && a.program_name === prog.name)
+            );
 
             const approved  = progApps.filter(a => a.status === 'approved');
             const waiting   = progApps.filter(a => a.status === 'waiting');
@@ -159,6 +184,7 @@ router.get('/program-summary', async (req, res) => {
                 program_id:   prog.id,
                 program_name: prog.name,
                 program_price: prog.price || 0,
+                estimated_monthly_fee: prog.price || 0,
                 capacity,
                 total_approved:  approved.length,
                 total_waiting:   waiting.length,
@@ -248,6 +274,44 @@ router.get('/fee-settlement', async (req, res) => {
                 total_billing:      totalBilling,
                 price_map:          priceMap
             }
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 출석/횟수 일괄 저장 (bulk-sessions는 /:id보다 먼저 선언) ──
+// body: { rows: [{ id, total_sessions, remaining_sessions, monthly_fee }] }
+router.put('/bulk-sessions', async (req, res) => {
+    try {
+        const { rows } = req.body;
+        if (!Array.isArray(rows) || rows.length === 0) {
+            return res.status(400).json({ success: false, error: 'rows 배열이 필요합니다' });
+        }
+        const sb = getSupabase();
+        const results = [];
+        const errors  = [];
+
+        for (const row of rows) {
+            const { id, total_sessions, remaining_sessions, monthly_fee } = row;
+            if (!id) { errors.push({ id, msg: 'id 없음' }); continue; }
+
+            const patch = {};
+            if (total_sessions     !== undefined && total_sessions     !== '') patch.total_sessions     = parseInt(total_sessions)     || null;
+            if (remaining_sessions !== undefined && remaining_sessions !== '') patch.remaining_sessions = parseInt(remaining_sessions) || null;
+            if (monthly_fee        !== undefined && monthly_fee        !== '') patch.monthly_fee        = parseInt(monthly_fee)        || null;
+            if (Object.keys(patch).length === 0) continue; // 변경 없음
+
+            patch.updated_at = new Date().toISOString();
+            const { error } = await sb.from('applications').update(patch).eq('id', id);
+            if (error) errors.push({ id, msg: error.message });
+            else results.push(id);
+        }
+
+        res.json({
+            success: errors.length === 0,
+            updated: results.length,
+            errors
         });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });

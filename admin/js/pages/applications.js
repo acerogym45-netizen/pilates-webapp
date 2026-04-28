@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v2.5 프로그램 현황 패널 + 관리비 정산 */
+/** 신청 관리 페이지 - v2.6 정산 횟수 직접 입력 탭 + 여유 계산 버그 수정 */
 const applications = {
     data: [],
     filtered: [],
@@ -211,111 +211,160 @@ const applications = {
     },
 
     // ══════════════════════════════════════════════════
-    //  수강료 정산 모달
+    //  수강료 정산 모달 (탭: 정산현황 / 횟수입력)
     // ══════════════════════════════════════════════════
+    _settlementData: [],
+    _settlementTab: 'view',   // 'view' | 'edit'
+
     async showSettlement() {
         openGlobalModal('<i class="fas fa-won-sign"></i> 수강료 정산 현황',
             '<div class="loading-mini" style="padding:30px 0;text-align:center"><i class="fas fa-spinner fa-spin"></i> 불러오는 중...</div>',
             `<button class="btn-secondary" onclick="closeGlobalModal()">닫기</button>
-             <button class="btn-primary" onclick="applications._exportSettlementCSV()" style="background:#8e44ad">
+             <button class="btn-primary" id="settlementActionBtn" onclick="applications._exportSettlementCSV()" style="background:#8e44ad">
                 <i class="fas fa-download"></i> CSV 내보내기
              </button>`
         );
+        this._settlementTab = 'view';
+        await this._loadSettlementData();
+    },
+
+    async _loadSettlementData() {
+        const modalBody = document.querySelector('#globalModal .modal-body');
+        if (modalBody) modalBody.innerHTML = '<div class="loading-mini" style="padding:30px 0;text-align:center"><i class="fas fa-spinner fa-spin"></i> 불러오는 중...</div>';
         try {
             const params = {};
             const cid = getEffectiveComplexId();
             if (cid) params.complexId = cid;
             const res = await API.applications.feeSettlement(params);
-            const list = res.data || [];
-            const sum  = res.summary || {};
-            this._settlementData = list;
+            this._settlementData = res.data || [];
+            this._renderSettlement(res.summary || {});
+        } catch (e) {
+            const mb = document.querySelector('#globalModal .modal-body');
+            if (mb) mb.innerHTML = `<p style="color:#e74c3c">데이터 로드 실패: ${e.message}</p>`;
+        }
+    },
 
-            // 프로그램별 그룹
-            const byProg = {};
-            list.forEach(a => {
-                const k = a.program_name || '(미분류)';
-                if (!byProg[k]) byProg[k] = [];
-                byProg[k].push(a);
-            });
+    _renderSettlement(sum) {
+        const modalBody = document.querySelector('#globalModal .modal-body');
+        if (!modalBody) return;
+        const list = this._settlementData;
+        const tab  = this._settlementTab;
 
-            const tableRows = Object.entries(byProg).map(([prog, members]) => {
+        // ── 탭 전환 버튼 업데이트 ──
+        const actionBtn = document.getElementById('settlementActionBtn');
+        if (actionBtn) {
+            if (tab === 'edit') {
+                actionBtn.innerHTML = '<i class="fas fa-save"></i> 저장';
+                actionBtn.onclick = () => applications._saveSessionInputs();
+                actionBtn.style.background = '#27ae60';
+            } else {
+                actionBtn.innerHTML = '<i class="fas fa-download"></i> CSV 내보내기';
+                actionBtn.onclick = () => applications._exportSettlementCSV();
+                actionBtn.style.background = '#8e44ad';
+            }
+        }
+
+        // ── 요약 카드 ──
+        const summaryHtml = `
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+                <div style="background:#e8f4fd;border-radius:8px;padding:10px;text-align:center">
+                    <div style="font-size:1.4rem;font-weight:700;color:#2980b9">${sum.total_approved||0}</div>
+                    <div style="font-size:.78rem;color:#666">전체 수강생</div>
+                </div>
+                <div style="background:#e8f8f0;border-radius:8px;padding:10px;text-align:center">
+                    <div style="font-size:1.4rem;font-weight:700;color:#27ae60">${sum.has_fee||0}</div>
+                    <div style="font-size:.78rem;color:#666">수강료 확인</div>
+                </div>
+                <div style="background:#fdf3f3;border-radius:8px;padding:10px;text-align:center">
+                    <div style="font-size:1.4rem;font-weight:700;color:#e74c3c">${sum.no_fee||0}</div>
+                    <div style="font-size:.78rem;color:#666">수강료 미설정</div>
+                </div>
+                <div style="background:#f5eeff;border-radius:8px;padding:10px;text-align:center">
+                    <div style="font-size:1.1rem;font-weight:700;color:#8e44ad">₩${(sum.total_billing||0).toLocaleString()}</div>
+                    <div style="font-size:.78rem;color:#666">부과금액 합계</div>
+                </div>
+            </div>`;
+
+        // ── 탭 헤더 ──
+        const tabHtml = `
+            <div style="display:flex;border-bottom:2px solid #e8ecef;margin-bottom:12px">
+                <button onclick="applications._switchSettlementTab('view')"
+                    style="padding:8px 18px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:600;
+                           border-bottom:${tab==='view'?'2px solid #8e44ad':'2px solid transparent'};
+                           color:${tab==='view'?'#8e44ad':'#888'};margin-bottom:-2px">
+                    <i class="fas fa-list"></i> 정산 현황
+                </button>
+                <button onclick="applications._switchSettlementTab('edit')"
+                    style="padding:8px 18px;border:none;background:none;cursor:pointer;font-size:.88rem;font-weight:600;
+                           border-bottom:${tab==='edit'?'2px solid #27ae60':'2px solid transparent'};
+                           color:${tab==='edit'?'#27ae60':'#888'};margin-bottom:-2px">
+                    <i class="fas fa-pencil-alt"></i> 횟수 입력
+                </button>
+            </div>`;
+
+        // ── 프로그램별 그룹 ──
+        const byProg = {};
+        list.forEach(a => {
+            const k = a.program_name || '(미분류)';
+            if (!byProg[k]) byProg[k] = [];
+            byProg[k].push(a);
+        });
+
+        let tableHtml = '';
+
+        if (tab === 'view') {
+            // ── 정산 현황 탭 ──
+            const infoHtml = `
+                <div style="background:#e8f4fd;border:1px solid #b3d7f5;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:.8rem;color:#1a5276">
+                    <i class="fas fa-info-circle"></i>
+                    <span style="color:#2980b9;font-weight:600">(기본)</span> 표시: 프로그램 기본 수강료 자동 적용 | 개인 수정값 우선 적용됩니다.
+                </div>
+                ${(sum.no_fee||0) > 0 ? `
+                <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:.8rem;color:#7d5000">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    수강료 미설정 <strong>${sum.no_fee}명</strong> — 프로그램 관리에서 기본 수강료 입력하거나 신청 수정에서 직접 입력하세요.
+                </div>` : ''}`;
+
+            const rows = Object.entries(byProg).map(([prog, members]) => {
                 const progBilling = members.reduce((s, a) => s + (a.billing_amount || 0), 0);
-                const rows = members.map(a => {
-                    const feeColor = a.fee_source === 'manual' ? '#2c3e50'
-                                   : a.fee_source === 'program' ? '#2980b9'
-                                   : '#e74c3c';
+                const memberRows = members.map(a => {
+                    const feeColor = a.fee_source === 'manual' ? '#2c3e50' : a.fee_source === 'program' ? '#2980b9' : '#e74c3c';
                     const feeLabel = a.effective_fee
-                        ? `<span style="color:${feeColor}">₩${parseInt(a.effective_fee).toLocaleString()}
-                            ${a.fee_source === 'program' ? '<sup style="font-size:.7rem;color:#7f8c8d">(기본)</sup>' : ''}</span>`
-                        : `<span style="color:#e74c3c;font-weight:600">미입력</span>`;
-                    // 총횟수/수강횟수
-                    const sessionsLabel = a.total_sessions != null
-                        ? `${a.total_sessions}회 / ${a.attended_sessions != null ? a.attended_sessions + '회' : '-'}`
-                        : '-';
-                    // 부과 금액
-                    const billingLabel = a.billing_amount != null
+                        ? `<span style="color:${feeColor}">₩${parseInt(a.effective_fee).toLocaleString()}${a.fee_source==='program'?'<sup style="font-size:.7rem;color:#7f8c8d">(기본)</sup>':''}</span>`
+                        : `<span style="color:#e74c3c;font-weight:600">미설정</span>`;
+                    const sessLabel = a.total_sessions != null
+                        ? `${a.total_sessions}회 / ${a.attended_sessions != null ? a.attended_sessions+'회' : '-'}`
+                        : '<span style="color:#f39c12">미입력</span>';
+                    const billLabel = a.billing_amount != null
                         ? `<strong style="color:#8e44ad">₩${parseInt(a.billing_amount).toLocaleString()}</strong>`
                         : '<span style="color:#aaa">-</span>';
-                    return `
-                    <tr style="font-size:.82rem;border-bottom:1px solid #f0f0f0">
+                    return `<tr style="font-size:.82rem;border-bottom:1px solid #f0f0f0">
                         <td style="padding:5px 8px;white-space:nowrap">${a.dong} ${a.ho}</td>
                         <td style="padding:5px 8px;white-space:nowrap">${a.name}</td>
                         <td style="padding:5px 8px;color:#555;white-space:nowrap">${fmtPhone(a.phone||'')}</td>
-                        <td style="padding:5px 8px;color:#666;font-size:.78rem">${a.program_name}${a.preferred_time ? ' ' + a.preferred_time : ''}</td>
-                        <td style="padding:5px 8px;text-align:center;color:#555;font-size:.78rem">${sessionsLabel}</td>
+                        <td style="padding:5px 8px;color:#666;font-size:.78rem">${a.program_name}${a.preferred_time?' '+a.preferred_time:''}</td>
+                        <td style="padding:5px 8px;text-align:center;color:#555;font-size:.78rem">${sessLabel}</td>
                         <td style="padding:5px 8px;text-align:right">${feeLabel}</td>
-                        <td style="padding:5px 8px;text-align:right">${billingLabel}</td>
+                        <td style="padding:5px 8px;text-align:right">${billLabel}</td>
                     </tr>`;
                 }).join('');
-
-                return `
-                    <tr style="background:#f0f4ff">
-                        <td colspan="4" style="padding:7px 8px;font-weight:700;font-size:.85rem;color:#3a3a8c">
-                            <i class="fas fa-dumbbell" style="margin-right:5px"></i>${prog}
-                            <span style="font-size:.78rem;color:#666;font-weight:400;margin-left:6px">${members.length}명</span>
-                        </td>
-                        <td colspan="2" style="padding:7px 8px;font-size:.75rem;color:#888;text-align:center">총횟수 / 수강횟수</td>
-                        <td style="padding:7px 8px;text-align:right;font-weight:700;color:#8e44ad">
-                            ${progBilling > 0 ? '₩' + progBilling.toLocaleString() : '-'}
-                        </td>
-                    </tr>
-                    ${rows}`;
+                return `<tr style="background:#f0f4ff">
+                    <td colspan="4" style="padding:7px 8px;font-weight:700;font-size:.85rem;color:#3a3a8c">
+                        <i class="fas fa-dumbbell" style="margin-right:5px"></i>${escHtml(prog)}
+                        <span style="font-size:.78rem;color:#666;font-weight:400;margin-left:6px">${members.length}명</span>
+                    </td>
+                    <td style="padding:7px 8px;font-size:.75rem;color:#888;text-align:center">총횟수/수강횟수</td>
+                    <td style="padding:7px 8px;font-size:.75rem;color:#888;text-align:right">수강료</td>
+                    <td style="padding:7px 8px;text-align:right;font-weight:700;color:#8e44ad">${progBilling>0?'₩'+progBilling.toLocaleString():'-'}</td>
+                </tr>${memberRows}`;
             }).join('');
 
-            const html = `
-                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
-                    <div style="background:#e8f4fd;border-radius:8px;padding:10px;text-align:center">
-                        <div style="font-size:1.4rem;font-weight:700;color:#2980b9">${sum.total_approved}</div>
-                        <div style="font-size:.78rem;color:#666">전체 수강생</div>
-                    </div>
-                    <div style="background:#e8f8f0;border-radius:8px;padding:10px;text-align:center">
-                        <div style="font-size:1.4rem;font-weight:700;color:#27ae60">${sum.has_fee}</div>
-                        <div style="font-size:.78rem;color:#666">수강료 확인</div>
-                    </div>
-                    <div style="background:#fdf3f3;border-radius:8px;padding:10px;text-align:center">
-                        <div style="font-size:1.4rem;font-weight:700;color:#e74c3c">${sum.no_fee}</div>
-                        <div style="font-size:.78rem;color:#666">수강료 미설정</div>
-                    </div>
-                    <div style="background:#f5eeff;border-radius:8px;padding:10px;text-align:center">
-                        <div style="font-size:1.1rem;font-weight:700;color:#8e44ad">₩${(sum.total_billing||0).toLocaleString()}</div>
-                        <div style="font-size:.78rem;color:#666">부과 금액 합계</div>
-                    </div>
-                </div>
-                <div style="background:#e8f4fd;border:1px solid #b3d7f5;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:.8rem;color:#1a5276">
-                    <i class="fas fa-info-circle"></i>
-                    <span style="color:#2980b9;font-weight:600">(기본)</span> 표시: 프로그램 관리에 설정된 기본 수강료 자동 적용 |
-                    개인 수정값 우선 적용됩니다.
-                </div>
-                ${sum.no_fee > 0 ? `
-                <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:.8rem;color:#7d5000">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    수강료가 미설정된 수강생 <strong>${sum.no_fee}명</strong> — 프로그램 관리에서 기본 수강료 입력 또는 신청 수정에서 직접 입력하세요.
-                </div>` : ''}
-                <div style="max-height:400px;overflow-y:auto;border:1px solid #e8ecef;border-radius:6px">
+            tableHtml = `${infoHtml}
+                <div style="max-height:380px;overflow-y:auto;border:1px solid #e8ecef;border-radius:6px">
                     <table style="width:100%;border-collapse:collapse">
                         <thead style="position:sticky;top:0;background:#f8f9fa;z-index:1">
                             <tr style="font-size:.8rem;color:#555">
-                                <th style="padding:7px 8px;text-align:left;font-weight:600;white-space:nowrap">동/호수</th>
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">동/호수</th>
                                 <th style="padding:7px 8px;text-align:left;font-weight:600">이름</th>
                                 <th style="padding:7px 8px;text-align:left;font-weight:600">전화번호</th>
                                 <th style="padding:7px 8px;text-align:left;font-weight:600">수강 프로그램</th>
@@ -324,19 +373,157 @@ const applications = {
                                 <th style="padding:7px 8px;text-align:right;font-weight:600">부과금액</th>
                             </tr>
                         </thead>
-                        <tbody>${tableRows}</tbody>
+                        <tbody>${rows}</tbody>
                     </table>
                 </div>`;
 
-            const modalBody = document.querySelector('#globalModal .modal-body');
-            if (modalBody) modalBody.innerHTML = html;
-        } catch (e) {
-            const modalBody = document.querySelector('#globalModal .modal-body');
-            if (modalBody) modalBody.innerHTML = `<p style="color:#e74c3c">데이터 로드 실패: ${e.message}</p>`;
+        } else {
+            // ── 횟수 입력 탭 ──
+            const editGuide = `
+                <div style="background:#e8f8f0;border:1px solid #a9dfbf;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:.8rem;color:#1e6e3b">
+                    <i class="fas fa-pencil-alt"></i>
+                    출석부 기준으로 <strong>총 수업 횟수</strong>와 <strong>수강 횟수</strong>를 입력하세요.
+                    입력 후 <b>저장</b> 버튼을 누르면 일괄 반영됩니다. (빈 칸은 변경하지 않음)
+                </div>`;
+
+            const editRows = Object.entries(byProg).map(([prog, members]) => {
+                const memberRows = members.map(a => {
+                    const feeColor = a.fee_source === 'manual' ? '#2c3e50' : a.fee_source === 'program' ? '#2980b9' : '#e74c3c';
+                    const feeDisp = a.effective_fee
+                        ? `₩${parseInt(a.effective_fee).toLocaleString()}${a.fee_source==='program'?'<span style="font-size:.7rem;color:#7f8c8d">(기본)</span>':''}`
+                        : '<span style="color:#e74c3c">미설정</span>';
+                    return `<tr style="font-size:.82rem;border-bottom:1px solid #f0f0f0" data-id="${a.id}">
+                        <td style="padding:5px 8px;white-space:nowrap">${a.dong} ${a.ho}</td>
+                        <td style="padding:5px 8px;white-space:nowrap">${a.name}</td>
+                        <td style="padding:5px 8px;color:#666;font-size:.78rem">${a.program_name}${a.preferred_time?' '+a.preferred_time:''}</td>
+                        <td style="padding:5px 8px;text-align:right;color:${feeColor};font-size:.78rem">${feeDisp}</td>
+                        <td style="padding:5px 6px;text-align:center">
+                            <input type="number" min="0" max="31"
+                                class="sess-total-input"
+                                data-id="${a.id}"
+                                value="${a.total_sessions != null ? a.total_sessions : ''}"
+                                placeholder="총횟수"
+                                oninput="applications._previewBilling('${a.id}')"
+                                style="width:62px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.82rem;text-align:center">
+                        </td>
+                        <td style="padding:5px 6px;text-align:center">
+                            <input type="number" min="0" max="31"
+                                class="sess-remaining-input"
+                                data-id="${a.id}"
+                                value="${a.remaining_sessions != null ? a.remaining_sessions : ''}"
+                                placeholder="잔여"
+                                oninput="applications._previewBilling('${a.id}')"
+                                style="width:62px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.82rem;text-align:center">
+                        </td>
+                        <td style="padding:5px 8px;text-align:right;font-size:.8rem" id="billing-preview-${a.id}">
+                            ${a.billing_amount != null ? '<strong style="color:#8e44ad">₩'+parseInt(a.billing_amount).toLocaleString()+'</strong>' : '<span style="color:#aaa">-</span>'}
+                        </td>
+                    </tr>`;
+                }).join('');
+                return `<tr style="background:#f0f4ff">
+                    <td colspan="3" style="padding:7px 8px;font-weight:700;font-size:.85rem;color:#3a3a8c">
+                        <i class="fas fa-dumbbell" style="margin-right:5px"></i>${escHtml(prog)}
+                        <span style="font-size:.78rem;color:#666;font-weight:400;margin-left:6px">${members.length}명</span>
+                    </td>
+                    <td style="padding:7px 8px;font-size:.75rem;color:#888;text-align:right">수강료</td>
+                    <td style="padding:7px 8px;font-size:.75rem;color:#2980b9;text-align:center;font-weight:600">총 횟수</td>
+                    <td style="padding:7px 8px;font-size:.75rem;color:#e67e22;text-align:center;font-weight:600">잔여 횟수</td>
+                    <td style="padding:7px 8px;font-size:.75rem;color:#8e44ad;text-align:right;font-weight:600">부과금액</td>
+                </tr>${memberRows}`;
+            }).join('');
+
+            tableHtml = `${editGuide}
+                <div style="max-height:380px;overflow-y:auto;border:1px solid #e8ecef;border-radius:6px">
+                    <table style="width:100%;border-collapse:collapse">
+                        <thead style="position:sticky;top:0;background:#f8f9fa;z-index:1">
+                            <tr style="font-size:.8rem;color:#555">
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">동/호수</th>
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">이름</th>
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">수강 프로그램</th>
+                                <th style="padding:7px 8px;text-align:right;font-weight:600">수강료</th>
+                                <th style="padding:7px 8px;text-align:center;font-weight:600;color:#2980b9">총 횟수 ✏️</th>
+                                <th style="padding:7px 8px;text-align:center;font-weight:600;color:#e67e22">잔여 횟수 ✏️</th>
+                                <th style="padding:7px 8px;text-align:right;font-weight:600;color:#8e44ad">부과금액</th>
+                            </tr>
+                        </thead>
+                        <tbody>${editRows}</tbody>
+                    </table>
+                </div>`;
+        }
+
+        modalBody.innerHTML = summaryHtml + tabHtml + tableHtml;
+    },
+
+    _switchSettlementTab(tab) {
+        this._settlementTab = tab;
+        // 마지막 summary는 재조회 없이 기존 데이터 사용
+        const list = this._settlementData;
+        const totalBilling = list.reduce((s,a) => s+(a.billing_amount||0), 0);
+        const sum = {
+            total_approved: list.length,
+            has_fee:  list.filter(a=>a.effective_fee).length,
+            no_fee:   list.filter(a=>!a.effective_fee).length,
+            total_billing: totalBilling
+        };
+        this._renderSettlement(sum);
+    },
+
+    // 입력 중 부과금액 미리보기
+    _previewBilling(id) {
+        const a = this._settlementData.find(x => x.id === id);
+        if (!a) return;
+        const totalEl     = document.querySelector(`.sess-total-input[data-id="${id}"]`);
+        const remainEl    = document.querySelector(`.sess-remaining-input[data-id="${id}"]`);
+        const previewEl   = document.getElementById(`billing-preview-${id}`);
+        if (!previewEl) return;
+
+        const total     = parseInt(totalEl?.value);
+        const remaining = parseInt(remainEl?.value);
+        const fee       = a.effective_fee;
+
+        if (fee && !isNaN(total) && total > 0) {
+            const attended   = !isNaN(remaining) ? Math.max(0, total - remaining) : total;
+            const perSession = Math.round(fee / total);
+            const billing    = attended * perSession;
+            previewEl.innerHTML = `<strong style="color:#8e44ad">₩${billing.toLocaleString()}</strong><div style="font-size:.72rem;color:#aaa">${attended}회×₩${perSession.toLocaleString()}</div>`;
+        } else {
+            previewEl.innerHTML = '<span style="color:#aaa">-</span>';
         }
     },
 
-    _settlementData: [],
+    // 일괄 저장
+    async _saveSessionInputs() {
+        const rows = [];
+        document.querySelectorAll('.sess-total-input').forEach(el => {
+            const id       = el.getAttribute('data-id');
+            const remEl    = document.querySelector(`.sess-remaining-input[data-id="${id}"]`);
+            const total    = el.value.trim();
+            const remaining = remEl ? remEl.value.trim() : '';
+            if (total !== '' || remaining !== '') {
+                rows.push({ id, total_sessions: total, remaining_sessions: remaining });
+            }
+        });
+
+        if (!rows.length) { showToast('변경된 값이 없습니다', 'error'); return; }
+
+        const btn = document.getElementById('settlementActionBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 저장 중...'; }
+
+        try {
+            const res = await API.applications.bulkSessions({ rows });
+            if (res.success) {
+                showToast(`✅ ${res.updated}명 저장 완료`, 'success');
+                await this._loadSettlementData();   // 새로고침
+            } else {
+                showToast(`저장 실패: ${res.errors?.[0]?.msg||'오류'}`, 'error');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+            }
+        } catch (e) {
+            showToast('저장 오류: ' + e.message, 'error');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+        }
+    },
+
     _exportSettlementCSV() {
         if (!this._settlementData || !this._settlementData.length) {
             showToast('데이터가 없습니다', 'error'); return;
