@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v2.7 여유 계산 로직 정확성 개선 + 정산 탭 전화번호 열 */
+/** 신청 관리 페이지 - v2.8 여유/초과 표시 + 횟수입력탭 전화번호 열 추가 */
 const applications = {
     data: [],
     filtered: [],
@@ -161,18 +161,23 @@ const applications = {
                         const slotRows = (prog.slot_summary || []).map(s => {
                             // s.capacity를 기준으로 퍼센트 계산 (슬롯별 정원)
                             const cap = s.capacity || prog.capacity || 6;
-                            const pct = cap > 0 ? Math.round(s.approved / cap * 100) : 0;
-                            // available = capacity - approved (음수 불가, 서버에서 Math.max(0,...) 처리됨)
-                            const available = typeof s.available === 'number' ? s.available : Math.max(0, cap - s.approved);
+                            const exceeded = s.exceeded || s.approved > cap; // 정원 초과 여부
+                            const available = exceeded ? 0 : Math.max(0, cap - s.approved);
+                            const pct = cap > 0 ? Math.min(100, Math.round(s.approved / cap * 100)) : 0;
                             const isFull = s.isFull || available === 0;
-                            const barColor = isFull ? '#e74c3c' : pct >= 80 ? '#e67e22' : '#27ae60';
+                            const barColor = exceeded ? '#8e44ad' : isFull ? '#e74c3c' : pct >= 80 ? '#e67e22' : '#27ae60';
+                            const statusLabel = exceeded
+                                ? `<span style="color:#8e44ad;font-size:.75rem">초과 ${s.approved - cap}명</span>`
+                                : isFull
+                                    ? '<span style="color:#e74c3c;font-size:.75rem">마감</span>'
+                                    : `<span style="color:#27ae60;font-size:.75rem">여유 ${available}</span>`;
                             return `
                                 <div style="margin-bottom:8px">
                                     <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px">
                                         <span style="color:#555">${s.slot}</span>
                                         <span style="font-weight:600;color:${barColor}">
                                             ${s.approved}/${cap}
-                                            ${isFull ? ' <span style="color:#e74c3c;font-size:.75rem">마감</span>' : ` <span style="color:#27ae60;font-size:.75rem">여유 ${available}</span>`}
+                                            ${statusLabel}
                                             ${s.waiting > 0 ? ` <span style="color:#f39c12;font-size:.75rem">대기 ${s.waiting}</span>` : ''}
                                         </span>
                                     </div>
@@ -400,6 +405,7 @@ const applications = {
                     return `<tr style="font-size:.82rem;border-bottom:1px solid #f0f0f0" data-id="${a.id}">
                         <td style="padding:5px 8px;white-space:nowrap">${a.dong} ${a.ho}</td>
                         <td style="padding:5px 8px;white-space:nowrap">${a.name}</td>
+                        <td style="padding:5px 8px;white-space:nowrap;color:#555;font-size:.78rem">${fmtPhone(a.phone||'')}</td>
                         <td style="padding:5px 8px;color:#666;font-size:.78rem">${a.program_name}${a.preferred_time?' '+a.preferred_time:''}</td>
                         <td style="padding:5px 8px;text-align:right;color:${feeColor};font-size:.78rem">${feeDisp}</td>
                         <td style="padding:5px 6px;text-align:center">
@@ -426,7 +432,7 @@ const applications = {
                     </tr>`;
                 }).join('');
                 return `<tr style="background:#f0f4ff">
-                    <td colspan="3" style="padding:7px 8px;font-weight:700;font-size:.85rem;color:#3a3a8c">
+                    <td colspan="4" style="padding:7px 8px;font-weight:700;font-size:.85rem;color:#3a3a8c">
                         <i class="fas fa-dumbbell" style="margin-right:5px"></i>${escHtml(prog)}
                         <span style="font-size:.78rem;color:#666;font-weight:400;margin-left:6px">${members.length}명</span>
                     </td>
@@ -444,6 +450,7 @@ const applications = {
                             <tr style="font-size:.8rem;color:#555">
                                 <th style="padding:7px 8px;text-align:left;font-weight:600">동/호수</th>
                                 <th style="padding:7px 8px;text-align:left;font-weight:600">이름</th>
+                                <th style="padding:7px 8px;text-align:left;font-weight:600">전화번호</th>
                                 <th style="padding:7px 8px;text-align:left;font-weight:600">수강 프로그램</th>
                                 <th style="padding:7px 8px;text-align:right;font-weight:600">수강료</th>
                                 <th style="padding:7px 8px;text-align:center;font-weight:600;color:#2980b9">총 횟수 ✏️</th>
