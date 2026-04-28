@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v2.9 횟수입력탭 수강횟수 직접입력 + 부과금액=수강횟수×회당가 */
+/** 신청 관리 페이지 - v3.0 단지별 데이터 완전 분리 (complex_id 필수 필터) */
 const applications = {
     data: [],
     filtered: [],
@@ -143,6 +143,16 @@ const applications = {
             const cid = getEffectiveComplexId();
             if (cid) params.complexId = cid;
             const res = await API.applications.programSummary(params);
+
+            // 단지 미선택 경고
+            if (res.warning) {
+                body.innerHTML = `<p style="color:#e67e22;font-size:.85rem;text-align:center;padding:12px 0">
+                    <i class="fas fa-exclamation-triangle"></i> ${res.warning}
+                </p>`;
+                if (badge) badge.textContent = '단지를 선택해주세요';
+                return;
+            }
+
             const list = res.data || [];
 
             // 뱃지: 총 승인 인원 합산
@@ -246,6 +256,16 @@ const applications = {
             const cid = getEffectiveComplexId();
             if (cid) params.complexId = cid;
             const res = await API.applications.feeSettlement(params);
+            // 단지 미선택 경고
+            if (res.warning) {
+                const mb = document.querySelector('#globalModal .modal-body');
+                if (mb) mb.innerHTML = `<div style="padding:30px;text-align:center;color:#e67e22">
+                    <i class="fas fa-exclamation-triangle" style="font-size:2rem;margin-bottom:10px;display:block"></i>
+                    <strong>${res.warning}</strong><br>
+                    <span style="font-size:.85rem;color:#888;margin-top:6px;display:block">단지 코드로 로그인하거나 마스터에서 단지를 선택해주세요.</span>
+                </div>`;
+                return;
+            }
             this._settlementData = res.data || [];
             this._renderSettlement(res.summary || {});
         } catch (e) {
