@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v2.8 여유/초과 표시 + 횟수입력탭 전화번호 열 추가 */
+/** 신청 관리 페이지 - v2.9 횟수입력탭 수강횟수 직접입력 + 부과금액=수강횟수×회당가 */
 const applications = {
     data: [],
     filtered: [],
@@ -343,7 +343,7 @@ const applications = {
                         ? `<span style="color:${feeColor}">₩${parseInt(a.effective_fee).toLocaleString()}${a.fee_source==='program'?'<sup style="font-size:.7rem;color:#7f8c8d">(기본)</sup>':''}</span>`
                         : `<span style="color:#e74c3c;font-weight:600">미설정</span>`;
                     const sessLabel = a.total_sessions != null
-                        ? `${a.total_sessions}회 / ${a.attended_sessions != null ? a.attended_sessions+'회' : '-'}`
+                        ? `${a.total_sessions}회 / <span style="color:#e67e22;font-weight:600">${a.attended_sessions != null ? a.attended_sessions+'회' : '-'}</span>`
                         : '<span style="color:#f39c12">미입력</span>';
                     const billLabel = a.billing_amount != null
                         ? `<strong style="color:#8e44ad">₩${parseInt(a.billing_amount).toLocaleString()}</strong>`
@@ -392,7 +392,8 @@ const applications = {
             const editGuide = `
                 <div style="background:#e8f8f0;border:1px solid #a9dfbf;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:.8rem;color:#1e6e3b">
                     <i class="fas fa-pencil-alt"></i>
-                    출석부 기준으로 <strong>총 수업 횟수</strong>와 <strong>수강 횟수</strong>를 입력하세요.
+                    출석부 기준으로 <strong>총 횟수</strong>(이번 달 총 수업 수)와 <strong>수강 횟수</strong>(실제 출석 횟수)를 입력하세요.
+                    <b>부과금액 = 수강 횟수 × 회당가(수강료 ÷ 총횟수)</b>로 자동 계산됩니다.
                     입력 후 <b>저장</b> 버튼을 누르면 일괄 반영됩니다. (빈 칸은 변경하지 않음)
                 </div>`;
 
@@ -419,10 +420,10 @@ const applications = {
                         </td>
                         <td style="padding:5px 6px;text-align:center">
                             <input type="number" min="0" max="31"
-                                class="sess-remaining-input"
+                                class="sess-attended-input"
                                 data-id="${a.id}"
-                                value="${a.remaining_sessions != null ? a.remaining_sessions : ''}"
-                                placeholder="잔여"
+                                value="${a.attended_sessions != null ? a.attended_sessions : ''}"
+                                placeholder="수강"
                                 oninput="applications._previewBilling('${a.id}')"
                                 style="width:62px;padding:3px 5px;border:1px solid #ddd;border-radius:4px;font-size:.82rem;text-align:center">
                         </td>
@@ -438,7 +439,7 @@ const applications = {
                     </td>
                     <td style="padding:7px 8px;font-size:.75rem;color:#888;text-align:right">수강료</td>
                     <td style="padding:7px 8px;font-size:.75rem;color:#2980b9;text-align:center;font-weight:600">총 횟수</td>
-                    <td style="padding:7px 8px;font-size:.75rem;color:#e67e22;text-align:center;font-weight:600">잔여 횟수</td>
+                    <td style="padding:7px 8px;font-size:.75rem;color:#e67e22;text-align:center;font-weight:600">수강 횟수</td>
                     <td style="padding:7px 8px;font-size:.75rem;color:#8e44ad;text-align:right;font-weight:600">부과금액</td>
                 </tr>${memberRows}`;
             }).join('');
@@ -454,7 +455,7 @@ const applications = {
                                 <th style="padding:7px 8px;text-align:left;font-weight:600">수강 프로그램</th>
                                 <th style="padding:7px 8px;text-align:right;font-weight:600">수강료</th>
                                 <th style="padding:7px 8px;text-align:center;font-weight:600;color:#2980b9">총 횟수 ✏️</th>
-                                <th style="padding:7px 8px;text-align:center;font-weight:600;color:#e67e22">잔여 횟수 ✏️</th>
+                                <th style="padding:7px 8px;text-align:center;font-weight:600;color:#e67e22">수강 횟수 ✏️</th>
                                 <th style="padding:7px 8px;text-align:right;font-weight:600;color:#8e44ad">부과금액</th>
                             </tr>
                         </thead>
@@ -480,39 +481,48 @@ const applications = {
         this._renderSettlement(sum);
     },
 
-    // 입력 중 부과금액 미리보기
+    // 입력 중 부과금액 미리보기 (수강횟수 × 회당가)
     _previewBilling(id) {
         const a = this._settlementData.find(x => x.id === id);
         if (!a) return;
-        const totalEl     = document.querySelector(`.sess-total-input[data-id="${id}"]`);
-        const remainEl    = document.querySelector(`.sess-remaining-input[data-id="${id}"]`);
-        const previewEl   = document.getElementById(`billing-preview-${id}`);
+        const totalEl    = document.querySelector(`.sess-total-input[data-id="${id}"]`);
+        const attendedEl = document.querySelector(`.sess-attended-input[data-id="${id}"]`);
+        const previewEl  = document.getElementById(`billing-preview-${id}`);
         if (!previewEl) return;
 
-        const total     = parseInt(totalEl?.value);
-        const remaining = parseInt(remainEl?.value);
-        const fee       = a.effective_fee;
+        const total    = parseInt(totalEl?.value);
+        const attended = parseInt(attendedEl?.value);
+        const fee      = a.effective_fee;
 
-        if (fee && !isNaN(total) && total > 0) {
-            const attended   = !isNaN(remaining) ? Math.max(0, total - remaining) : total;
-            const perSession = Math.round(fee / total);
-            const billing    = attended * perSession;
+        if (fee && !isNaN(total) && total > 0 && !isNaN(attended)) {
+            const perSession = Math.round(fee / total);          // 회당가 = 수강료 ÷ 총횟수
+            const billing    = Math.max(0, attended) * perSession; // 부과금액 = 수강횟수 × 회당가
             previewEl.innerHTML = `<strong style="color:#8e44ad">₩${billing.toLocaleString()}</strong><div style="font-size:.72rem;color:#aaa">${attended}회×₩${perSession.toLocaleString()}</div>`;
         } else {
             previewEl.innerHTML = '<span style="color:#aaa">-</span>';
         }
     },
 
-    // 일괄 저장
+    // 일괄 저장 (수강 횟수 직접 입력 → remaining = total - attended 로 변환 저장)
     async _saveSessionInputs() {
         const rows = [];
         document.querySelectorAll('.sess-total-input').forEach(el => {
-            const id       = el.getAttribute('data-id');
-            const remEl    = document.querySelector(`.sess-remaining-input[data-id="${id}"]`);
-            const total    = el.value.trim();
-            const remaining = remEl ? remEl.value.trim() : '';
-            if (total !== '' || remaining !== '') {
-                rows.push({ id, total_sessions: total, remaining_sessions: remaining });
+            const id          = el.getAttribute('data-id');
+            const attendedEl  = document.querySelector(`.sess-attended-input[data-id="${id}"]`);
+            const totalStr    = el.value.trim();
+            const attendedStr = attendedEl ? attendedEl.value.trim() : '';
+            if (totalStr !== '' || attendedStr !== '') {
+                const total    = totalStr !== '' ? parseInt(totalStr) : null;
+                const attended = attendedStr !== '' ? parseInt(attendedStr) : null;
+                // DB에는 remaining_sessions = total - attended 로 저장
+                const remaining = (total != null && attended != null)
+                    ? Math.max(0, total - attended)
+                    : null;
+                rows.push({
+                    id,
+                    total_sessions:     total != null ? String(total) : '',
+                    remaining_sessions: remaining != null ? String(remaining) : ''
+                });
             }
         });
 
