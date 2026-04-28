@@ -60,7 +60,9 @@ const API = (() => {
             update:   (id, d) => req('PUT',  `/applications/${id}`, d),
             delete:   (id)    => req('DELETE',`/applications/${id}`),
             transfer: (id, d) => req('POST', `/applications/${id}/transfer`, d),
-            feeCalc:  (d)     => req('POST', '/applications/fee-calc', d),
+            feeCalc:        (d) => req('POST', '/applications/fee-calc', d),
+            programSummary: (p) => req('GET',  `/applications/program-summary${qs(p)}`),
+            feeSettlement:  (p) => req('GET',  `/applications/fee-settlement${qs(p)}`),
         },
 
         // ─── 해지 ────────────────────────────────────────
