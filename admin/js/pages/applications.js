@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.9 출석부PDF서명제거+여백축소+시간표버튼수정 */
+/** 신청 관리 페이지 - v3.10 시간표달력형PDF수정+선택값저장방식 */
 const applications = {
     data: [],
     filtered: [],
@@ -2315,15 +2315,19 @@ ${(() => {
             '<td style="padding:6px 10px;font-size:.88rem;text-align:center;color:#1abc9c;font-weight:600">' + c.count + '명</td></tr>'
         ).join('');
 
+        // 스타일 선택값 초기화 (DOM 대신 변수에 저장)
+        applications._ttStyle = applications._ttStyle || 'calendar';
+        applications._ttMonth = defaultMonth;
+
         const body =
             '<div style="padding:4px 0 8px">' +
             '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">' +
             '<label style="font-size:.88rem;color:#555">출력 월:</label>' +
-            '<input type="month" id="ttMonth" value="' + defaultMonth + '" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">' +
+            '<input type="month" id="ttMonth" value="' + defaultMonth + '" onchange="applications._ttMonth=this.value" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">' +
             '<label style="font-size:.88rem;color:#555;margin-left:10px">표시 스타일:</label>' +
-            '<select id="ttStyle" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">' +
-            '<option value="calendar">달력형</option>' +
-            '<option value="list">목록형</option>' +
+            '<select id="ttStyle" onchange="applications._ttStyle=this.value" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">' +
+            '<option value="calendar"' + (applications._ttStyle==='calendar'?' selected':'') + '>달력형</option>' +
+            '<option value="list"' + (applications._ttStyle==='list'?' selected':'') + '>목록형</option>' +
             '</select></div>' +
             '<div style="background:#f8f9fa;border-radius:8px;padding:10px 14px;margin-bottom:10px">' +
             '<div style="font-size:.82rem;color:#888;margin-bottom:6px">개설 강좌 목록 (승인 회원 기준)</div>' +
@@ -2342,10 +2346,9 @@ ${(() => {
     },
 
     _downloadTimetablePDF() {
-        const monthEl = document.getElementById('ttMonth');
-        const styleEl = document.getElementById('ttStyle');
-        const monthVal = monthEl ? monthEl.value : (new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0'));
-        const printStyle = styleEl ? styleEl.value : 'calendar';
+        // DOM 대신 변수에서 읽음 (select value 재생성 버그 방지)
+        const monthVal = applications._ttMonth || (new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0'));
+        const printStyle = applications._ttStyle || 'calendar';
         const [yr, mo] = monthVal.split('-').map(Number);
         const complexName = applications._ttComplexName || '';
         const apps = applications._ttApps || [];
