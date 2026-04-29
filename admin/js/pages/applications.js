@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.22 출석부PDF블록실제높이캡처+여백최소화 */
+/** 신청 관리 페이지 - v3.23 출석부PDF가로꽉채움+여백제거 */
 const applications = {
     data: [],
     filtered: [],
@@ -2299,9 +2299,9 @@ ${(() => {
             'var bw=el.scrollWidth;var bh=el.scrollHeight;' +
             'var canvas=await html2canvas(el,{scale:2,useCORS:true,logging:false,backgroundColor:\'#ffffff\',width:bw,height:bh,windowWidth:bw,windowHeight:bh,scrollX:0,scrollY:0});' +
             'var iw=canvas.width;var ih=canvas.height;' +
-            'var aw=pw-margin*2;var ah=ph-margin*2;' +
-            'var ratio=Math.min(aw/iw,ah/ih);' +
-            'var cx=margin;var cy=margin+(ah-ih*ratio)/2;' +
+            'var aw=pw-margin*2;' +
+            'var ratio=aw/iw;' +
+            'var cx=margin;var cy=margin;' +
             'if(i>0)pdf.addPage(\'a4\',\'landscape\');' +
             'pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.95),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
             '}' +
