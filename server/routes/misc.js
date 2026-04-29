@@ -737,14 +737,33 @@ router.get('/settlement-report', async (req, res) => {
         const nextKey = `${nextYr}-${String(nextMo).padStart(2,'0')}`;
 
         // ── 1. 해당월 승인된 해지 전체 (termination_month = 해당월)
-        const { data: cancels, error: cErr } = await sb
-            .from('cancellations')
-            .select('id, dong, ho, name, phone, program_name, preferred_time, termination_month, termination_date, refund_amount, total_sessions_in_month, attended_sessions, created_at, approved_at, status, request_type')
-            .eq('complex_id', cid)
-            .eq('status', 'approved')
-            .eq('termination_month', monthKey)
-            .order('termination_date', { ascending: true });
-        if (cErr) throw cErr;
+        //    preferred_time 컬럼 없음 주의 - cancellations 테이블에는 없는 컬럼
+        let cancels = [], cErrFinal = null;
+        {
+            // termination_month 컬럼 있는 경우 시도
+            const { data: c1, error: e1 } = await sb
+                .from('cancellations')
+                .select('id, dong, ho, name, phone, program_name, reason, termination_month, termination_date, refund_amount, total_sessions_in_month, attended_sessions, session_fee, billing_amount, created_at, approved_at, status, request_type')
+                .eq('complex_id', cid)
+                .eq('status', 'approved')
+                .eq('termination_month', monthKey)
+                .order('termination_date', { ascending: true });
+            if (e1) {
+                // termination_month 컬럼 없으면 approved_at 기준 fallback
+                const { data: c2, error: e2 } = await sb
+                    .from('cancellations')
+                    .select('id, dong, ho, name, phone, program_name, reason, refund_amount, created_at, approved_at, status, request_type')
+                    .eq('complex_id', cid)
+                    .eq('status', 'approved')
+                    .gte('approved_at', monthStart + 'T00:00:00')
+                    .lte('approved_at', monthEnd   + 'T23:59:59')
+                    .order('approved_at', { ascending: true });
+                if (e2) { cErrFinal = e2; } else { cancels = c2 || []; }
+            } else {
+                cancels = c1 || [];
+            }
+        }
+        if (cErrFinal) throw cErrFinal;
 
         // ── 2. 해당월 승인된 신규접수 (applications.status='approved', approved_at이 해당월 내)
         //    created_at 기준으로 해당월 내 신규 승인된 것
@@ -794,18 +813,24 @@ router.get('/settlement-report', async (req, res) => {
                 ? Math.round(monthlyFee * attendedSess / totalSess)
                 : null;
 
+            // billing_amount가 있으면 우선 사용, 없으면 역산
+            if (!monthlyFee && c.billing_amount && totalSess > 0 && attendedSess > 0) {
+                monthlyFee = Math.round(c.billing_amount * totalSess / attendedSess);
+            }
+
             const row = {
                 dong:          c.dong,
                 ho:            c.ho,
                 name:          c.name,
                 phone:         c.phone,
                 program_name:  c.program_name,
-                preferred_time:c.preferred_time,
+                // preferred_time은 cancellations 테이블에 없음 → reason에서 프로그램 정보 추출
+                preferred_time: c.reason ? (c.reason.match(/\d{1,2}:\d{2}/) || [''])[0] : '',
                 termination_date: tDate,
                 total_sessions:   totalSess,
                 attended_sessions:attendedSess,
-                monthly_fee:      monthlyFee,
-                charge_amount:    chargeAmt,
+                monthly_fee:      monthlyFee || c.billing_amount || null,
+                charge_amount:    chargeAmt || c.billing_amount || null,
                 refund_amount:    c.refund_amount,
                 note: ''
             };
