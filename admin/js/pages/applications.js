@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.5 출석부 달력날짜+요일동시표시·요일별색상·전체선택버튼 */
+/** 신청 관리 페이지 - v3.6 출석부 프로그램별 수업요일 자동감지+달력 자동선택 */
 const applications = {
     data: [],
     filtered: [],
@@ -1681,6 +1681,56 @@ ${(() => {
     _dowName(dateObj) {
         return ['일','월','화','수','목','금','토'][dateObj.getDay()];
     },
+    // ── 프로그램명에서 수업 요일 번호 배열 추출 ──────────────────────────
+    // 반환: [0~6 배열] (0=일,1=월,...,6=토), 감지 불가 시 []
+    // 예: "월6:1 그룹수업" → [1]
+    //     "화목 필라테스"  → [2,4]
+    //     "수금반"         → [3,5]
+    //     "월수금"         → [1,3,5]
+    _parseProgramDows(name) {
+        if (!name) return [];
+        const n = name.replace(/\s/g, '');
+        // 복합 패턴 먼저 (긴 것 먼저)
+        const PATTERNS = [
+            { re: /월.*수.*금|수.*금.*월|월수금/,  dows: [1,3,5] },
+            { re: /화.*목.*토|화목토/,             dows: [2,4,6] },
+            { re: /월.*수|수.*월/,                 dows: [1,3]   },
+            { re: /화.*목|목.*화/,                 dows: [2,4]   },
+            { re: /수.*금|금.*수/,                 dows: [3,5]   },
+            { re: /월.*금|금.*월/,                 dows: [1,5]   },
+            { re: /화.*금|금.*화/,                 dows: [2,5]   },
+            { re: /목.*토|토.*목/,                 dows: [4,6]   },
+        ];
+        for (const p of PATTERNS) {
+            if (p.re.test(n)) return p.dows;
+        }
+        // 단일 요일
+        if (/월/.test(n)) return [1];
+        if (/화/.test(n)) return [2];
+        if (/수/.test(n)) return [3];
+        if (/목/.test(n)) return [4];
+        if (/금/.test(n)) return [5];
+        if (/토/.test(n)) return [6];
+        if (/일/.test(n)) return [0];
+        return [];
+    },
+
+    // ── 감지된 요일로 현재 달력 월의 날짜 자동 선택 ───────────────────
+    _autoSelectDatesByDow(dows) {
+        const sel = document.getElementById('attCalMonth');
+        if (!sel || !dows.length) return;
+        const [yr, mo] = sel.value.split('-').map(Number);
+        const lastDate = new Date(yr, mo, 0).getDate();
+        const dates = [];
+        for (let d = 1; d <= lastDate; d++) {
+            const date = new Date(yr, mo-1, d);
+            if (dows.includes(date.getDay())) {
+                dates.push(yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
+            }
+        }
+        applications._attCustomDates = dates;
+        applications._attAutoDows = dows;  // 월 변경 시 재사용
+    },
 
     // 날짜 레이블: "4/7(월)"
     _dateLabel(dateStr) {           // dateStr = 'YYYY-MM-DD'
@@ -1695,14 +1745,35 @@ ${(() => {
         if (!sel) return;
         const [yr, mo] = sel.value.split('-').map(Number);  // 1-based month
         const checked  = applications._attCustomDates || [];  // ['YYYY-MM-DD', ...]
+        const autoDows = applications._attAutoDows   || [];  // 자동감지 요일
 
         const firstDay = new Date(yr, mo-1, 1).getDay();   // 0=일
         const lastDate = new Date(yr, mo, 0).getDate();
-        const DOW_NAMES = ['일','월','화','수','목','금','토'];
+        const DOW_NAMES  = ['일','월','화','수','목','금','토'];
         const DOW_COLORS = ['#e74c3c','#444','#444','#444','#444','#444','#2980b9'];
 
+        // ── 자동감지 요일 뱃지
+        let autoBadge = '';
+        if (autoDows.length) {
+            const dowBadges = autoDows.map(d => {
+                const fc  = DOW_COLORS[d];
+                const bg2 = (d===0) ? '#fdecea' : (d===6) ? '#eaf3fb' : '#e8f8f0';
+                const bc  = (d===0) ? '#f1aaa5' : (d===6) ? '#aed6f1' : '#a9dfbf';
+                return '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:.76rem;font-weight:700;' +
+                    'background:' + bg2 + ';border:1px solid ' + bc + ';color:' + fc + '">' + DOW_NAMES[d] + '</span>';
+            }).join('');
+            autoBadge = '<div style="display:flex;align-items:center;gap:5px;margin-bottom:8px;padding:6px 10px;' +
+                'background:#f0fdf8;border:1px solid #c3e6cb;border-radius:6px;flex-wrap:wrap">' +
+                '<i class="fas fa-magic" style="color:#1abc9c;font-size:.8rem"></i>' +
+                '<span style="font-size:.78rem;color:#555;font-weight:600">프로그램 수업 요일 자동감지:</span>' +
+                dowBadges +
+                '<span style="font-size:.75rem;color:#999;margin-left:2px">(수동으로 추가/해제 가능)</span>' +
+                '</div>';
+        }
+
         // ── 달력 테이블 (헤더 없음 – 셀마다 날짜+요일 표시)
-        let html = '<table style="border-collapse:collapse;width:100%;table-layout:fixed;margin-bottom:2px">';
+        let html = autoBadge;
+        html += '<table style="border-collapse:collapse;width:100%;table-layout:fixed;margin-bottom:2px">';
         html += '<tbody>';
 
         let dayNum = 1;
@@ -1749,12 +1820,20 @@ ${(() => {
         html += '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;align-items:center;padding:6px 4px 2px;border-top:1px solid #eee">' +
             '<span style="font-size:.75rem;color:#999;font-weight:600;white-space:nowrap">일괄 선택:</span>' +
             [0,1,2,3,4,5,6].map(d => {
-                const fc = DOW_COLORS[d];
-                const bg2 = (d===0) ? '#fff5f5' : (d===6) ? '#f0f6ff' : '#f8f8f8';
+                const fc   = DOW_COLORS[d];
+                const bg2  = (d===0) ? '#fff5f5' : (d===6) ? '#f0f6ff' : '#f8f8f8';
+                const bdrExtra = autoDows.includes(d)
+                    ? ';border-color:' + (d===0?'#e74c3c':d===6?'#2980b9':'#1abc9c') + ';border-width:1.5px'
+                    : '';
                 return '<button onclick="applications._selectByDow(' + yr + ',' + mo + ',' + d + ')" ' +
-                    'style="' + btnBase + ';color:' + fc + ';background:' + bg2 + '">' +
+                    'style="' + btnBase + ';color:' + fc + ';background:' + bg2 + bdrExtra + '">' +
                     DOW_NAMES[d] + '</button>';
             }).join('') +
+            (autoDows.length
+                ? '<button onclick="applications._autoReselect()" ' +
+                  'style="' + btnBase + ';background:#e8f8f0;color:#1e8449;border-color:#a9dfbf;margin-left:2px">' +
+                  '<i class="fas fa-magic" style="font-size:.72rem"></i> 자동선택</button>'
+                : '') +
             '<button onclick="applications._selectAllMonth(' + yr + ',' + mo + ')" ' +
             'style="' + btnBase + ';background:#eafaf1;color:#1e8449;border-color:#a9dfbf">전체선택</button>' +
             '<button onclick="applications._clearCalMonth(' + yr + ',' + mo + ')" ' +
@@ -1845,6 +1924,41 @@ ${(() => {
         applications._renderAttendancePreview();
     },
 
+    // ── 자동감지 요일로 재선택 (월 변경 후 재적용용)
+    _autoReselect() {
+        const dows = applications._attAutoDows || [];
+        if (!dows.length) return;
+        applications._autoSelectDatesByDow(dows);
+        applications._renderCalendar();
+        applications._renderAttendancePreview();
+    },
+
+    // ── 프로그램 선택 변경 핸들러 (자동 요일 감지 + 날짜 재선택)
+    _onAttProgramChange() {
+        const prog = document.getElementById('attProgram')?.value || '';
+        const dows = applications._parseProgramDows(prog);
+        if (dows.length) {
+            applications._autoSelectDatesByDow(dows);
+        } else {
+            applications._attAutoDows    = [];
+            // 날짜는 초기화하지 않고 유지
+        }
+        applications._renderCalendar();
+        applications._renderAttendancePreview();
+    },
+
+    // ── 월 변경 핸들러 (자동감지 요일이 있으면 재계산, 없으면 초기화)
+    _onAttMonthChange() {
+        const dows = applications._attAutoDows || [];
+        if (dows.length) {
+            applications._autoSelectDatesByDow(dows);
+        } else {
+            applications._attCustomDates = [];
+        }
+        applications._renderCalendar();
+        applications._renderAttendancePreview();
+    },
+
     // ── 출석부 모달 진입점 ─────────────────────────────────────────────
     async showAttendanceModal() {
         const complexId = getEffectiveComplexId();
@@ -1877,6 +1991,7 @@ ${(() => {
             const defaultMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
 
             applications._attCustomDates = [];
+            applications._attAutoDows    = [];  // 자동감지 요일 초기화
             applications._attApps        = apps;
             applications._attComplexName = complexName;
 
@@ -1888,7 +2003,7 @@ ${(() => {
                 '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">' +
                   '<div style="display:flex;flex-direction:column;gap:4px">' +
                     '<label style="font-size:.8rem;color:#666;font-weight:600">프로그램</label>' +
-                    '<select id="attProgram" onchange="applications._renderAttendancePreview()" style="padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem;min-width:200px">' +
+                    '<select id="attProgram" onchange="applications._onAttProgramChange()" style="padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem;min-width:200px">' +
                     '<option value="">-- 전체 프로그램 --</option>' + progOpts + '</select></div>' +
                   '<div style="display:flex;flex-direction:column;gap:4px">' +
                     '<label style="font-size:.8rem;color:#666;font-weight:600">시간대</label>' +
@@ -1906,7 +2021,7 @@ ${(() => {
                     '<div style="display:flex;align-items:center;gap:6px">' +
                       '<label style="font-size:.8rem;color:#555;font-weight:600">월 선택</label>' +
                       '<input type="month" id="attCalMonth" value="' + defaultMonth + '" ' +
-                        'onchange="applications._attCustomDates=[];applications._renderCalendar();applications._renderAttendancePreview();" ' +
+                        'onchange="applications._onAttMonthChange()" ' +
                         'style="padding:4px 8px;border:1px solid #a9dfbf;border-radius:6px;font-size:.85rem;color:#1e8449;font-weight:600">' +
                     '</div></div>' +
                   '<div id="attCalGrid" style="margin-bottom:10px"></div>' +
@@ -1926,11 +2041,12 @@ ${(() => {
 
             document.getElementById('globalModalBody').innerHTML = body;
             document.getElementById('globalModalFooter').innerHTML = footer;
-            applications._renderCalendar();
 
             if (programs.length) {
                 document.getElementById('attProgram').value = programs[0];
-                applications._renderAttendancePreview();
+                applications._onAttProgramChange();  // 첫 프로그램 자동감지 + 달력 렌더
+            } else {
+                applications._renderCalendar();
             }
 
         } catch (e) {
