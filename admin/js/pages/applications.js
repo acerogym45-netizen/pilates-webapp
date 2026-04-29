@@ -2203,8 +2203,26 @@ ${(() => {
             return String(a.ho||'').replace(/호$/,'').localeCompare(String(b.ho||'').replace(/호$/,''),'ko',{numeric:true});
         });
 
+        // ── 그룹 정렬: 프로그램명에서 첫 번째 수업요일 기준으로 정렬
+        // 요일 우선순위: 월(1) → 화(2) → 수(3) → 목(4) → 금(5) → 토(6) → 일(0) → 미감지(99)
+        // 같은 요일 그룹 내에서는 시간대 오름차순
+        const getDowPriority = (programName) => {
+            const dows = applications._parseProgramDows(programName);
+            if (!dows.length) return 99;
+            // 복합 요일은 첫 번째 요일 기준 (월화 → 월=1, 화목 → 화=2, 수금 → 수=3)
+            const first = Math.min(...dows);
+            // 0(일)은 최하위로
+            return first === 0 ? 98 : first;
+        };
+        const sortedGroups = Object.values(groups).sort((a, b) => {
+            const pa = getDowPriority(a.program), pb = getDowPriority(b.program);
+            if (pa !== pb) return pa - pb;
+            // 같은 요일 패턴이면 시간대 오름차순
+            return (a.time || '').localeCompare(b.time || '', 'ko');
+        });
+
         let printContent = '';
-        Object.values(groups).forEach((g, gi) => {
+        sortedGroups.forEach((g, gi) => {
             sortM(g.members);
             // 그룹별 날짜 계산
             const groupRaw  = getGroupDates(g.program) || [];
