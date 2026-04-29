@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.15 문의조회동호접미사정규화+출석부미리보기서명제거 */
+/** 신청 관리 페이지 - v3.16 시간표PDF한장출력+시간표시제거+범례삭제 */
 const applications = {
     data: [],
     filtered: [],
@@ -2613,7 +2613,7 @@ ${(() => {
         // 달력 셀
         let cellIdx = 0, calRows = '', row = '<tr>';
         for (let i = 0; i < firstDay; i++) {
-            row += '<td style="border:1px solid #eee;height:22mm;background:#fafafa"></td>';
+            row += '<td style="border:1px solid #eee;height:16mm;background:#fafafa"></td>';
             cellIdx++;
         }
         for (let d = 1; d <= lastDate; d++) {
@@ -2629,36 +2629,28 @@ ${(() => {
             const classes  = dayClasses[d] || [];
             const holName  = holidays[dateKey] || '';
 
-            // 강좌 블록 (선택 날짜에만)
+            // 강좌 블록 (선택 날짜에만, 프로그램명만 표시)
             const classHtml = (isSel && classes.length) ? classes.map(g =>
-                '<div style="margin:1px 1px;padding:2px 3px;background:#e8f4fd;border-left:2.5px solid #3498db;border-radius:2px;font-size:6.5pt;line-height:1.35">' +
-                '<div style="font-weight:700;color:#1a5276;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' + g.program + '</div>' +
-                '<div style="color:#555;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' + g.time + '</div></div>'
+                '<div style="margin:1px 1px;padding:1px 3px;background:#e8f4fd;border-left:2.5px solid #3498db;border-radius:2px;font-size:6pt;line-height:1.3;font-weight:700;color:#1a5276;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' +
+                g.program + '</div>'
             ).join('') : '';
 
             row +=
-                '<td style="border:1px solid #ddd;height:22mm;vertical-align:top;padding:2px;background:' + cellBg + '">' +
+                '<td style="border:1px solid #ddd;height:16mm;vertical-align:top;padding:2px;background:' + cellBg + '">' +
                 '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 1px">' +
-                '<span style="font-size:9.5pt;font-weight:700;color:' + numColor + '">' + d + '</span>' +
-                (holName ? '<span style="font-size:6pt;color:#e74c3c;font-weight:600;white-space:nowrap">' + holName + '</span>' : '') +
+                '<span style="font-size:9pt;font-weight:700;color:' + numColor + '">' + d + '</span>' +
+                (holName ? '<span style="font-size:5.5pt;color:#e74c3c;font-weight:600;white-space:nowrap">' + holName + '</span>' : '') +
                 '</div>' +
                 classHtml + '</td>';
             cellIdx++;
             if (cellIdx % 7 === 0) { row += '</tr>'; calRows += row; row = '<tr>'; }
         }
         if (cellIdx % 7 !== 0) {
-            while (cellIdx % 7 !== 0) { row += '<td style="border:1px solid #eee;height:22mm;background:#fafafa"></td>'; cellIdx++; }
+            while (cellIdx % 7 !== 0) { row += '<td style="border:1px solid #eee;height:16mm;background:#fafafa"></td>'; cellIdx++; }
             row += '</tr>'; calRows += row;
         }
 
-        // 범례 (수업요일별 강좌 목록, 명수 제외)
-        const legendHtml = sortedGroups.map(g => {
-            const dows = applications._parseProgramDows(g.program);
-            const dowStr = dows.length ? dows.map(d => DOW_KR[d]).join('·') : '?';
-            return '<span style="display:inline-flex;align-items:center;margin:2px 8px 2px 0;font-size:7.5pt">' +
-                '<span style="display:inline-block;width:9px;height:9px;background:#3498db;border-radius:2px;margin-right:3px"></span>' +
-                '<span style="color:#555">' + dowStr + '</span>&nbsp;<strong>' + g.program + '</strong>&nbsp;<span style="color:#888">' + g.time + '</span></span>';
-        }).join('');
+        // 범례 섹션 삭제됨
 
         const content =
             '<div style="text-align:center;border-bottom:2.5px solid #3498db;padding-bottom:6px;margin-bottom:8px;position:relative">' +
@@ -2667,9 +2659,7 @@ ${(() => {
             '<div style="position:absolute;right:0;bottom:6px;font-size:7pt;color:#aaa">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</div></div>' +
             '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
             '<thead><tr>' + dowHeaders + '</tr></thead>' +
-            '<tbody>' + calRows + '</tbody></table>' +
-            '<div style="margin-top:5px;padding:4px 8px;background:#f0f7ff;border:1px solid #bee3f8;border-radius:5px;line-height:1.8">' +
-            legendHtml + '</div>';
+            '<tbody>' + calRows + '</tbody></table>';
 
         const win = window.open('','_blank','width=820,height=1060');
         if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
