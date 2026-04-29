@@ -696,28 +696,32 @@ router.get('/stats/dashboard', async (req, res) => {
 
 /**
  * GET /api/settlement-report
- * 월별 정산 분류 (v2 - 재정의)
+ * 월별 정산 분류 (v3 - 최종 정의)
  *
  * ── 분류 기준 ──────────────────────────────────────────
- *  [현재수강자]  applications.status='approved'  (조회월 기준 수강 중인 전체)
- *               → 조회월 이전에 승인된 것: created_at < monthStart
- *               → 승인일 기준 동호수별 부과금액 집계
+ *  [현재수강자]  applications.status='approved' 전체
+ *               → 조회월 말일 기준으로 수강 중인 사람 전부
+ *               → 동호수별 부과금액 집계 대상 (시트1)
+ *
+ *  [기존수강자]  현재수강자 중 approved_at(또는 created_at) < monthStart
+ *               → 이번달 이전부터 수강 중이던 사람
+ *
+ *  [차월신규접수] 현재수강자 - 기존수강자
+ *               = approved_at(또는 created_at)이 해당월(monthStart~monthEnd) 이내
+ *               → 이번달에 새로 승인된 사람 → 다음달부터 부과 대상
  *
  *  [중도해지]    cancellations.status='approved'
- *               + termination_date가 해당월 1일 ~ 말일(미포함) 사이
- *               → 월 중간 해지 → 부과금액이 정액이 아님 (관리비 후청구)
+ *               + termination_month = monthKey (해당 월에 처리된 해지)
+ *               + termination_date가 말일(monthEnd)이 아닌 경우
+ *               → 월 중간 해지 → 관리비 후청구 방식 (금액 별도 협의)
  *
- *  [차월해지]    cancellations.status='approved' 전체 - 중도해지
- *               (= 해당월 말일 해지 또는 해당 월에 승인된 해지)
+ *  [차월해지]    cancellations.status='approved' 중 중도해지 제외
+ *               = termination_month = monthKey 이고 termination_date = monthEnd
+ *                 또는 termination_date 미상인 경우
  *               → 다음달 미부과 대상
  *
- *  [차월신규접수] applications.status='approved'
- *               + approved_at(또는 created_at)이 해당월 내
- *               = "전체 현재 승인자" - "해당월 이전부터 있던 승인자"
- *               → 다음달부터 부과 대상
- *
  *  [취소(excluded)] applications.status='cancelled'
- *               → 수강 시작 전 취소, 부과 없음, 해지 아님 → 제외
+ *               → 수강 시작 전 취소, 부과 없음, 해지 아님 → 집계 제외
  */
 router.get('/settlement-report', async (req, res) => {
     try {
@@ -762,8 +766,8 @@ router.get('/settlement-report', async (req, res) => {
         };
 
         // ────────────────────────────────────────────────
-        // A. 현재 수강자 전체 (status='approved')
-        //    → 조회월 말일 기준 수강 중인 사람들
+        // A. 현재 수강자 전체 (applications.status='approved')
+        //    ※ status='cancelled'는 수강 시작 전 취소 → 완전 제외
         // ────────────────────────────────────────────────
         const { data: allApproved, error: appErr } = await sb
             .from('applications')
@@ -775,61 +779,81 @@ router.get('/settlement-report', async (req, res) => {
 
         const approvedList = allApproved || [];
 
-        // 차월신규접수: 해당월 내 승인된 것 (approved_at 또는 created_at이 monthStart~monthEnd 이내)
-        const nextNewList = approvedList.filter(a => {
-            const dt = (a.approved_at || a.created_at || '').slice(0, 10);
-            return dt >= monthStart && dt <= monthEnd;
-        });
-
-        // 기존 수강자 (차월신규 제외 = 조회월 이전부터 있던 사람)
+        // 기존수강자: 해당월 이전부터 수강 중이던 사람
         const existingList = approvedList.filter(a => {
             const dt = (a.approved_at || a.created_at || '').slice(0, 10);
             return dt < monthStart;
         });
 
+        // 차월신규접수: 해당월 내 승인된 것 = 전체 - 기존
+        const nextNewList = approvedList.filter(a => {
+            const dt = (a.approved_at || a.created_at || '').slice(0, 10);
+            return dt >= monthStart && dt <= monthEnd;
+        });
+
         // ────────────────────────────────────────────────
-        // B. 해지 전체 (status='approved')
-        //    termination_month 컬럼 있으면 우선 사용, 없으면 created_at 기준
+        // B. 해지 전체 (cancellations.status='approved')
+        //    termination_month = monthKey 기준 우선
+        //    없으면 processed_at(승인일) 기준 fallback
         // ────────────────────────────────────────────────
         let cancels = [];
         {
+            // 1차: termination_month 컬럼으로 조회
             const { data: c1, error: e1 } = await sb
                 .from('cancellations')
                 .select('*')
                 .eq('complex_id', cid)
                 .eq('status', 'approved')
                 .eq('termination_month', monthKey)
-                .order('created_at', { ascending: true });
+                .order('termination_date', { ascending: true });
 
             if (!e1) {
                 cancels = c1 || [];
             } else {
-                // termination_month 컬럼 없는 경우 created_at 기준 fallback
+                // 2차 fallback: processed_at(승인 처리일) 기준
                 const { data: c2, error: e2 } = await sb
                     .from('cancellations')
                     .select('*')
                     .eq('complex_id', cid)
                     .eq('status', 'approved')
-                    .gte('created_at', monthStart + 'T00:00:00')
-                    .lte('created_at', monthEnd   + 'T23:59:59')
+                    .gte('processed_at', monthStart + 'T00:00:00')
+                    .lte('processed_at', monthEnd   + 'T23:59:59')
                     .order('created_at', { ascending: true });
-                if (e2) throw e2;
-                cancels = c2 || [];
+
+                if (!e2) {
+                    cancels = c2 || [];
+                } else {
+                    // 3차 fallback: created_at 기준
+                    const { data: c3, error: e3 } = await sb
+                        .from('cancellations')
+                        .select('*')
+                        .eq('complex_id', cid)
+                        .eq('status', 'approved')
+                        .gte('created_at', monthStart + 'T00:00:00')
+                        .lte('created_at', monthEnd   + 'T23:59:59')
+                        .order('created_at', { ascending: true });
+                    if (e3) throw e3;
+                    cancels = c3 || [];
+                }
             }
         }
 
         // ────────────────────────────────────────────────
-        // C. 분류
-        //    중도해지: termination_date가 해당월 1일 이후 ~ 말일 미만 (월 중간 해지)
-        //    차월해지: 나머지 (말일 해지 or 날짜 미상)
+        // C. 중도해지 / 차월해지 분류
+        //
+        //  중도해지: termination_date가 있고, monthStart <= date < monthEnd
+        //           (월 중간에 해지 → 당월 후청구 방식)
+        //  차월해지: termination_date = monthEnd 이거나 날짜 미상
+        //           (말일 해지 또는 미상 → 다음달부터 미부과)
         // ────────────────────────────────────────────────
         const midCancel = [];
         const endCancel = [];
 
         (cancels || []).forEach(c => {
             const tDate = c.termination_date ? c.termination_date.slice(0, 10) : null;
-            // 말일 해지 = 차월해지, 그 외(중간 or 날짜미상) = 중도해지
-            const isEndDay = tDate === monthEnd;
+
+            // 말일 해지이거나 날짜 미상 → 차월해지
+            const isEndDay = !tDate || tDate >= monthEnd;
 
             const row = {
                 dong:             c.dong,
@@ -838,45 +862,58 @@ router.get('/settlement-report', async (req, res) => {
                 phone:            c.phone,
                 program_name:     c.program_name,
                 termination_date: tDate,
-                refund_amount:    c.refund_amount || null,
-                billing_amount:   c.billing_amount || null,
                 note:             ''
             };
 
             if (isEndDay) {
-                endCancel.push({ ...row, note: '말일해지-차월미부과' });
+                endCancel.push({ ...row, note: tDate ? `${tDate} 해지` : '해지(날짜미상)' });
             } else {
-                midCancel.push({ ...row, note: tDate ? `${tDate} 중도해지` : '중도해지(날짜미상)' });
+                // 월 중간 해지 → 중도해지
+                midCancel.push({ ...row, note: `${tDate} 중도해지` });
             }
         });
 
         // ────────────────────────────────────────────────
-        // D. 시트1: 동호수별 부과 금액 집계
-        //    현재 수강자 기준 (기존 + 차월신규 모두 포함)
-        //    단, 중도해지자는 금액이 다를 수 있으므로 별도 표시
-        //    동(숫자) → 오름차순, 호(숫자) → 오름차순
+        // D. 동호수 파싱 헬퍼 (숫자 기준 정렬용)
         // ────────────────────────────────────────────────
-        // 동호수 파싱 헬퍼 (숫자만 추출)
         const parseDong = d => parseInt((d || '').replace(/[^0-9]/g, '')) || 0;
         const parseHo   = h => parseInt((h || '').replace(/[^0-9]/g, '')) || 0;
 
-        // 중도해지자 동호수 Set
+        // ────────────────────────────────────────────────
+        // E. 시트1: 동호수별 부과 금액 집계
+        //    현재 수강자 전체 기준 (기존 + 차월신규 포함)
+        //    중도해지자는 별도 표시 (금액은 후청구 방식이므로 참고용)
+        //    정렬: 동(숫자) 오름차순 → 호(숫자) 오름차순
+        // ────────────────────────────────────────────────
         const midCancelKey = new Set(midCancel.map(r => `${r.dong}_${r.ho}_${r.name}`));
 
-        // 동호수별 합계: Map { "동_호" → { dong, ho, items:[], total:0 } }
         const donghoMap = new Map();
         approvedList.forEach(a => {
             const key = `${a.dong}_${a.ho}`;
-            if (!donghoMap.has(key)) donghoMap.set(key, { dong: a.dong, ho: a.ho, items: [] });
-            const isMid = midCancelKey.has(`${a.dong}_${a.ho}_${a.name}`);
-            const fee = getFee(a);
-            donghoMap.get(key).items.push({
+            if (!donghoMap.has(key)) {
+                donghoMap.set(key, {
+                    dong:  a.dong,
+                    ho:    a.ho,
+                    phone: a.phone || '',   // 세대 전화번호 (첫 번째 수강자 기준)
+                    items: []
+                });
+            }
+            const entry = donghoMap.get(key);
+            // 전화번호 보완 (첫 번째로 발견된 번호 사용)
+            if (!entry.phone && a.phone) entry.phone = a.phone;
+
+            const isMid     = midCancelKey.has(`${a.dong}_${a.ho}_${a.name}`);
+            const isNextNew = nextNewList.some(n => n.id === a.id);
+            const fee       = getFee(a);
+
+            entry.items.push({
                 name:           a.name,
+                phone:          a.phone,
                 program_name:   a.program_name,
                 preferred_time: a.preferred_time,
                 monthly_fee:    fee || null,
                 is_mid_cancel:  isMid,
-                is_next_new:    nextNewList.some(n => n.id === a.id),
+                is_next_new:    isNextNew,
             });
         });
 
@@ -887,29 +924,33 @@ router.get('/settlement-report', async (req, res) => {
             return parseHo(a.ho) - parseHo(b.ho);
         });
 
-        // 총 부과 금액 계산
+        // 총 부과 금액 계산 (중도해지자 제외 — 후청구이므로 정액 아님)
         let totalCharge = 0;
         donghoRows.forEach(row => {
-            row.total_fee = row.items.reduce((sum, it) => sum + (Number(it.monthly_fee) || 0), 0);
+            row.total_fee = row.items.reduce((sum, it) => {
+                // 중도해지자는 부과금액 합산에서 제외 (후청구 별도 처리)
+                if (it.is_mid_cancel) return sum;
+                return sum + (Number(it.monthly_fee) || 0);
+            }, 0);
             totalCharge += row.total_fee;
         });
 
         res.json({
-            success:   true,
+            success:  true,
             year: yr, month: mo,
             monthKey, nextKey,
             summary: {
-                approved_count:    approvedList.length,
-                existing_count:    existingList.length,
-                next_new_count:    nextNewList.length,
-                mid_cancel_count:  midCancel.length,
-                end_cancel_count:  endCancel.length,
-                total_charge:      totalCharge,
+                approved_count:   approvedList.length,
+                existing_count:   existingList.length,
+                next_new_count:   nextNewList.length,
+                mid_cancel_count: midCancel.length,
+                end_cancel_count: endCancel.length,
+                total_charge:     totalCharge,
             },
-            // 시트1용: 동호수별 부과내역
-            dongho_rows:  donghoRows,
+            // 시트1용: 동호수별 부과내역 (동↑ 호↑ 정렬)
+            dongho_rows: donghoRows,
             // 시트2용: 각 분류 상세
-            approved:     approvedList.map(a => ({
+            approved: approvedList.map(a => ({
                 dong:           a.dong,
                 ho:             a.ho,
                 name:           a.name,
@@ -919,9 +960,9 @@ router.get('/settlement-report', async (req, res) => {
                 monthly_fee:    getFee(a) || null,
                 approved_at:    (a.approved_at || a.created_at || '').slice(0, 10),
             })),
-            mid_cancel:   midCancel,
-            end_cancel:   endCancel,
-            next_new:     nextNewList.map(a => ({
+            mid_cancel: midCancel,
+            end_cancel: endCancel,
+            next_new:   nextNewList.map(a => ({
                 dong:           a.dong,
                 ho:             a.ho,
                 name:           a.name,
