@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.17 시간표PDF프로그램명중복제거 */
+/** 신청 관리 페이지 - v3.18 시간표PDF가로배열+동적셀높이 */
 const applications = {
     data: [],
     filtered: [],
@@ -2610,10 +2610,14 @@ ${(() => {
             '<th style="padding:5px 2px;text-align:center;font-size:9pt;font-weight:700;color:' + DOW_COLORS_HD[i] + ';background:' + DOW_BG_HD[i] + ';border:1px solid #ddd;width:14.28%">' + n + '</th>'
         ).join('');
 
+        // 달력 행 수 계산 → 셀 높이 동적 산출 (landscape A4 유효높이 ~170mm, 헤더 ~22mm 제외)
+        const totalRows = Math.ceil((firstDay + lastDate) / 7);
+        const cellH = Math.floor((170 - 22) / totalRows) + 'mm';
+
         // 달력 셀
         let cellIdx = 0, calRows = '', row = '<tr>';
         for (let i = 0; i < firstDay; i++) {
-            row += '<td style="border:1px solid #eee;height:16mm;background:#fafafa"></td>';
+            row += '<td style="border:1px solid #eee;height:' + cellH + ';background:#fafafa"></td>';
             cellIdx++;
         }
         for (let d = 1; d <= lastDate; d++) {
@@ -2631,12 +2635,12 @@ ${(() => {
 
             // 강좌 블록 (선택 날짜에만, 프로그램명만 표시)
             const classHtml = (isSel && classes.length) ? classes.map(g =>
-                '<div style="margin:1px 1px;padding:1px 3px;background:#e8f4fd;border-left:2.5px solid #3498db;border-radius:2px;font-size:6pt;line-height:1.3;font-weight:700;color:#1a5276;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' +
+                '<div style="margin:1px 1px;padding:1px 3px;background:#e8f4fd;border-left:2.5px solid #3498db;border-radius:2px;font-size:6.5pt;line-height:1.35;font-weight:700;color:#1a5276;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' +
                 g.program + '</div>'
             ).join('') : '';
 
             row +=
-                '<td style="border:1px solid #ddd;height:16mm;vertical-align:top;padding:2px;background:' + cellBg + '">' +
+                '<td style="border:1px solid #ddd;height:' + cellH + ';vertical-align:top;padding:2px;background:' + cellBg + '">' +
                 '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 1px">' +
                 '<span style="font-size:9pt;font-weight:700;color:' + numColor + '">' + d + '</span>' +
                 (holName ? '<span style="font-size:5.5pt;color:#e74c3c;font-weight:600;white-space:nowrap">' + holName + '</span>' : '') +
@@ -2646,7 +2650,7 @@ ${(() => {
             if (cellIdx % 7 === 0) { row += '</tr>'; calRows += row; row = '<tr>'; }
         }
         if (cellIdx % 7 !== 0) {
-            while (cellIdx % 7 !== 0) { row += '<td style="border:1px solid #eee;height:16mm;background:#fafafa"></td>'; cellIdx++; }
+            while (cellIdx % 7 !== 0) { row += '<td style="border:1px solid #eee;height:' + cellH + ';background:#fafafa"></td>'; cellIdx++; }
             row += '</tr>'; calRows += row;
         }
 
@@ -2661,13 +2665,13 @@ ${(() => {
             '<thead><tr>' + dowHeaders + '</tr></thead>' +
             '<tbody>' + calRows + '</tbody></table>';
 
-        const win = window.open('','_blank','width=820,height=1060');
+        const win = window.open('','_blank','width=1130,height=820');
         if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
         win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
             '<title>' + complexName + ' 시간표 ' + monthLabel + '</title>' +
             '<style>*{box-sizing:border-box}' +
-            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:8mm 10mm;color:#111}' +
-            '@media print{body{margin:0}@page{size:A4 portrait;margin:8mm 10mm}.no-print{display:none!important}}' +
+            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:8mm 12mm;color:#111}' +
+            '@media print{body{margin:0}@page{size:A4 landscape;margin:8mm 12mm}.no-print{display:none!important}}' +
             'table{border-collapse:collapse}' +
             '</style></head><body>' +
             '<div class="no-print" style="text-align:right;margin-bottom:8px">' +
