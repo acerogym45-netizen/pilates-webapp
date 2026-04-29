@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.16 시간표PDF한장출력+시간표시제거+범례삭제 */
+/** 신청 관리 페이지 - v3.17 시간표PDF프로그램명중복제거 */
 const applications = {
     data: [],
     filtered: [],
@@ -2572,16 +2572,16 @@ ${(() => {
         let selDates = (applications._ttCustomDates || []).slice().sort();
         if (!selDates.length) { showToast('날짜를 선택해주세요','error'); return; }
 
-        // 강좌별 그룹화 (시간 오름차순 정렬)
+        // 강좌별 그룹화 - 프로그램명 기준 중복 제거 (시간표에서는 시간 미표시)
         const groups = {};
         apps.forEach(a => {
-            const k = (a.program_name||'') + '__' + (a.preferred_time||'');
-            if (!groups[k]) groups[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정' };
+            const k = (a.program_name||'').trim();
+            if (!groups[k]) groups[k] = { program: k||'미지정' };
         });
         const sortedGroups = Object.values(groups).sort((a,b) => {
             const pa = (() => { const d = applications._parseProgramDows(a.program); return d.length ? Math.min(...d.map(x=>x===0?98:x)) : 99; })();
             const pb = (() => { const d = applications._parseProgramDows(b.program); return d.length ? Math.min(...d.map(x=>x===0?98:x)) : 99; })();
-            return pa !== pb ? pa - pb : (a.time||'').localeCompare(b.time||'');
+            return pa !== pb ? pa - pb : a.program.localeCompare(b.program);
         });
 
         const monthLabel = yr + '년 ' + mo + '월';
