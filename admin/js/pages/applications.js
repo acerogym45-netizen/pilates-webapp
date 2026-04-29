@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.13 시간표달력월변경자동재선택+일요일파싱+공휴일PDF */
+/** 신청 관리 페이지 - v3.14 시간표PDF헤더중앙정렬 */
 const applications = {
     data: [],
     filtered: [],
@@ -2661,10 +2661,10 @@ ${(() => {
         }).join('');
 
         const content =
-            '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #3498db;padding-bottom:5px;margin-bottom:8px">' +
-            '<div><div style="font-size:15pt;font-weight:bold;color:#1a252f">' + complexName + '</div>' +
-            '<div style="font-size:10.5pt;color:#3498db;font-weight:600;margin-top:1px">' + monthLabel + ' 강좌 시간표</div></div>' +
-            '<div style="text-align:right;font-size:7pt;color:#aaa">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</div></div>' +
+            '<div style="text-align:center;border-bottom:2.5px solid #3498db;padding-bottom:6px;margin-bottom:8px;position:relative">' +
+            '<div style="font-size:15pt;font-weight:bold;color:#1a252f">' + complexName + '</div>' +
+            '<div style="font-size:10.5pt;color:#3498db;font-weight:600;margin-top:1px">' + monthLabel + ' 강좌 시간표</div>' +
+            '<div style="position:absolute;right:0;bottom:6px;font-size:7pt;color:#aaa">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</div></div>' +
             '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
             '<thead><tr>' + dowHeaders + '</tr></thead>' +
             '<tbody>' + calRows + '</tbody></table>' +
