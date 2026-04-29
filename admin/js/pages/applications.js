@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.18 시간표PDF가로배열+동적셀높이 */
+/** 신청 관리 페이지 - v3.19 출석부+시간표PDF직접다운로드 */
 const applications = {
     data: [],
     filtered: [],
@@ -2271,18 +2271,33 @@ ${(() => {
         const attTitle = complexName + ' 출석부';
         win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
             '<title>' + attTitle + ' ' + monthLabel + '</title>' +
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>' +
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>' +
             '<style>*{box-sizing:border-box}' +
             'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:6mm 8mm;color:#111}' +
-            '@media print{body{margin:0}@page{size:A4 landscape;margin:8mm 10mm}.no-print{display:none!important}}' +
-            'table{border-collapse:collapse}</style></head><body>' +
-            '<div class="no-print" style="text-align:right;margin-bottom:8px">' +
-            '<button onclick="window.print()" style="padding:7px 18px;background:#1abc9c;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">🖨️ 인쇄 / PDF 저장</button>' +
+            'table{border-collapse:collapse}</style>' +
+            '<script>function downloadPDF(){' +
+            'var btn=document.getElementById(\'dlBtn\');btn.disabled=true;btn.textContent=\'생성 중...\';' +
+            'var el=document.getElementById(\'printArea\');' +
+            'html2canvas(el,{scale:2,useCORS:true,logging:false}).then(function(canvas){' +
+            'var pdf=new window.jspdf.jsPDF({orientation:\'landscape\',unit:\'mm\',format:\'a4\'});' +
+            'var pw=pdf.internal.pageSize.getWidth();var ph=pdf.internal.pageSize.getHeight();' +
+            'var iw=canvas.width;var ih=canvas.height;' +
+            'var ratio=Math.min(pw/iw,ph/ih);' +
+            'var cx=(pw-iw*ratio)/2;var cy=(ph-ih*ratio)/2;' +
+            'pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.95),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
+            'pdf.save(\'출석부_' + monthLabel + '.pdf\');' +
+            'btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';});}<\/script>' +
+            '</head><body>' +
+            '<div style="text-align:right;margin-bottom:8px">' +
+            '<button id="dlBtn" onclick="downloadPDF()" style="padding:7px 18px;background:#1abc9c;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">📥 PDF 다운로드</button>' +
             '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
+            '<div id="printArea">' +
             // 상단 공통 헤더 (인쇄 시 포함)
             '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:5px;border-bottom:2.5px solid #1abc9c;padding-bottom:3px">' +
             '<div style="font-size:14pt;font-weight:bold;color:#111">' + attTitle + '</div>' +
             '<div style="font-size:7.5pt;color:#888">출력일: ' + new Date().toLocaleDateString('ko-KR') + ' &nbsp;|&nbsp; ' + monthLabel + '</div></div>' +
-            printContent + '</body></html>');
+            printContent + '</div></body></html>');
         win.document.close();
         win.focus();
     },
@@ -2669,15 +2684,29 @@ ${(() => {
         if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
         win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
             '<title>' + complexName + ' 시간표 ' + monthLabel + '</title>' +
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>' +
+            '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>' +
             '<style>*{box-sizing:border-box}' +
             'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:8mm 12mm;color:#111}' +
-            '@media print{body{margin:0}@page{size:A4 landscape;margin:8mm 12mm}.no-print{display:none!important}}' +
             'table{border-collapse:collapse}' +
-            '</style></head><body>' +
-            '<div class="no-print" style="text-align:right;margin-bottom:8px">' +
-            '<button onclick="window.print()" style="padding:7px 18px;background:#3498db;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">🖨️ 인쇄 / PDF 저장</button>' +
+            '</style>' +
+            '<script>function downloadPDF(){' +
+            'var btn=document.getElementById(\'dlBtn\');btn.disabled=true;btn.textContent=\'생성 중...\';' +
+            'var el=document.getElementById(\'printArea\');' +
+            'html2canvas(el,{scale:2,useCORS:true,logging:false}).then(function(canvas){' +
+            'var pdf=new window.jspdf.jsPDF({orientation:\'landscape\',unit:\'mm\',format:\'a4\'});' +
+            'var pw=pdf.internal.pageSize.getWidth();var ph=pdf.internal.pageSize.getHeight();' +
+            'var iw=canvas.width;var ih=canvas.height;' +
+            'var ratio=Math.min(pw/iw,ph/ih);' +
+            'var cx=(pw-iw*ratio)/2;var cy=(ph-ih*ratio)/2;' +
+            'pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.95),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
+            'pdf.save(\'시간표_' + monthLabel + '.pdf\');' +
+            'btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';});}<\/script>' +
+            '</head><body>' +
+            '<div style="text-align:right;margin-bottom:8px">' +
+            '<button id="dlBtn" onclick="downloadPDF()" style="padding:7px 18px;background:#3498db;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">📥 PDF 다운로드</button>' +
             '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
-            content + '</body></html>');
+            '<div id="printArea">' + content + '</div></body></html>');
         win.document.close();
         win.focus();
     },
