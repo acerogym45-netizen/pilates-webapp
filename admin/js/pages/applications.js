@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.8 출석부PDF그룹별날짜수정+시간표달력PDF */
+/** 신청 관리 페이지 - v3.9 출석부PDF서명제거+여백축소+시간표버튼수정 */
 const applications = {
     data: [],
     filtered: [],
@@ -2212,48 +2212,57 @@ ${(() => {
                 ? groupRaw.map(k => applications._dateLabel(k))
                 : ['1회','2회','3회','4회'];
             // A4 landscape ~247mm 유효. 고정열: No(10)+동호(24)+이름(18)+연락처(18)+서명(16)=86mm → 나머지 161mm를 날짜열로
-            const dateMm = Math.max(9, Math.floor(161 / dateCols.length));
+            // A4 landscape: 고정열 No(8)+동호(22)+이름(16)+연락처(16)=62mm → 나머지 185mm를 날짜열로 (서명 제거)
+            const dateMm = Math.max(9, Math.floor(185 / dateCols.length));
             const thDates = dateCols.map(d =>
-                '<th style="padding:5px 1px;text-align:center;border:1px solid #bbb;font-size:7.5pt;width:' + dateMm + 'mm;white-space:nowrap">' + d + '</th>'
+                '<th style="padding:3px 1px;text-align:center;border:1px solid #bbb;font-size:7pt;width:' + dateMm + 'mm;white-space:nowrap">' + d + '</th>'
             ).join('');
             const rows = g.members.map((m, i) =>
-                '<tr style="' + (i%2?'background:#f5f5f5':'') + '">' +
-                '<td style="padding:4px 2px;border:1px solid #ccc;text-align:center;font-size:8pt;color:#999">' + (i+1) + '</td>' +
-                '<td style="padding:4px 4px;border:1px solid #ccc;text-align:center;font-size:8.5pt;white-space:nowrap">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
-                '<td style="padding:4px 4px;border:1px solid #ccc;text-align:center;font-size:10pt;font-weight:bold">' + (m.name||'') + '</td>' +
-                '<td style="padding:4px 4px;border:1px solid #ccc;text-align:center;font-size:8pt;color:#555">' + applications._fmtPhoneLast4(m.phone) + '</td>' +
-                dateCols.map(() => '<td style="border:1px solid #ccc;height:26px;width:' + dateMm + 'mm"></td>').join('') +
-                '<td style="border:1px solid #ccc;width:16mm"></td></tr>'
+                '<tr style="' + (i%2?'background:#f0fdf8':'') + '">' +
+                '<td style="padding:3px 2px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#999">' + (i+1) + '</td>' +
+                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:8pt;white-space:nowrap">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
+                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:9.5pt;font-weight:bold">' + (m.name||'') + '</td>' +
+                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#555">' + applications._fmtPhoneLast4(m.phone) + '</td>' +
+                dateCols.map(() => '<td style="border:1px solid #ccc;height:22px;width:' + dateMm + 'mm"></td>').join('') +
+                '</tr>'
             ).join('');
+            // 그룹 구분: 첫 번째는 여백 없음, 이후는 위쪽 구분선+여백
             printContent +=
-                '<div style="' + (gi>0?'page-break-before:always;padding-top:6mm':'') + '">' +
-                '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:5px;border-bottom:2px solid #1abc9c;padding-bottom:4px">' +
-                '<div><div style="font-size:15pt;font-weight:bold;color:#111">' + complexName + ' 출석부</div>' +
-                '<div style="font-size:9.5pt;color:#444;margin-top:2px">' + g.program + ' · ' + g.time + ' · ' + monthLabel + '</div></div>' +
-                '<div style="font-size:8.5pt;color:#666;text-align:right">총 <strong>' + g.members.length + '</strong>명 | 인당 <strong>' + dateCols.length + '</strong>회<br>' +
-                '<span style="font-size:7.5pt">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</span></div></div>' +
+                '<div style="' + (gi>0?'margin-top:8mm;border-top:2px solid #1abc9c;padding-top:4mm':'') + '">' +
+                '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:3px;border-bottom:1.5px solid #1abc9c;padding-bottom:3px">' +
+                '<div>' +
+                '<span style="font-size:11pt;font-weight:bold;color:#1e8449">' + g.program + '</span>' +
+                '<span style="font-size:9.5pt;color:#555;margin-left:8px">' + g.time + '</span>' +
+                '<span style="font-size:8pt;color:#888;margin-left:6px">· ' + monthLabel + '</span></div>' +
+                '<div style="font-size:8pt;color:#666;text-align:right">총 <strong>' + g.members.length + '</strong>명 | 인당 <strong>' + dateCols.length + '</strong>회</div></div>' +
                 '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
                 '<thead><tr style="background:#1abc9c;color:#fff">' +
-                '<th style="padding:5px 2px;text-align:center;border:1px solid #bbb;width:10mm;font-size:8pt">No.</th>' +
-                '<th style="padding:5px 3px;text-align:center;border:1px solid #bbb;width:24mm;font-size:8.5pt">동/호수</th>' +
-                '<th style="padding:5px 3px;text-align:center;border:1px solid #bbb;width:18mm;font-size:9pt">이름</th>' +
-                '<th style="padding:5px 3px;text-align:center;border:1px solid #bbb;width:18mm;font-size:8.5pt">연락처</th>' +
+                '<th style="padding:4px 2px;text-align:center;border:1px solid #bbb;width:8mm;font-size:7.5pt">No.</th>' +
+                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:22mm;font-size:8pt">동/호수</th>' +
+                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:8.5pt">이름</th>' +
+                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:7.5pt">연락처</th>' +
                 thDates +
-                '<th style="padding:5px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:8.5pt">서명</th></tr></thead>' +
+                '</tr></thead>' +
                 '<tbody>' + rows + '</tbody></table></div>';
         });  // ← forEach 종료 (버그수정: win.open을 루프 밖으로)
 
         const win = window.open('','_blank','width=1150,height=780');
         if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
+        // 출석부 제목 (단지명 + 출석부)
+        const attTitle = complexName + ' 출석부';
         win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
-            '<title>' + complexName + ' 출석부 ' + monthLabel + '</title>' +
+            '<title>' + attTitle + ' ' + monthLabel + '</title>' +
             '<style>*{box-sizing:border-box}' +
-            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:8mm 10mm;color:#111}' +
-            '@media print{body{margin:0}@page{size:A4 landscape;margin:10mm 12mm}.no-print{display:none!important}}' +
+            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:6mm 8mm;color:#111}' +
+            '@media print{body{margin:0}@page{size:A4 landscape;margin:8mm 10mm}.no-print{display:none!important}}' +
             'table{border-collapse:collapse}</style></head><body>' +
-            '<div class="no-print" style="text-align:right;margin-bottom:10px">' +
-            '<button onclick="window.print()" style="padding:8px 20px;background:#1abc9c;color:#fff;border:none;border-radius:6px;font-size:11pt;cursor:pointer;margin-right:8px">🖨️ 인쇄 / PDF 저장</button>' +
-            '<button onclick="window.close()" style="padding:8px 14px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:11pt;cursor:pointer">닫기</button></div>' +
+            '<div class="no-print" style="text-align:right;margin-bottom:8px">' +
+            '<button onclick="window.print()" style="padding:7px 18px;background:#1abc9c;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">🖨️ 인쇄 / PDF 저장</button>' +
+            '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
+            // 상단 공통 헤더 (인쇄 시 포함)
+            '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:5px;border-bottom:2.5px solid #1abc9c;padding-bottom:3px">' +
+            '<div style="font-size:14pt;font-weight:bold;color:#111">' + attTitle + '</div>' +
+            '<div style="font-size:7.5pt;color:#888">출력일: ' + new Date().toLocaleDateString('ko-KR') + ' &nbsp;|&nbsp; ' + monthLabel + '</div></div>' +
             printContent + '</body></html>');
         win.document.close();
         win.focus();
@@ -2263,15 +2272,19 @@ ${(() => {
     // 시간표 달력 PDF
     // ══════════════════════════════════════════════════════════════════
     async showTimetableModal() {
-        const complexId = Admin.selectedComplexId || Admin.complex?.id;
+        const complexId = getEffectiveComplexId();
         if (!complexId) { showToast('단지를 먼저 선택해주세요','error'); return; }
 
-        showGlobalModal('시간표 PDF 출력', '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>', '');
+        openGlobalModal(
+            '<i class="fas fa-calendar-alt" style="color:#3498db"></i> 시간표 PDF 출력',
+            '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x" style="color:#3498db"></i><p style="margin-top:12px;color:#666">강좌 목록을 불러오는 중...</p></div>',
+            ''
+        );
 
         let apps = [];
         try {
             const res = await API.applications.list({ complexId, status: 'approved', limit: 500 });
-            apps = res.applications || res || [];
+            apps = res.data || res.applications || res || [];
         } catch(e) { showToast('데이터 로드 실패','error'); return; }
 
         if (!apps.length) {
@@ -2279,7 +2292,8 @@ ${(() => {
             return;
         }
 
-        const complexName = (Admin.role === 'superadmin' ? (Admin.complex?.name||'') : (Admin.complex?.name||''));
+        const complexName = Admin.role === 'master'
+            ? (Admin.selectedComplexName || '단지') : (Admin.complex?.name || '단지');
         const now = new Date();
         const defaultMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
 
