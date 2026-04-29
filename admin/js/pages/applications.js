@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.0 단지별 데이터 완전 분리 (complex_id 필수 필터) */
+/** 신청 관리 페이지 - v3.1 수정 모달 프로그램·시간대 드롭다운 */
 const applications = {
     data: [],
     filtered: [],
@@ -1086,20 +1086,77 @@ ${(() => {
     // ══════════════════════════════════════════════════
     //  수정 폼
     // ══════════════════════════════════════════════════
-    editForm(id) {
+    async editForm(id) {
         const a = this.data.find(x => x.id === id);
         if (!a) return;
 
+        // 활성 프로그램 목록 로드 (단지 필터)
+        let progList = [];
+        try {
+            const complexId = getEffectiveComplexId();
+            const res = await API.programs.list({ complexId, activeOnly: true, limit: 100 });
+            progList = (res.data || []).filter(p => p.is_active !== false);
+        } catch (e) { /* 실패해도 수동 입력 폴백 */ }
+
+        // 현재 프로그램의 time_slots 찾기
+        const curProg = progList.find(p => p.name === a.program_name);
+        const curSlots = curProg ? (curProg.time_slots || []) : [];
+
+        // 프로그램 드롭다운 옵션 생성
+        const progOptions = progList.length
+            ? `<option value="">-- 직접 입력 --</option>` +
+              progList.map(p =>
+                `<option value="${escHtml(p.name)}"
+                    data-times="${escHtml(JSON.stringify(p.time_slots || []))}"
+                    ${p.name === a.program_name ? 'selected' : ''}>${escHtml(p.name)}</option>`
+              ).join('')
+            : null;  // null이면 text input 폴백
+
+        // 시간대 드롭다운 옵션 생성
+        const buildTimeOptions = (slots, current) => {
+            const hasMatch = slots.includes(current);
+            let opts = `<option value="">-- 직접 입력 --</option>`;
+            opts += slots.map(s =>
+                `<option value="${escHtml(s)}" ${s === current ? 'selected' : ''}>${escHtml(s)}</option>`
+            ).join('');
+            // 현재값이 목록에 없으면 기타 항목 추가
+            if (current && !hasMatch) {
+                opts += `<option value="${escHtml(current)}" selected>${escHtml(current)} (현재값)</option>`;
+            }
+            return opts;
+        };
+
+        // 프로그램 선택 시 시간대 드롭다운 갱신 함수 (모달 내 inline)
+        const programFieldHtml = progOptions
+            ? `<select id="editProgram" onchange="applications._onEditProgramChange(this)"
+                  style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:.9rem">
+                  ${progOptions}
+               </select>`
+            : `<input type="text" id="editProgram" value="${escHtml(a.program_name)}">`;
+
+        const timeFieldHtml = curSlots.length
+            ? `<select id="editTime"
+                  style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:.9rem">
+                  ${buildTimeOptions(curSlots, a.preferred_time || '')}
+               </select>`
+            : `<input type="text" id="editTime" value="${escHtml(a.preferred_time || '')}" placeholder="예: 20:00">`;
+
+        // 프로그램별 time_slots 맵 (JS에 인라인으로 주입)
+        const slotsMapJson = JSON.stringify(
+            Object.fromEntries(progList.map(p => [p.name, p.time_slots || []]))
+        );
+
         const bodyHtml = `
+            <script>applications._editSlotsMap = ${slotsMapJson};</script>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                 <div class="form-group"><label>동</label><input type="text" id="editDong" value="${escHtml(a.dong)}"></div>
                 <div class="form-group"><label>호수</label><input type="text" id="editHo" value="${escHtml(a.ho)}"></div>
                 <div class="form-group"><label>이름</label><input type="text" id="editName" value="${escHtml(a.name)}"></div>
                 <div class="form-group"><label>전화번호</label><input type="tel" id="editPhone" value="${escHtml(a.phone)}"></div>
             </div>
-            <div class="form-group"><label>프로그램명</label><input type="text" id="editProgram" value="${escHtml(a.program_name)}"></div>
+            <div class="form-group"><label>프로그램명</label>${programFieldHtml}</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div class="form-group"><label>희망 시간</label><input type="text" id="editTime" value="${escHtml(a.preferred_time || '')}"></div>
+                <div class="form-group"><label>희망 시간</label>${timeFieldHtml}</div>
                 <div class="form-group">
                     <label>상태</label>
                     <select id="editStatus">
@@ -1132,6 +1189,39 @@ ${(() => {
             </button>`;
 
         openGlobalModal('<i class="fas fa-edit"></i> 신청 수정', bodyHtml, footerHtml);
+    },
+
+    // 프로그램 드롭다운 변경 시 시간대 드롭다운 갱신
+    _onEditProgramChange(sel) {
+        const progName = sel.value;
+        const slots = (this._editSlotsMap || {})[progName] || [];
+        const timeEl = document.getElementById('editTime');
+        if (!timeEl) return;
+
+        if (slots.length) {
+            // select로 교체
+            if (timeEl.tagName === 'INPUT') {
+                const newSel = document.createElement('select');
+                newSel.id = 'editTime';
+                newSel.style.cssText = 'width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:.9rem';
+                timeEl.parentNode.replaceChild(newSel, timeEl);
+            }
+            const tSel = document.getElementById('editTime');
+            tSel.innerHTML = `<option value="">-- 시간대 선택 --</option>` +
+                slots.map(s => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join('');
+        } else {
+            // 시간대 없는 프로그램 → input으로 교체
+            if (timeEl.tagName === 'SELECT') {
+                const inp = document.createElement('input');
+                inp.type = 'text'; inp.id = 'editTime';
+                inp.placeholder = '시간대 없음 또는 직접 입력';
+                inp.style.cssText = 'width:100%;padding:8px;border:1px solid #ddd;border-radius:6px;font-size:.9rem';
+                timeEl.parentNode.replaceChild(inp, timeEl);
+            } else {
+                timeEl.value = '';
+                timeEl.placeholder = '시간대 없음 또는 직접 입력';
+            }
+        }
     },
 
     async saveEdit(id) {
