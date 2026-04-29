@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.14 시간표PDF헤더중앙정렬 */
+/** 신청 관리 페이지 - v3.15 문의조회동호접미사정규화+출석부미리보기서명제거 */
 const applications = {
     data: [],
     filtered: [],
@@ -2136,7 +2136,7 @@ ${(() => {
                 '<th style="padding:6px 8px;border:1px solid #d5f5e3;text-align:center;min-width:54px">이름</th>' +
                 '<th style="padding:6px 8px;border:1px solid #d5f5e3;text-align:center;min-width:64px">연락처</th>' +
                 thDates +
-                '<th style="padding:6px;border:1px solid #d5f5e3;text-align:center;min-width:44px">서명</th></tr></thead>' +
+                '</tr></thead>' +
                 '<tbody>' + rows + '</tbody></table></div></div>';
         });
         container.innerHTML = html;

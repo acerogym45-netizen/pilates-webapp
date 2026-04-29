@@ -176,11 +176,14 @@ router.get('/inquiries/my', async (req, res) => {
         }
 
         // 동·호수로 모든 문의 조회 (phone은 별도 필터링)
+        // '113동', '113' 등 접미사 유무 무관하게 숫자 부분만 추출하여 비교하기 위해
+        // DB에서 범위를 넓게 가져온 후 클라이언트 필터링 적용
+        const dongNum = dong.replace(/[^0-9]/g, '');   // '113동' → '113'
+        const hoNum   = ho.replace(/[^0-9]/g, '');     // '1303호' → '1303'
+
         let query = sb
             .from('inquiries')
             .select('id, dong, ho, name, phone, title, content, answer, is_public, is_hidden, created_at, answered_at')
-            .eq('dong', dong)
-            .eq('ho', ho)
             .order('created_at', { ascending: false });
 
         if (resolvedComplexId) query = query.eq('complex_id', resolvedComplexId);
@@ -188,11 +191,14 @@ router.get('/inquiries/my', async (req, res) => {
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /inquiries/my');
 
-        // 전화번호 끝 4자리로 필터링 (클라이언트 측)
+        // 전화번호 끝 4자리 + 동·호수 숫자 부분으로 필터링 (접미사 '동','호' 무관)
         const normalizedPhone4 = phoneLast4.replace(/\D/g, '');
-        const result = (data || []).filter(r =>
-            r.phone && r.phone.replace(/\D/g, '').slice(-4) === normalizedPhone4
-        );
+        const result = (data || []).filter(r => {
+            const rDong = (r.dong || '').replace(/[^0-9]/g, '');
+            const rHo   = (r.ho   || '').replace(/[^0-9]/g, '');
+            const phone4Match = r.phone && r.phone.replace(/\D/g, '').slice(-4) === normalizedPhone4;
+            return rDong === dongNum && rHo === hoNum && phone4Match;
+        });
 
         if (result.length === 0) {
             return res.status(404).json({
