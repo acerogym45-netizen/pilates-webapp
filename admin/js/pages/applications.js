@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.19 출석부+시간표PDF직접다운로드 */
+/** 신청 관리 페이지 - v3.20 출석부PDF그룹별페이지분리 */
 const applications = {
     data: [],
     filtered: [],
@@ -2245,9 +2245,9 @@ ${(() => {
                 dateCols.map(() => '<td style="border:1px solid #ccc;height:22px;width:' + dateMm + 'mm"></td>').join('') +
                 '</tr>'
             ).join('');
-            // 그룹 구분: 첫 번째는 여백 없음, 이후는 위쪽 구분선+여백
+            // 그룹 구분: 그룹별 page-block div (PDF 페이지 분리용)
             printContent +=
-                '<div style="' + (gi>0?'margin-top:8mm;border-top:2px solid #1abc9c;padding-top:4mm':'') + '">' +
+                '<div class=\"page-block\">' +
                 '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:3px;border-bottom:1.5px solid #1abc9c;padding-bottom:3px">' +
                 '<div>' +
                 '<span style="font-size:11pt;font-weight:bold;color:#1e8449">' + g.program + '</span>' +
@@ -2274,30 +2274,31 @@ ${(() => {
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>' +
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>' +
             '<style>*{box-sizing:border-box}' +
-            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:6mm 8mm;color:#111}' +
+            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:0;padding:0;color:#111}' +
+            '.page-block{padding:8mm 10mm;background:#fff}' +
             'table{border-collapse:collapse}</style>' +
-            '<script>function downloadPDF(){' +
+            '<script>async function downloadPDF(){' +
             'var btn=document.getElementById(\'dlBtn\');btn.disabled=true;btn.textContent=\'생성 중...\';' +
-            'var el=document.getElementById(\'printArea\');' +
-            'html2canvas(el,{scale:2,useCORS:true,logging:false}).then(function(canvas){' +
+            'var blocks=document.querySelectorAll(\'.page-block\');' +
             'var pdf=new window.jspdf.jsPDF({orientation:\'landscape\',unit:\'mm\',format:\'a4\'});' +
             'var pw=pdf.internal.pageSize.getWidth();var ph=pdf.internal.pageSize.getHeight();' +
+            'var margin=8;' +
+            'for(var i=0;i<blocks.length;i++){' +
+            'var canvas=await html2canvas(blocks[i],{scale:2,useCORS:true,logging:false,backgroundColor:\'#ffffff\'});' +
             'var iw=canvas.width;var ih=canvas.height;' +
-            'var ratio=Math.min(pw/iw,ph/ih);' +
-            'var cx=(pw-iw*ratio)/2;var cy=(ph-ih*ratio)/2;' +
+            'var aw=pw-margin*2;var ah=ph-margin*2;' +
+            'var ratio=Math.min(aw/iw,ah/ih);' +
+            'var cx=margin+(aw-iw*ratio)/2;var cy=margin+(ah-ih*ratio)/2;' +
+            'if(i>0)pdf.addPage(\'a4\',\'landscape\');' +
             'pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.95),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
+            '}' +
             'pdf.save(\'출석부_' + monthLabel + '.pdf\');' +
-            'btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';});}<\/script>' +
+            'btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';}<\/script>' +
             '</head><body>' +
-            '<div style="text-align:right;margin-bottom:8px">' +
+            '<div style="position:sticky;top:0;z-index:99;background:#fff;text-align:right;padding:6px 10mm;border-bottom:1px solid #eee">' +
             '<button id="dlBtn" onclick="downloadPDF()" style="padding:7px 18px;background:#1abc9c;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">📥 PDF 다운로드</button>' +
             '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
-            '<div id="printArea">' +
-            // 상단 공통 헤더 (인쇄 시 포함)
-            '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:5px;border-bottom:2.5px solid #1abc9c;padding-bottom:3px">' +
-            '<div style="font-size:14pt;font-weight:bold;color:#111">' + attTitle + '</div>' +
-            '<div style="font-size:7.5pt;color:#888">출력일: ' + new Date().toLocaleDateString('ko-KR') + ' &nbsp;|&nbsp; ' + monthLabel + '</div></div>' +
-            printContent + '</div></body></html>');
+            printContent + '</body></html>');
         win.document.close();
         win.focus();
     },
