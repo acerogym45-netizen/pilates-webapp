@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.10 시간표달력형PDF수정+선택값저장방식 */
+/** 신청 관리 페이지 - v3.13 시간표달력월변경자동재선택+일요일파싱+공휴일PDF */
 const applications = {
     data: [],
     filtered: [],
@@ -1724,6 +1724,7 @@ ${(() => {
         if (/목/.test(n)) return [4];
         if (/금/.test(n)) return [5];
         if (/토/.test(n)) return [6];
+        if (/일/.test(n)) return [0];
         return [];
     },
 
@@ -2287,8 +2288,185 @@ ${(() => {
     },
 
     // ══════════════════════════════════════════════════════════════════
-    // 시간표 달력 PDF
+    // 시간표 달력 PDF  (v3.12 전면 재설계)
     // ══════════════════════════════════════════════════════════════════
+
+    // ── 한국 공휴일 (연도별 고정 공휴일 + 주요 연도 음력 환산 포함)
+    _getKoreanHolidays(yr) {
+        const h = {};
+        const add = (m, d, name) => { h[yr + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0')] = name; };
+        // 고정 공휴일
+        add(1,1,'신정'); add(3,1,'삼일절'); add(5,5,'어린이날');
+        add(6,6,'현충일'); add(8,15,'광복절'); add(10,3,'개천절');
+        add(10,9,'한글날'); add(12,25,'성탄절');
+        // 연도별 음력 공휴일 (2024~2027)
+        const lunar = {
+            2024: { seol:[[2,9],[2,10],[2,12]], chuseok:[[9,16],[9,17],[9,18]], buddha:[5,15], memorial:[4,10] },
+            2025: { seol:[[1,28],[1,29],[1,30]], chuseok:[[10,5],[10,6],[10,7]], buddha:[5,5], memorial:[4,9] },
+            2026: { seol:[[2,16],[2,17],[2,19]], chuseok:[[9,24],[9,25],[9,26]], buddha:[5,24], memorial:[4,15] },
+            2027: { seol:[[2,6],[2,7],[2,8]],   chuseok:[[9,14],[9,15],[9,16]], buddha:[5,13], memorial:[4,11] },
+        };
+        if (lunar[yr]) {
+            lunar[yr].seol.forEach(([m,d]) => add(m,d,'설날'));
+            lunar[yr].chuseok.forEach(([m,d]) => add(m,d,'추석'));
+            add(...lunar[yr].buddha, '부처님오신날');
+        }
+        return h;
+    },
+
+    // ── 시간표 달력 렌더 (모달 내부용)
+    _renderTtCalendar() {
+        const sel = document.getElementById('ttCalMonth');
+        if (!sel) return;
+        const [yr, mo] = sel.value.split('-').map(Number);
+        const checked  = applications._ttCustomDates || [];
+        const holidays = applications._ttHolidays    || {};
+
+        // 요일별 강좌 목록 미리계산
+        const apps = applications._ttApps || [];
+        const programsByDow = {}; // dow -> [{program, time}]
+        const seen = new Set();
+        apps.forEach(a => {
+            const k = (a.program_name||'') + '__' + (a.preferred_time||'');
+            if (seen.has(k)) return; seen.add(k);
+            const dows = applications._parseProgramDows(a.program_name||'');
+            dows.forEach(dow => {
+                if (!programsByDow[dow]) programsByDow[dow] = [];
+                programsByDow[dow].push({ program: a.program_name||'', time: a.preferred_time||'' });
+            });
+        });
+
+        const firstDay = new Date(yr, mo-1, 1).getDay();
+        const lastDate = new Date(yr, mo, 0).getDate();
+        const DOW_NAMES  = ['일','월','화','수','목','금','토'];
+        const DOW_COLORS = ['#e74c3c','#444','#444','#444','#444','#444','#2980b9'];
+
+        // 헤더
+        const headerHtml = DOW_NAMES.map((n, i) =>
+            '<th style="padding:4px 0;text-align:center;font-size:.75rem;color:' + DOW_COLORS[i] + ';border-bottom:1px solid #ddd;width:14.28%">' + n + '</th>'
+        ).join('');
+
+        // 셀
+        let cellIdx = 0, rows = '', row = '<tr>';
+        for (let i = 0; i < firstDay; i++) { row += '<td></td>'; cellIdx++; }
+        for (let d = 1; d <= lastDate; d++) {
+            const dow     = new Date(yr, mo-1, d).getDay();
+            const key     = yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+            const isSel   = checked.includes(key);
+            const isHol   = !!holidays[key];
+            const isSun   = dow === 0;
+            const isSat   = dow === 6;
+            const isRed   = isHol || isSun;
+            const holName = holidays[key] || '';
+            const numCol  = isSel ? '#fff' : (isRed ? '#e74c3c' : (isSat ? '#2980b9' : '#333'));
+            const bgCol   = isSel ? '#3498db' : (isRed ? '#fff5f5' : '#fff');
+            const border  = isSel ? '2px solid #2980b9' : (isRed ? '1px solid #f5c6c6' : '1px solid #e8e8e8');
+
+            // 해당 요일에 개설되는 강좌 미리보기 (최대 3개)
+            const dowPrograms = programsByDow[dow] || [];
+            const progHtml = isSel ? dowPrograms.slice(0,3).map(g =>
+                '<div style="font-size:.55rem;color:' + (isSel?'rgba(255,255,255,0.9)':'#1a5276') + ';line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:left;padding:0 1px">' +
+                g.time + '</div>'
+            ).join('') : '';
+
+            row +=
+                '<td style="padding:1px;text-align:center;vertical-align:top">' +
+                '<label style="display:block;cursor:pointer;border-radius:4px;border:' + border + ';background:' + bgCol + ';padding:3px 2px;min-height:38px">' +
+                '<input type="checkbox" style="display:none" ' + (isSel?'checked':'') +
+                    ' onchange="applications._onTtCalCheck(this,\'' + key + '\')">' +
+                '<div style="font-size:.82rem;font-weight:700;color:' + numCol + ';line-height:1.2">' + d + '</div>' +
+                (holName ? '<div style="font-size:.58rem;color:' + (isSel?'rgba(255,255,255,0.9)':'#e74c3c') + ';line-height:1;overflow:hidden;white-space:nowrap">' + holName + '</div>' : '') +
+                (dowPrograms.length && !isSel ? '<div style="font-size:.58rem;color:#888;line-height:1.2;margin-top:1px">' + dowPrograms.length + '개강좌</div>' : '') +
+                progHtml +
+                '</label></td>';
+            cellIdx++;
+            if (cellIdx % 7 === 0) { row += '</tr>'; rows += row; row = '<tr>'; }
+        }
+        if (cellIdx % 7 !== 0) {
+            while (cellIdx % 7 !== 0) { row += '<td></td>'; cellIdx++; }
+            row += '</tr>'; rows += row;
+        }
+
+        const grid = document.getElementById('ttCalGrid');
+        if (grid) grid.innerHTML =
+            '<table style="width:100%;border-collapse:collapse"><thead><tr>' + headerHtml + '</tr></thead><tbody>' + rows + '</tbody></table>';
+
+        // 태그 업데이트
+        const tags = document.getElementById('ttCalTags');
+        if (tags) {
+            const sorted = [...checked].sort();
+            if (sorted.length) {
+                tags.innerHTML = sorted.map(k => {
+                    const [y,m,dd] = k.split('-').map(Number);
+                    const dow2 = new Date(y,m-1,dd).getDay();
+                    const isH  = !!holidays[k] || dow2===0;
+                    const isS  = dow2===6;
+                    const col  = isH?'#e74c3c':(isS?'#2980b9':'#2c3e50');
+                    const bg   = isH?'#fdecea':(isS?'#eaf3fb':'#f0f4f8');
+                    const lbl  = m+'/'+dd+'('+['일','월','화','수','목','금','토'][dow2]+')';
+                    return '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:'+bg+';border:1px solid '+col+';font-size:.75rem;color:'+col+'">' +
+                        lbl + '<button onclick="applications._removeTtDate(\''+k+'\')" style="border:none;background:none;cursor:pointer;font-size:.8rem;color:'+col+';padding:0;line-height:1">×</button></span>';
+                }).join('');
+            } else {
+                tags.innerHTML = '<span style="color:#bbb;font-size:.82rem">선택된 날짜 없음</span>';
+            }
+        }
+        const cnt = document.getElementById('ttDateCount');
+        if (cnt) cnt.textContent = checked.length ? '(' + checked.length + '일 선택됨)' : '';
+    },
+
+    _onTtCalCheck(cb, key) {
+        const arr = applications._ttCustomDates || [];
+        if (cb.checked) { if (!arr.includes(key)) arr.push(key); }
+        else { const i = arr.indexOf(key); if (i > -1) arr.splice(i,1); }
+        applications._ttCustomDates = arr.sort();
+        applications._renderTtCalendar();
+    },
+
+    _removeTtDate(key) {
+        applications._ttCustomDates = (applications._ttCustomDates || []).filter(k => k !== key);
+        applications._renderTtCalendar();
+    },
+
+    _selectTtByDow(yr, mo, dow) {
+        const last = new Date(yr, mo, 0).getDate();
+        const arr  = applications._ttCustomDates || [];
+        for (let d = 1; d <= last; d++) {
+            if (new Date(yr, mo-1, d).getDay() === dow) {
+                const k = yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+                if (!arr.includes(k)) arr.push(k);
+            }
+        }
+        applications._ttCustomDates = arr.sort();
+        applications._renderTtCalendar();
+    },
+
+    _onTtMonthChange() {
+        const sel = document.getElementById('ttCalMonth');
+        if (!sel) return;
+        applications._ttMonth = sel.value;
+        const [yr, mo] = sel.value.split('-').map(Number);
+        applications._ttHolidays = applications._getKoreanHolidays(yr);
+        // 새 월에 맞춰 프로그램 요일 기반 날짜 자동 재선택
+        const apps = applications._ttApps || [];
+        const groups = {};
+        apps.forEach(a => {
+            const k = (a.program_name||'') + '__' + (a.preferred_time||'');
+            if (!groups[k]) groups[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정' };
+        });
+        const lastDate = new Date(yr, mo, 0).getDate();
+        const autoSelected = new Set();
+        Object.values(groups).forEach(g => {
+            const dows = applications._parseProgramDows(g.program);
+            for (let d = 1; d <= lastDate; d++) {
+                if (dows.includes(new Date(yr, mo-1, d).getDay()))
+                    autoSelected.add(yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
+            }
+        });
+        applications._ttCustomDates = [...autoSelected].sort();
+        applications._renderTtCalendar();
+    },
+
     async showTimetableModal() {
         const complexId = getEffectiveComplexId();
         if (!complexId) { showToast('단지를 먼저 선택해주세요','error'); return; }
@@ -2314,46 +2492,65 @@ ${(() => {
             ? (Admin.selectedComplexName || '단지') : (Admin.complex?.name || '단지');
         const now = new Date();
         const defaultMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+        const [initYr] = defaultMonth.split('-').map(Number);
 
-        // 프로그램+시간 조합 목록
-        const combos = {};
+        applications._ttApps         = apps;
+        applications._ttComplexName  = complexName;
+        applications._ttMonth        = defaultMonth;
+        applications._ttCustomDates  = [];
+        applications._ttHolidays     = applications._getKoreanHolidays(initYr);
+
+        // 프로그램별 요일 자동 감지 → 해당 월 날짜 자동 선택
+        const groups = {};
         apps.forEach(a => {
             const k = (a.program_name||'') + '__' + (a.preferred_time||'');
-            if (!combos[k]) combos[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정', count: 0 };
-            combos[k].count++;
+            if (!groups[k]) groups[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정' };
         });
+        const [initYr2, initMo] = defaultMonth.split('-').map(Number);
+        const lastDate = new Date(initYr2, initMo, 0).getDate();
+        const autoSelected = new Set();
+        Object.values(groups).forEach(g => {
+            const dows = applications._parseProgramDows(g.program);
+            for (let d = 1; d <= lastDate; d++) {
+                if (dows.includes(new Date(initYr2, initMo-1, d).getDay()))
+                    autoSelected.add(initYr2 + '-' + String(initMo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
+            }
+        });
+        applications._ttCustomDates = [...autoSelected].sort();
 
-        applications._ttApps = apps;
-        applications._ttComplexName = complexName;
-
-        const comboRows = Object.values(combos).map(c =>
-            '<tr style="border-bottom:1px solid #f0f0f0">' +
-            '<td style="padding:6px 10px;font-size:.88rem">' + c.program + '</td>' +
-            '<td style="padding:6px 10px;font-size:.88rem;color:#555">' + c.time + '</td>' +
-            '<td style="padding:6px 10px;font-size:.88rem;text-align:center;color:#1abc9c;font-weight:600">' + c.count + '명</td></tr>'
-        ).join('');
-
-        // 스타일 선택값 초기화 (DOM 대신 변수에 저장)
-        applications._ttStyle = applications._ttStyle || 'calendar';
-        applications._ttMonth = defaultMonth;
+        // 강좌 목록 (모달 내 미리보기)
+        const DOW_KR = ['일','월','화','수','목','금','토'];
+        const comboRows = Object.values(groups).map(g => {
+            const dows = applications._parseProgramDows(g.program);
+            const dowStr = dows.length ? dows.map(d => DOW_KR[d]).join('·') : '?';
+            return '<tr style="border-bottom:1px solid #f0f0f0">' +
+                '<td style="padding:4px 8px;font-size:.82rem">' + g.program + '</td>' +
+                '<td style="padding:4px 8px;font-size:.82rem;color:#555">' + g.time + '</td>' +
+                '<td style="padding:4px 8px;font-size:.82rem;color:#3498db;text-align:center">' + dowStr + '</td></tr>';
+        }).join('');
 
         const body =
-            '<div style="padding:4px 0 8px">' +
-            '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">' +
-            '<label style="font-size:.88rem;color:#555">출력 월:</label>' +
-            '<input type="month" id="ttMonth" value="' + defaultMonth + '" onchange="applications._ttMonth=this.value" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">' +
-            '<label style="font-size:.88rem;color:#555;margin-left:10px">표시 스타일:</label>' +
-            '<select id="ttStyle" onchange="applications._ttStyle=this.value" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">' +
-            '<option value="calendar"' + (applications._ttStyle==='calendar'?' selected':'') + '>달력형</option>' +
-            '<option value="list"' + (applications._ttStyle==='list'?' selected':'') + '>목록형</option>' +
-            '</select></div>' +
-            '<div style="background:#f8f9fa;border-radius:8px;padding:10px 14px;margin-bottom:10px">' +
-            '<div style="font-size:.82rem;color:#888;margin-bottom:6px">개설 강좌 목록 (승인 회원 기준)</div>' +
+            // ── 월 선택 + 달력
+            '<div style="background:#f0f7ff;border:1px solid #bee3f8;border-radius:8px;padding:10px 14px;margin-bottom:10px">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
+            '<div style="font-size:.85rem;font-weight:700;color:#1a5276"><i class="fas fa-calendar-check"></i> 수업 날짜 선택 ' +
+            '<span id="ttDateCount" style="font-weight:400;color:#888;font-size:.8rem"></span></div>' +
+            '<div style="display:flex;align-items:center;gap:6px">' +
+            '<label style="font-size:.8rem;color:#555">월:</label>' +
+            '<input type="month" id="ttCalMonth" value="' + defaultMonth + '" onchange="applications._onTtMonthChange()" ' +
+            'style="padding:4px 8px;border:1px solid #bee3f8;border-radius:6px;font-size:.85rem;color:#1a5276;font-weight:600"></div></div>' +
+            '<div id="ttCalGrid" style="margin-bottom:8px"></div>' +
+            '<div style="font-size:.78rem;color:#888;font-weight:600;margin-bottom:4px">선택된 날짜</div>' +
+            '<div id="ttCalTags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:26px;padding:4px 6px;background:#fff;border:1px solid #bee3f8;border-radius:6px">' +
+            '<span style="color:#bbb;font-size:.82rem">선택된 날짜 없음</span></div></div>' +
+            // ── 강좌 목록 참고
+            '<details style="margin-top:2px"><summary style="font-size:.82rem;color:#888;cursor:pointer;padding:4px 0">강좌 목록 (참고)</summary>' +
+            '<div style="background:#f8f9fa;border-radius:6px;padding:8px 10px;margin-top:6px">' +
             '<table style="width:100%;border-collapse:collapse">' +
-            '<thead><tr style="background:#eee"><th style="padding:5px 10px;text-align:left;font-size:.82rem">프로그램</th>' +
-            '<th style="padding:5px 10px;text-align:left;font-size:.82rem">시간</th>' +
-            '<th style="padding:5px 10px;text-align:center;font-size:.82rem">수강인원</th></tr></thead>' +
-            '<tbody>' + comboRows + '</tbody></table></div></div>';
+            '<thead><tr style="background:#eee"><th style="padding:4px 8px;text-align:left;font-size:.78rem">프로그램</th>' +
+            '<th style="padding:4px 8px;text-align:left;font-size:.78rem">시간</th>' +
+            '<th style="padding:4px 8px;text-align:center;font-size:.78rem">수업요일</th></tr></thead>' +
+            '<tbody>' + comboRows + '</tbody></table></div></details>';
 
         const footer =
             '<button onclick="closeGlobalModal()" style="padding:8px 18px;background:#95a5a6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem;margin-right:8px">닫기</button>' +
@@ -2361,174 +2558,131 @@ ${(() => {
 
         document.getElementById('globalModalBody').innerHTML = body;
         document.getElementById('globalModalFooter').innerHTML = footer;
+        // 달력 초기 렌더
+        applications._renderTtCalendar();
     },
 
     _downloadTimetablePDF() {
-        // DOM 대신 변수에서 읽음 (select value 재생성 버그 방지)
         const monthVal = applications._ttMonth || (new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0'));
-        const printStyle = applications._ttStyle || 'calendar';
         const [yr, mo] = monthVal.split('-').map(Number);
         const complexName = applications._ttComplexName || '';
-        const apps = applications._ttApps || [];
+        const apps        = applications._ttApps || [];
+        const holidays    = applications._ttHolidays || applications._getKoreanHolidays(yr);
+        // 선택된 날짜 (없으면 자동 계산)
+        let selDates = (applications._ttCustomDates || []).slice().sort();
+        if (!selDates.length) { showToast('날짜를 선택해주세요','error'); return; }
 
-        // 강좌별 그룹화
+        // 강좌별 그룹화 (시간 오름차순 정렬)
         const groups = {};
         apps.forEach(a => {
             const k = (a.program_name||'') + '__' + (a.preferred_time||'');
-            if (!groups[k]) groups[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정', members: [] };
-            groups[k].members.push(a);
+            if (!groups[k]) groups[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정' };
+        });
+        const sortedGroups = Object.values(groups).sort((a,b) => {
+            const pa = (() => { const d = applications._parseProgramDows(a.program); return d.length ? Math.min(...d.map(x=>x===0?98:x)) : 99; })();
+            const pb = (() => { const d = applications._parseProgramDows(b.program); return d.length ? Math.min(...d.map(x=>x===0?98:x)) : 99; })();
+            return pa !== pb ? pa - pb : (a.time||'').localeCompare(b.time||'');
         });
 
         const monthLabel = yr + '년 ' + mo + '월';
-        const DOW_KR = ['일','월','화','수','목','금','토'];
-        const DOW_COLOR = ['#e74c3c','#2c3e50','#2c3e50','#2c3e50','#2c3e50','#2c3e50','#2980b9'];
-        const DOW_BG    = ['#fdecea','#f8f9fa','#f8f9fa','#f8f9fa','#f8f9fa','#f8f9fa','#eaf3fb'];
+        const DOW_KR     = ['일','월','화','수','목','금','토'];
 
-        // 달력 날짜 → 해당일의 강좌 목록 매핑
+        // ── 달력 그리기
         const firstDay = new Date(yr, mo-1, 1).getDay();
         const lastDate = new Date(yr, mo, 0).getDate();
 
-        // 날짜별 강좌 계산
-        const dayClasses = {};  // key: day(1~31), value: [{program, time, count}]
-        Object.values(groups).forEach(g => {
-            const dows = applications._parseProgramDows(g.program);
-            if (!dows.length) return;
-            for (let d = 1; d <= lastDate; d++) {
-                const dow = new Date(yr, mo-1, d).getDay();
-                if (dows.includes(dow)) {
-                    if (!dayClasses[d]) dayClasses[d] = [];
-                    dayClasses[d].push({ program: g.program, time: g.time, count: g.members.length });
-                }
-            }
+        // 날짜별 강좌 목록 (선택된 날짜만, 요일로 매칭)
+        const dayClasses = {};
+        selDates.forEach(key => {
+            const [y,m,d] = key.split('-').map(Number);
+            const dow = new Date(y,m-1,d).getDay();
+            const matched = sortedGroups.filter(g => {
+                const dows = applications._parseProgramDows(g.program);
+                return dows.includes(dow);
+            });
+            if (matched.length) dayClasses[d] = matched;
         });
 
-        let content = '';
+        // 달력 헤더
+        const DOW_COLORS_HD = ['#e74c3c','#444','#444','#444','#444','#444','#2980b9'];
+        const DOW_BG_HD     = ['#fdecea','#f5f5f5','#f5f5f5','#f5f5f5','#f5f5f5','#f5f5f5','#eaf3fb'];
+        const dowHeaders = DOW_KR.map((n,i) =>
+            '<th style="padding:5px 2px;text-align:center;font-size:9pt;font-weight:700;color:' + DOW_COLORS_HD[i] + ';background:' + DOW_BG_HD[i] + ';border:1px solid #ddd;width:14.28%">' + n + '</th>'
+        ).join('');
 
-        if (printStyle === 'calendar') {
-            // ── 달력형 ──────────────────────────────────────────
-            const cellH = 90; // px (화면용, 인쇄는 mm)
-            let calRows = '';
-            let cellIdx = 0;
-            let row = '<tr>';
-            // 첫 주 빈 칸
-            for (let i = 0; i < firstDay; i++) {
-                row += '<td style="border:1px solid #e0e0e0;height:24mm;vertical-align:top;background:#fafafa"></td>';
-                cellIdx++;
-            }
-            for (let d = 1; d <= lastDate; d++) {
-                const dow = new Date(yr, mo-1, d).getDay();
-                const isSun = dow === 0, isSat = dow === 6;
-                const dayColor = isSun ? '#e74c3c' : (isSat ? '#2980b9' : '#2c3e50');
-                const classes = dayClasses[d] || [];
-                const classHtml = classes.map(c => {
-                    const progDows = applications._parseProgramDows(c.program);
-                    const dotColor = '#1abc9c';
-                    return '<div style="margin:1px 2px;padding:2px 4px;background:#e8faf5;border-left:3px solid #1abc9c;border-radius:2px;font-size:7pt;line-height:1.3;overflow:hidden">' +
-                        '<div style="font-weight:600;color:#0e6655;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.program + '</div>' +
-                        '<div style="color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.time + ' · ' + c.count + '명</div></div>';
-                }).join('');
-                row += '<td style="border:1px solid #e0e0e0;height:24mm;vertical-align:top;padding:2px">' +
-                    '<div style="font-size:9pt;font-weight:700;color:' + dayColor + ';padding:1px 3px 2px">' + d + '</div>' +
-                    classHtml + '</td>';
-                cellIdx++;
-                if (cellIdx % 7 === 0) {
-                    row += '</tr>';
-                    calRows += row;
-                    row = '<tr>';
-                }
-            }
-            // 마지막 주 나머지 칸
-            if (cellIdx % 7 !== 0) {
-                while (cellIdx % 7 !== 0) {
-                    row += '<td style="border:1px solid #e0e0e0;height:24mm;vertical-align:top;background:#fafafa"></td>';
-                    cellIdx++;
-                }
-                row += '</tr>';
-                calRows += row;
-            }
-
-            const dowHeaders = DOW_KR.map((d, i) =>
-                '<th style="padding:6px 2px;text-align:center;font-size:9pt;color:' + DOW_COLOR[i] + ';background:' + DOW_BG[i] + ';border:1px solid #e0e0e0;width:14.28%">' + d + '</th>'
-            ).join('');
-
-            // 강좌 범례
-            const legendItems = Object.values(groups).map(g =>
-                '<span style="display:inline-flex;align-items:center;margin:2px 5px 2px 0;font-size:7.5pt">' +
-                '<span style="display:inline-block;width:10px;height:10px;background:#1abc9c;border-radius:2px;margin-right:3px"></span>' +
-                g.program + ' ' + g.time + ' (' + g.members.length + '명)</span>'
-            ).join('');
-
-            content =
-                '<div style="margin-bottom:8mm">' +
-                // 헤더
-                '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #3498db;padding-bottom:5px;margin-bottom:8px">' +
-                '<div>' +
-                '<div style="font-size:16pt;font-weight:bold;color:#1a252f">' + complexName + '</div>' +
-                '<div style="font-size:11pt;color:#3498db;font-weight:600;margin-top:1px">' + monthLabel + ' 강좌 시간표</div>' +
-                '</div>' +
-                '<div style="text-align:right;font-size:7.5pt;color:#888">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</div>' +
-                '</div>' +
-                // 달력
-                '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-                '<thead><tr>' + dowHeaders + '</tr></thead>' +
-                '<tbody>' + calRows + '</tbody></table>' +
-                // 범례
-                '<div style="margin-top:6px;padding:5px 8px;background:#f0faf8;border:1px solid #d1f0e8;border-radius:6px">' +
-                '<span style="font-size:7.5pt;color:#888;margin-right:6px">강좌:</span>' + legendItems + '</div>' +
-                '</div>';
-
-        } else {
-            // ── 목록형 ──────────────────────────────────────────
-            // 요일별로 강좌를 정리
-            const byDow = { 1:[], 2:[], 3:[], 4:[], 5:[], 6:[], 0:[] };
-            Object.values(groups).forEach(g => {
-                const dows = applications._parseProgramDows(g.program);
-                dows.forEach(d => { byDow[d].push(g); });
-                if (!dows.length) byDow[1].push(g); // 요일 불명 → 월요일
-            });
-            const dowOrder = [1,2,3,4,5,6,0];
-            let listHtml = '';
-            dowOrder.forEach(dow => {
-                if (!byDow[dow].length) return;
-                const dColor = DOW_COLOR[dow];
-                listHtml += '<div style="margin-bottom:8px">' +
-                    '<div style="background:' + (dow===0?'#e74c3c':(dow===6?'#2980b9':'#3498db')) + ';color:#fff;padding:5px 12px;border-radius:6px 6px 0 0;font-size:10pt;font-weight:700">' +
-                    DOW_KR[dow] + '요일 강좌</div>' +
-                    '<table style="width:100%;border-collapse:collapse">' +
-                    '<thead><tr style="background:#f0f4f8">' +
-                    '<th style="padding:5px 10px;text-align:left;border:1px solid #dde;font-size:8pt">프로그램</th>' +
-                    '<th style="padding:5px 10px;text-align:left;border:1px solid #dde;font-size:8pt">시간</th>' +
-                    '<th style="padding:5px 10px;text-align:center;border:1px solid #dde;font-size:8pt">수강 인원</th>' +
-                    '</tr></thead><tbody>';
-                byDow[dow].forEach((g, i) => {
-                    listHtml +=
-                        '<tr style="' + (i%2?'background:#fafafa':'') + '">' +
-                        '<td style="padding:6px 10px;border:1px solid #dde;font-size:9pt">' + g.program + '</td>' +
-                        '<td style="padding:6px 10px;border:1px solid #dde;font-size:9pt;color:#555">' + g.time + '</td>' +
-                        '<td style="padding:6px 10px;border:1px solid #dde;font-size:9pt;text-align:center;color:#1abc9c;font-weight:600">' + g.members.length + '명</td></tr>';
-                });
-                listHtml += '</tbody></table></div>';
-            });
-            content =
-                '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #3498db;padding-bottom:5px;margin-bottom:10px">' +
-                '<div><div style="font-size:16pt;font-weight:bold;color:#1a252f">' + complexName + '</div>' +
-                '<div style="font-size:11pt;color:#3498db;font-weight:600;margin-top:1px">' + monthLabel + ' 강좌 시간표</div></div>' +
-                '<div style="text-align:right;font-size:7.5pt;color:#888">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</div></div>' +
-                listHtml;
+        // 달력 셀
+        let cellIdx = 0, calRows = '', row = '<tr>';
+        for (let i = 0; i < firstDay; i++) {
+            row += '<td style="border:1px solid #eee;height:22mm;background:#fafafa"></td>';
+            cellIdx++;
         }
+        for (let d = 1; d <= lastDate; d++) {
+            const dow     = new Date(yr, mo-1, d).getDay();
+            const dateKey = yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+            const isHol   = !!holidays[dateKey];
+            const isSun   = dow === 0;
+            const isSat   = dow === 6;
+            const isRed   = isHol || isSun;
+            const numColor = isRed ? '#e74c3c' : (isSat ? '#2980b9' : '#222');
+            const cellBg   = isRed ? '#fff8f8' : (isSat ? '#f8faff' : '#fff');
+            const isSel    = selDates.includes(dateKey);
+            const classes  = dayClasses[d] || [];
+            const holName  = holidays[dateKey] || '';
+
+            // 강좌 블록 (선택 날짜에만)
+            const classHtml = (isSel && classes.length) ? classes.map(g =>
+                '<div style="margin:1px 1px;padding:2px 3px;background:#e8f4fd;border-left:2.5px solid #3498db;border-radius:2px;font-size:6.5pt;line-height:1.35">' +
+                '<div style="font-weight:700;color:#1a5276;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' + g.program + '</div>' +
+                '<div style="color:#555;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' + g.time + '</div></div>'
+            ).join('') : '';
+
+            row +=
+                '<td style="border:1px solid #ddd;height:22mm;vertical-align:top;padding:2px;background:' + cellBg + '">' +
+                '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 1px">' +
+                '<span style="font-size:9.5pt;font-weight:700;color:' + numColor + '">' + d + '</span>' +
+                (holName ? '<span style="font-size:6pt;color:#e74c3c;font-weight:600;white-space:nowrap">' + holName + '</span>' : '') +
+                '</div>' +
+                classHtml + '</td>';
+            cellIdx++;
+            if (cellIdx % 7 === 0) { row += '</tr>'; calRows += row; row = '<tr>'; }
+        }
+        if (cellIdx % 7 !== 0) {
+            while (cellIdx % 7 !== 0) { row += '<td style="border:1px solid #eee;height:22mm;background:#fafafa"></td>'; cellIdx++; }
+            row += '</tr>'; calRows += row;
+        }
+
+        // 범례 (수업요일별 강좌 목록, 명수 제외)
+        const legendHtml = sortedGroups.map(g => {
+            const dows = applications._parseProgramDows(g.program);
+            const dowStr = dows.length ? dows.map(d => DOW_KR[d]).join('·') : '?';
+            return '<span style="display:inline-flex;align-items:center;margin:2px 8px 2px 0;font-size:7.5pt">' +
+                '<span style="display:inline-block;width:9px;height:9px;background:#3498db;border-radius:2px;margin-right:3px"></span>' +
+                '<span style="color:#555">' + dowStr + '</span>&nbsp;<strong>' + g.program + '</strong>&nbsp;<span style="color:#888">' + g.time + '</span></span>';
+        }).join('');
+
+        const content =
+            '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #3498db;padding-bottom:5px;margin-bottom:8px">' +
+            '<div><div style="font-size:15pt;font-weight:bold;color:#1a252f">' + complexName + '</div>' +
+            '<div style="font-size:10.5pt;color:#3498db;font-weight:600;margin-top:1px">' + monthLabel + ' 강좌 시간표</div></div>' +
+            '<div style="text-align:right;font-size:7pt;color:#aaa">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</div></div>' +
+            '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+            '<thead><tr>' + dowHeaders + '</tr></thead>' +
+            '<tbody>' + calRows + '</tbody></table>' +
+            '<div style="margin-top:5px;padding:4px 8px;background:#f0f7ff;border:1px solid #bee3f8;border-radius:5px;line-height:1.8">' +
+            legendHtml + '</div>';
 
         const win = window.open('','_blank','width=820,height=1060');
         if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
         win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
             '<title>' + complexName + ' 시간표 ' + monthLabel + '</title>' +
             '<style>*{box-sizing:border-box}' +
-            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:10mm 12mm;color:#111}' +
-            '@media print{body{margin:0}@page{size:A4 portrait;margin:10mm 12mm}.no-print{display:none!important}}' +
+            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:8mm 10mm;color:#111}' +
+            '@media print{body{margin:0}@page{size:A4 portrait;margin:8mm 10mm}.no-print{display:none!important}}' +
             'table{border-collapse:collapse}' +
-            'td,th{word-break:break-all}</style></head><body>' +
-            '<div class="no-print" style="text-align:right;margin-bottom:10px">' +
-            '<button onclick="window.print()" style="padding:8px 20px;background:#3498db;color:#fff;border:none;border-radius:6px;font-size:11pt;cursor:pointer;margin-right:8px">🖨️ 인쇄 / PDF 저장</button>' +
-            '<button onclick="window.close()" style="padding:8px 14px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:11pt;cursor:pointer">닫기</button></div>' +
+            '</style></head><body>' +
+            '<div class="no-print" style="text-align:right;margin-bottom:8px">' +
+            '<button onclick="window.print()" style="padding:7px 18px;background:#3498db;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">🖨️ 인쇄 / PDF 저장</button>' +
+            '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
             content + '</body></html>');
         win.document.close();
         win.focus();
