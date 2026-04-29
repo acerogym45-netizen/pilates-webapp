@@ -1,5 +1,5 @@
 /**
- * Vercel 서버리스 함수 엔트리포인트 - Supabase 버전 v3.11
+ * Vercel 서버리스 함수 엔트리포인트 - Supabase 버전 v3.14
  */
 require('dotenv').config();
 
