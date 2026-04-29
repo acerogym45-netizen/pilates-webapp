@@ -204,7 +204,7 @@ const settlement = {
     },
 
     // ──────────────────────────────────────────────────
-    // 중도해지 특수 카드 (수강횟수 입력 + 자동계산)
+    // 중도해지 특수 카드 (수강횟수 + 월수강료 입력 + 자동계산)
     // ──────────────────────────────────────────────────
     _midCancelCard(rows, count) {
         const badge = `<span style="background:#e74c3c;color:#fff;font-size:.72rem;font-weight:700;
@@ -228,22 +228,46 @@ const settlement = {
                 <th style="${thStyle}">연락처</th>
                 <th style="${thStyle}">프로그램</th>
                 <th style="${thStyle}">해지일</th>
-                <th style="${thStyle}">월수강료</th>
-                <th style="${thStyle}">수강횟수<br><span style="font-weight:400;font-size:.7rem;color:#e74c3c">직접 입력</span></th>
-                <th style="${thStyle}">위약금<br><span style="font-weight:400;font-size:.7rem;color:#888">월수강료×10%</span></th>
-                <th style="${thStyle}">수강료<br><span style="font-weight:400;font-size:.7rem;color:#888">횟수×15,000</span></th>
+                <th style="${thStyle}">월수강료<br><span style="font-weight:400;font-size:.7rem;color:#2980b9">자동/직접입력</span></th>
+                <th style="${thStyle}">수강횟수<br><span style="font-weight:400;font-size:.7rem;color:#e74c3c">직접 입력 ↓</span></th>
+                <th style="${thStyle}">위약금<br><span style="font-weight:400;font-size:.7rem;color:#888">×10%</span></th>
+                <th style="${thStyle}">수강료<br><span style="font-weight:400;font-size:.7rem;color:#888">×15,000</span></th>
                 <th style="${thStyle}">총청구금액</th>
                 <th style="${thStyle}">저장</th>
               </tr>`;
 
             const tbodyRows = rows.map((r, i) => {
-                const id        = r.id || `idx_${i}`;
-                const fee       = Number(r.monthly_fee) || 0;
-                const savedAtt  = this._midEdits[id]?.attended ?? '';
-                const calc      = savedAtt !== '' ? this._calcBilling(fee, savedAtt) : null;
-                const bgRow     = i % 2 ? 'background:#fafafa' : '';
+                const id         = r.id || `idx_${i}`;
+                const hasFee     = r.monthly_fee !== null && r.monthly_fee !== undefined && Number(r.monthly_fee) > 0;
+                const initFee    = hasFee ? Number(r.monthly_fee) : (this._midEdits[id]?.fee || '');
+                const savedAtt   = this._midEdits[id]?.attended ?? (r.attended_sessions !== null ? r.attended_sessions : '');
+                const savedFee   = this._midEdits[id]?.fee ?? initFee;
 
-                const tdS = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bgRow}`;
+                // 로컬 편집 상태 초기화
+                if (!this._midEdits[id]) {
+                    this._midEdits[id] = { attended: savedAtt, fee: initFee };
+                } else {
+                    if (this._midEdits[id].fee === undefined) this._midEdits[id].fee = initFee;
+                    if (this._midEdits[id].attended === undefined) this._midEdits[id].attended = savedAtt;
+                }
+
+                const calc  = (savedAtt !== '' && savedFee !== '') ? this._calcBilling(savedFee, savedAtt) : null;
+                const bgRow = i % 2 ? 'background:#fafafa' : '';
+                const tdS   = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bgRow}`;
+
+                // 월수강료: 자동 매핑된 경우 표시만, 없으면 입력 필드
+                const feeCell = hasFee
+                    ? `<span style="color:#2980b9;font-weight:700">${Number(r.monthly_fee).toLocaleString('ko-KR')}원</span>`
+                    : `<input type="number" min="0" step="1000"
+                         id="fee-${id}"
+                         value="${savedFee}"
+                         oninput="settlement._onFeeChange('${id}')"
+                         placeholder="직접 입력"
+                         style="width:80px;padding:4px 6px;border:1.5px solid #2980b9;border-radius:5px;
+                                font-size:.82rem;text-align:right;color:#2980b9;font-weight:700">
+                       <span style="font-size:.7rem;color:#999">원</span>
+                       <div style="font-size:.68rem;color:#aaa;margin-top:1px">프로그램명 불일치</div>`;
+
                 return `<tr id="mid-row-${id}">
                   <td style="${tdS}">${r.dong||''}</td>
                   <td style="${tdS}">${r.ho||''}</td>
@@ -251,12 +275,12 @@ const settlement = {
                   <td style="${tdS}">${r.phone||''}</td>
                   <td style="${tdS}">${r.program_name||''}</td>
                   <td style="${tdS}">${r.termination_date||''}</td>
-                  <td style="${tdS};color:#2980b9;font-weight:600">${fee ? fee.toLocaleString('ko-KR')+'원' : '-'}</td>
+                  <td style="${tdS}" id="fee-cell-${id}">${feeCell}</td>
                   <td style="${tdS}">
                     <input type="number" min="0" max="99"
                       id="att-${id}"
                       value="${savedAtt}"
-                      oninput="settlement._onAttendChange('${id}', ${fee})"
+                      oninput="settlement._onAttendChange('${id}')"
                       style="width:60px;padding:4px 6px;border:1.5px solid #e74c3c;border-radius:5px;
                              font-size:.88rem;text-align:center;font-weight:700;color:#c0392b">
                     <span style="font-size:.72rem;color:#999">회</span>
@@ -271,7 +295,7 @@ const settlement = {
                     ${calc ? `<span style="color:#e74c3c;font-weight:700;font-size:.9rem">${calc.total.toLocaleString('ko-KR')}원</span>` : '<span style="color:#ccc">-</span>'}
                   </td>
                   <td style="${tdS}">
-                    <button onclick="settlement._saveMidBilling('${id}', ${fee})"
+                    <button onclick="settlement._saveMidBilling('${id}')"
                       id="save-btn-${id}"
                       style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;
                              border-radius:5px;font-size:.78rem;font-weight:700;cursor:pointer;
@@ -283,7 +307,7 @@ const settlement = {
             }).join('');
 
             body = `<div style="overflow-x:auto">
-              <table style="width:100%;border-collapse:collapse;min-width:800px">
+              <table style="width:100%;border-collapse:collapse;min-width:820px">
                 <thead>${thead}</thead>
                 <tbody>${tbodyRows}</tbody>
               </table>
@@ -304,15 +328,33 @@ const settlement = {
         </div>`;
     },
 
+    // 월수강료 직접 입력 시 실시간 계산 (자동 매핑 실패한 경우)
+    _onFeeChange(id) {
+        const feeInput = document.getElementById(`fee-${id}`);
+        if (!feeInput) return;
+        const fee = Number(feeInput.value) || 0;
+        if (!this._midEdits[id]) this._midEdits[id] = {};
+        this._midEdits[id].fee = fee;
+        this._updateCalcCells(id);
+    },
+
     // 수강횟수 입력 시 실시간 계산
-    _onAttendChange(id, monthlyFee) {
+    _onAttendChange(id) {
         const input = document.getElementById(`att-${id}`);
         if (!input) return;
         const attended = input.value;
-        this._midEdits[id] = { ...(this._midEdits[id]||{}), attended };
+        if (!this._midEdits[id]) this._midEdits[id] = {};
+        this._midEdits[id].attended = attended;
+        this._updateCalcCells(id);
+    },
 
-        const calc = attended !== '' && attended >= 0
-            ? this._calcBilling(monthlyFee, attended)
+    // 계산 셀 갱신 (위약금 / 수강료 / 총청구금액)
+    _updateCalcCells(id) {
+        const edit    = this._midEdits[id] || {};
+        const fee     = Number(edit.fee)      || 0;
+        const attended= edit.attended;
+        const calc    = (attended !== '' && attended !== undefined && fee > 0)
+            ? this._calcBilling(fee, attended)
             : null;
 
         const penEl    = document.getElementById(`penalty-${id}`);
@@ -331,12 +373,21 @@ const settlement = {
     },
 
     // 저장 버튼 → DB 반영
-    async _saveMidBilling(id, monthlyFee) {
-        const input = document.getElementById(`att-${id}`);
-        if (!input) return;
-        const attended = parseInt(input.value);
+    async _saveMidBilling(id) {
+        const edit = this._midEdits[id] || {};
+
+        // 수강횟수
+        const attInput = document.getElementById(`att-${id}`);
+        const attended = parseInt(attInput?.value ?? edit.attended);
         if (isNaN(attended) || attended < 0) {
             showToast('수강횟수를 올바르게 입력해주세요', 'error'); return;
+        }
+
+        // 월수강료 (자동 or 직접 입력)
+        const feeInput  = document.getElementById(`fee-${id}`);
+        const monthlyFee = feeInput ? parseInt(feeInput.value) : (Number(edit.fee) || 0);
+        if (!monthlyFee || monthlyFee <= 0) {
+            showToast('월수강료를 입력해주세요', 'error'); return;
         }
 
         const btn = document.getElementById(`save-btn-${id}`);
@@ -345,7 +396,6 @@ const settlement = {
         try {
             const calc = this._calcBilling(monthlyFee, attended);
 
-            // id가 idx_ 로 시작하면 실제 DB id가 없는 경우 (비정상)
             if (id.startsWith('idx_')) throw new Error('저장할 수 없는 레코드입니다 (id 없음)');
 
             const res = await fetch(`/api/cancellations/${id}`, {
@@ -361,13 +411,14 @@ const settlement = {
             if (!json.success) throw new Error(json.error || '저장 실패');
 
             // 로컬 상태 업데이트
-            this._midEdits[id] = { attended, billing: calc.total };
+            this._midEdits[id] = { attended, fee: monthlyFee, billing: calc.total };
 
             // _data 내 mid_cancel도 업데이트 (엑셀 다운로드 시 반영)
             if (this._data?.mid_cancel) {
                 const row = this._data.mid_cancel.find(r => r.id === id);
                 if (row) {
                     row.attended_sessions = attended;
+                    row.monthly_fee       = monthlyFee;
                     row.billing_amount    = calc.total;
                 }
             }
@@ -383,7 +434,8 @@ const settlement = {
                     }
                 }, 2000);
             }
-            showToast(`${this._data?.mid_cancel?.find(r=>r.id===id)?.name || ''} 저장 완료`, 'success');
+            const name = this._data?.mid_cancel?.find(r => r.id === id)?.name || '';
+            showToast(`${name} 저장 완료 (총청구 ${calc.total.toLocaleString('ko-KR')}원)`, 'success');
 
         } catch(e) {
             showToast('저장 오류: ' + e.message, 'error');
@@ -535,15 +587,20 @@ const settlement = {
                 s2.push(['동','호수','이름','연락처','프로그램종류','해지일',
                          '월수강료','수강횟수','위약금(10%)','수강료(×15,000)','총청구금액']);
                 d.mid_cancel.forEach(r => {
-                    const id       = r.id;
-                    const att      = this._midEdits[id]?.attended ?? r.attended_sessions ?? '';
-                    const fee      = Number(r.monthly_fee) || 0;
-                    const calc     = (att !== '' && att >= 0) ? this._calcBilling(fee, att) : null;
+                    const id  = r.id;
+                    const edit = this._midEdits[id] || {};
+                    // 수강횟수: 로컬 편집 → DB 저장값 → 빈값 순
+                    const att = edit.attended !== undefined ? edit.attended
+                              : (r.attended_sessions !== null ? r.attended_sessions : '');
+                    // 월수강료: 로컬 편집 → API 응답값 순
+                    const fee = Number(edit.fee || r.monthly_fee) || 0;
+                    const calc = (att !== '' && att !== undefined && att >= 0 && fee > 0)
+                        ? this._calcBilling(fee, att) : null;
                     s2.push([
                         r.dong, r.ho, r.name, r.phone||'',
                         r.program_name||'', r.termination_date||'',
                         fee || '',
-                        att !== '' ? att : '',
+                        att !== '' && att !== undefined ? att : '',
                         calc ? calc.penalty   : '',
                         calc ? calc.courseFee : '',
                         calc ? calc.total     : '',

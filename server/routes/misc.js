@@ -864,9 +864,27 @@ router.get('/settlement-report', async (req, res) => {
                 program_name:     c.program_name,
                 termination_date: tDate,
                 // 수강 횟수 / 청구 관련 (DB에 이미 저장된 값 전달)
-                attended_sessions:      c.attended_sessions       ?? null,
-                monthly_fee:            progPriceMap[c.program_name] || null,
-                billing_amount:         c.billing_amount          ?? null,
+                attended_sessions: c.attended_sessions ?? null,
+                // monthly_fee: programs 테이블 매핑 우선
+                //   → 없으면 session_fee(DB) 역산 시도
+                //   → 그것도 없으면 billing_amount / attended_sessions 역산 시도
+                monthly_fee: (() => {
+                    const fromProg = progPriceMap[c.program_name];
+                    if (fromProg) return fromProg;
+                    if (c.session_fee && Number(c.session_fee) > 0) {
+                        // session_fee는 회당 단가이므로 monthly_fee와 다름 — 사용 안 함
+                    }
+                    // billing_amount 역산: billing = penalty + courseFee
+                    //   billing = fee*0.1 + att*15000  →  fee = (billing - att*15000) / 0.1
+                    const att = Number(c.attended_sessions);
+                    const bil = Number(c.billing_amount);
+                    if (att > 0 && bil > 0) {
+                        const derived = Math.round((bil - att * 15000) / 0.1);
+                        if (derived > 0) return derived;
+                    }
+                    return null;
+                })(),
+                billing_amount: c.billing_amount ?? null,
                 note:             ''
             };
 
