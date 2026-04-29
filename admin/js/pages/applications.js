@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.20 출석부PDF그룹별페이지분리 */
+/** 신청 관리 페이지 - v3.21 출석부PDF프로그램별1페이지+시간대구분 */
 const applications = {
     data: [],
     filtered: [],
@@ -2160,33 +2160,37 @@ ${(() => {
         if (time) filtered = filtered.filter(a => a.preferred_time === time);
         if (!filtered.length) { showToast('출력할 회원이 없습니다','error'); return; }
 
-        const groups = {};
+        // ── 1단계: 프로그램명+시간 단위로 세부 그룹화
+        const timeGroups = {};
         filtered.forEach(a => {
             const key = (a.program_name||'') + '__' + (a.preferred_time||'');
-            if (!groups[key]) groups[key] = { program: a.program_name||'프로그램 미지정', time: a.preferred_time||'시간 미지정', members: [] };
-            groups[key].members.push(a);
+            if (!timeGroups[key]) timeGroups[key] = { program: a.program_name||'프로그램 미지정', time: a.preferred_time||'시간 미지정', members: [] };
+            timeGroups[key].members.push(a);
+        });
+
+        // ── 2단계: 프로그램명 기준으로 상위 그룹화 (시간대는 하위 배열)
+        const progGroups = {};
+        Object.values(timeGroups).forEach(tg => {
+            const pname = tg.program;
+            if (!progGroups[pname]) progGroups[pname] = { program: pname, timeSlots: [] };
+            progGroups[pname].timeSlots.push(tg);
         });
 
         const monthLabel = calYr + '년 ' + calMo + '월';
 
         // 그룹별 날짜 계산 함수
-        // - 달력에서 수동 선택한 날짜가 있으면 해당 요일과 교집합으로 필터
-        // - 없으면 프로그램명에서 요일 감지 후 해당월 날짜 자동 계산
         const getGroupDates = (programName) => {
             const dows = applications._parseProgramDows(programName);
             if (!dows.length) {
-                // 요일 감지 불가: 수동 선택 날짜 그대로 사용, 없으면 빈 4컬럼
                 return manualDates.length ? manualDates : null;
             }
             if (manualDates.length) {
-                // 수동 선택 날짜 중 해당 요일만 필터
                 const filtered2 = manualDates.filter(k => {
                     const [y,m,d] = k.split('-').map(Number);
                     return dows.includes(new Date(y,m-1,d).getDay());
                 });
                 return filtered2.length ? filtered2 : null;
             }
-            // 수동 선택 없음: 해당 월에서 요일에 맞는 날짜 자동 계산
             const lastDate = new Date(calYr, calMo, 0).getDate();
             const dates = [];
             for (let d = 1; d <= lastDate; d++) {
@@ -2204,66 +2208,73 @@ ${(() => {
             return String(a.ho||'').replace(/호$/,'').localeCompare(String(b.ho||'').replace(/호$/,''),'ko',{numeric:true});
         });
 
-        // ── 그룹 정렬: 프로그램명에서 첫 번째 수업요일 기준으로 정렬
-        // 요일 우선순위: 월(1) → 화(2) → 수(3) → 목(4) → 금(5) → 토(6) → 일(0) → 미감지(99)
-        // 같은 요일 그룹 내에서는 시간대 오름차순
+        // ── 프로그램 정렬 (요일 우선순위)
         const getDowPriority = (programName) => {
             const dows = applications._parseProgramDows(programName);
             if (!dows.length) return 99;
-            // 복합 요일은 첫 번째 요일 기준 (월화 → 월=1, 화목 → 화=2, 수금 → 수=3)
             const first = Math.min(...dows);
-            // 0(일)은 최하위로
             return first === 0 ? 98 : first;
         };
-        const sortedGroups = Object.values(groups).sort((a, b) => {
-            const pa = getDowPriority(a.program), pb = getDowPriority(b.program);
-            if (pa !== pb) return pa - pb;
-            // 같은 요일 패턴이면 시간대 오름차순
-            return (a.time || '').localeCompare(b.time || '', 'ko');
+        const sortedProgGroups = Object.values(progGroups).sort((a, b) => {
+            return getDowPriority(a.program) - getDowPriority(b.program);
+        });
+        // 각 프로그램 내 시간대도 오름차순 정렬
+        sortedProgGroups.forEach(pg => {
+            pg.timeSlots.sort((a, b) => (a.time||'').localeCompare(b.time||'', 'ko'));
         });
 
         let printContent = '';
-        sortedGroups.forEach((g, gi) => {
-            sortM(g.members);
-            // 그룹별 날짜 계산
-            const groupRaw  = getGroupDates(g.program) || [];
-            const dateCols  = groupRaw.length
+        sortedProgGroups.forEach(pg => {
+            // 날짜 컬럼은 프로그램명 기준으로 계산 (공통)
+            const groupRaw = getGroupDates(pg.program) || [];
+            const dateCols = groupRaw.length
                 ? groupRaw.map(k => applications._dateLabel(k))
                 : ['1회','2회','3회','4회'];
-            // A4 landscape ~247mm 유효. 고정열: No(10)+동호(24)+이름(18)+연락처(18)+서명(16)=86mm → 나머지 161mm를 날짜열로
-            // A4 landscape: 고정열 No(8)+동호(22)+이름(16)+연락처(16)=62mm → 나머지 185mm를 날짜열로 (서명 제거)
             const dateMm = Math.max(9, Math.floor(185 / dateCols.length));
             const thDates = dateCols.map(d =>
                 '<th style="padding:3px 1px;text-align:center;border:1px solid #bbb;font-size:7pt;width:' + dateMm + 'mm;white-space:nowrap">' + d + '</th>'
             ).join('');
-            const rows = g.members.map((m, i) =>
-                '<tr style="' + (i%2?'background:#f0fdf8':'') + '">' +
-                '<td style="padding:3px 2px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#999">' + (i+1) + '</td>' +
-                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:8pt;white-space:nowrap">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
-                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:9.5pt;font-weight:bold">' + (m.name||'') + '</td>' +
-                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#555">' + applications._fmtPhoneLast4(m.phone) + '</td>' +
-                dateCols.map(() => '<td style="border:1px solid #ccc;height:22px;width:' + dateMm + 'mm"></td>').join('') +
-                '</tr>'
-            ).join('');
-            // 그룹 구분: 그룹별 page-block div (PDF 페이지 분리용)
+
+            // 시간대별 테이블 HTML 생성
+            const totalMembers = pg.timeSlots.reduce((s, ts) => s + ts.members.length, 0);
+            let tablesHtml = '';
+            pg.timeSlots.forEach((ts, ti) => {
+                sortM(ts.members);
+                const rows = ts.members.map((m, i) =>
+                    '<tr style="' + (i%2?'background:#f0fdf8':'') + '">' +
+                    '<td style="padding:3px 2px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#999">' + (i+1) + '</td>' +
+                    '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:8pt;white-space:nowrap">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
+                    '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:9.5pt;font-weight:bold">' + (m.name||'') + '</td>' +
+                    '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#555">' + applications._fmtPhoneLast4(m.phone) + '</td>' +
+                    dateCols.map(() => '<td style="border:1px solid #ccc;height:22px;width:' + dateMm + 'mm"></td>').join('') +
+                    '</tr>'
+                ).join('');
+                // 시간대 구분 헤더 (두 번째 이상은 위쪽 여백 추가)
+                tablesHtml +=
+                    '<div style="' + (ti > 0 ? 'margin-top:6mm;' : '') + '">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;background:#e8f8f2;border-left:4px solid #1abc9c;padding:3px 6px;margin-bottom:3px">' +
+                    '<span style="font-size:9pt;font-weight:700;color:#1e8449">' + ts.time + '</span>' +
+                    '<span style="font-size:8pt;color:#666">' + ts.members.length + '명</span></div>' +
+                    '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+                    '<thead><tr style="background:#1abc9c;color:#fff">' +
+                    '<th style="padding:4px 2px;text-align:center;border:1px solid #bbb;width:8mm;font-size:7.5pt">No.</th>' +
+                    '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:22mm;font-size:8pt">동/호수</th>' +
+                    '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:8.5pt">이름</th>' +
+                    '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:7.5pt">연락처</th>' +
+                    thDates +
+                    '</tr></thead>' +
+                    '<tbody>' + rows + '</tbody></table></div>';
+            });
+
+            // 프로그램 page-block (PDF 1페이지)
             printContent +=
                 '<div class=\"page-block\">' +
-                '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:3px;border-bottom:1.5px solid #1abc9c;padding-bottom:3px">' +
-                '<div>' +
-                '<span style="font-size:11pt;font-weight:bold;color:#1e8449">' + g.program + '</span>' +
-                '<span style="font-size:9.5pt;color:#555;margin-left:8px">' + g.time + '</span>' +
-                '<span style="font-size:8pt;color:#888;margin-left:6px">· ' + monthLabel + '</span></div>' +
-                '<div style="font-size:8pt;color:#666;text-align:right">총 <strong>' + g.members.length + '</strong>명 | 인당 <strong>' + dateCols.length + '</strong>회</div></div>' +
-                '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-                '<thead><tr style="background:#1abc9c;color:#fff">' +
-                '<th style="padding:4px 2px;text-align:center;border:1px solid #bbb;width:8mm;font-size:7.5pt">No.</th>' +
-                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:22mm;font-size:8pt">동/호수</th>' +
-                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:8.5pt">이름</th>' +
-                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:7.5pt">연락처</th>' +
-                thDates +
-                '</tr></thead>' +
-                '<tbody>' + rows + '</tbody></table></div>';
-        });  // ← forEach 종료 (버그수정: win.open을 루프 밖으로)
+                '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:4px;border-bottom:2px solid #1abc9c;padding-bottom:3px">' +
+                '<span style="font-size:12pt;font-weight:bold;color:#1e8449">' + pg.program + '</span>' +
+                '<span style="font-size:8pt;color:#888">' + monthLabel + ' &nbsp;|&nbsp; 총 <strong style=\"color:#333\">' + totalMembers + '</strong>명 | 인당 <strong style=\"color:#333\">' + dateCols.length + '</strong>회</span></div>' +
+                tablesHtml +
+                '</div>';
+        });  // ← forEach 종료
 
         const win = window.open('','_blank','width=1150,height=780');
         if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
