@@ -856,12 +856,17 @@ router.get('/settlement-report', async (req, res) => {
             const isEndDay = !tDate || tDate >= monthEnd;
 
             const row = {
+                id:               c.id,
                 dong:             c.dong,
                 ho:               c.ho,
                 name:             c.name,
                 phone:            c.phone,
                 program_name:     c.program_name,
                 termination_date: tDate,
+                // 수강 횟수 / 청구 관련 (DB에 이미 저장된 값 전달)
+                attended_sessions:      c.attended_sessions       ?? null,
+                monthly_fee:            progPriceMap[c.program_name] || null,
+                billing_amount:         c.billing_amount          ?? null,
                 note:             ''
             };
 
