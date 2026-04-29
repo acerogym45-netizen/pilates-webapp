@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.1 수정 모달 프로그램·시간대 드롭다운 */
+/** 신청 관리 페이지 - v3.3 출석부 PDF 다운로드 (요일·시간대별 필터 + print CSS) */
 const applications = {
     data: [],
     filtered: [],
@@ -21,6 +21,9 @@ const applications = {
                     </button>
                     <button class="btn-sm" onclick="applications.showSettlement()" style="background:#8e44ad;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
                         <i class="fas fa-won-sign"></i> 수강료 정산
+                    </button>
+                    <button class="btn-sm" onclick="applications.showAttendanceModal()" style="background:#1abc9c;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
+                        <i class="fas fa-clipboard-list"></i> 출석부
                     </button>
                     <button class="btn-secondary btn-sm" onclick="applications.showImportModal()">
                         <i class="fas fa-upload"></i> 가져오기
@@ -1654,5 +1657,364 @@ ${(() => {
             showToast('신청 추가 실패: ' + e.message, 'error');
             if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-plus"></i> 신청 추가'; }
         }
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    //  출석부 모달
+    // ─────────────────────────────────────────────────────────────────────
+    async showAttendanceModal() {
+        const complexId = getEffectiveComplexId();
+        if (!complexId) { showToast('단지를 먼저 선택해주세요', 'error'); return; }
+
+        // 로딩 모달 열기
+        openGlobalModal(
+            '<i class="fas fa-clipboard-list" style="color:#1abc9c"></i> 출석부 다운로드',
+            `<div style="text-align:center;padding:30px">
+                <i class="fas fa-spinner fa-spin" style="font-size:2rem;color:#1abc9c"></i>
+                <p style="margin-top:12px;color:#666">승인 회원 목록을 불러오는 중...</p>
+             </div>`,
+            ''
+        );
+
+        try {
+            // 승인된 신청 전체 로드
+            const res = await API.applications.list({ complexId, status: 'approved', limit: 500 });
+            const apps = res.data || res.applications || [];
+
+            if (!apps.length) {
+                document.getElementById('globalModalBody').innerHTML =
+                    '<p style="padding:20px;text-align:center;color:#999">승인된 회원이 없습니다.</p>';
+                return;
+            }
+
+            // 프로그램·시간대 목록 추출
+            const programs = [...new Set(apps.map(a => a.program_name).filter(Boolean))].sort();
+            const times    = [...new Set(apps.map(a => a.preferred_time).filter(Boolean))].sort();
+
+            // 단지명
+            const complexName = Admin.role === 'master'
+                ? (Admin.selectedComplexName || '단지')
+                : (Admin.complex?.name || '단지');
+
+            // 필터 UI 생성
+            const progOptions = programs.map(p => `<option value="${p}">${p}</option>`).join('');
+            const timeOptions = times.map(t => `<option value="${t}">${t}</option>`).join('');
+
+            const body = `
+            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+                <div style="display:flex;flex-direction:column;gap:4px">
+                    <label style="font-size:.8rem;color:#666;font-weight:600">프로그램</label>
+                    <select id="attProgram" onchange="applications._renderAttendancePreview()"
+                        style="padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem;min-width:200px">
+                        <option value="">-- 전체 프로그램 --</option>
+                        ${progOptions}
+                    </select>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px">
+                    <label style="font-size:.8rem;color:#666;font-weight:600">시간대</label>
+                    <select id="attTime" onchange="applications._renderAttendancePreview()"
+                        style="padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem;min-width:130px">
+                        <option value="">-- 전체 시간 --</option>
+                        ${timeOptions}
+                    </select>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px">
+                    <label style="font-size:.8rem;color:#666;font-weight:600">수업 날짜 (선택)</label>
+                    <input type="month" id="attMonth"
+                        value="${new Date().toISOString().slice(0,7)}"
+                        onchange="applications._renderAttendancePreview()"
+                        style="padding:7px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">
+                </div>
+                <button onclick="applications._renderAttendancePreview()"
+                    style="padding:7px 14px;background:#1abc9c;color:#fff;border:none;border-radius:6px;font-size:.85rem;cursor:pointer;height:34px;align-self:flex-end">
+                    <i class="fas fa-search"></i> 조회
+                </button>
+            </div>
+            <div id="attendancePreview" style="max-height:420px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:4px">
+                <p style="padding:20px;text-align:center;color:#aaa;font-size:.9rem">
+                    프로그램 또는 시간대를 선택하면 출석부 미리보기가 표시됩니다.
+                </p>
+            </div>
+            `;
+
+            // 앱 데이터 임시 저장
+            applications._attApps = apps;
+            applications._attComplexName = complexName;
+
+            const footer = `
+            <button class="btn-secondary" onclick="closeGlobalModal()">닫기</button>
+            <button class="btn-primary" onclick="applications._downloadAttendancePDF()"
+                style="background:#1abc9c;border-color:#1abc9c">
+                <i class="fas fa-file-pdf"></i> PDF 다운로드
+            </button>
+            `;
+
+            document.getElementById('globalModalBody').innerHTML = body;
+            document.getElementById('globalModalFooter').innerHTML = footer;
+
+            // 첫 번째 프로그램 기본 선택
+            if (programs.length) {
+                document.getElementById('attProgram').value = programs[0];
+                applications._renderAttendancePreview();
+            }
+
+        } catch (e) {
+            document.getElementById('globalModalBody').innerHTML =
+                `<p style="padding:20px;text-align:center;color:#e74c3c">불러오기 실패: ${e.message}</p>`;
+        }
+    },
+
+    // 출석부 미리보기 렌더링
+    _renderAttendancePreview() {
+        const prog  = document.getElementById('attProgram')?.value || '';
+        const time  = document.getElementById('attTime')?.value || '';
+        const month = document.getElementById('attMonth')?.value || '';
+        const apps  = applications._attApps || [];
+
+        // 필터링
+        let filtered = apps;
+        if (prog) filtered = filtered.filter(a => a.program_name === prog);
+        if (time) filtered = filtered.filter(a => a.preferred_time === time);
+
+        const container = document.getElementById('attendancePreview');
+        if (!container) return;
+
+        if (!filtered.length) {
+            container.innerHTML = '<p style="padding:20px;text-align:center;color:#999">해당 조건의 회원이 없습니다.</p>';
+            return;
+        }
+
+        // 요일·시간대별로 그룹화
+        const groups = {};
+        filtered.forEach(a => {
+            const key = `${a.program_name || '프로그램 미지정'}__${a.preferred_time || '시간 미지정'}`;
+            if (!groups[key]) groups[key] = { program: a.program_name || '프로그램 미지정', time: a.preferred_time || '시간 미지정', members: [] };
+            groups[key].members.push(a);
+        });
+
+        // 월 표시용
+        const [yr, mo] = month ? month.split('-') : [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0')];
+        const monthLabel = `${yr}년 ${parseInt(mo)}월`;
+
+        // 수업 횟수 계산 (해당 월 기준, 요일로 추정)
+        const dayCountInMonth = (year, month, dayOfWeek) => {
+            const date = new Date(year, month - 1, 1);
+            let count = 0;
+            while (date.getMonth() === month - 1) {
+                if (date.getDay() === dayOfWeek) count++;
+                date.setDate(date.getDate() + 1);
+            }
+            return count;
+        };
+
+        let html = '';
+        Object.values(groups).forEach(g => {
+            // 요일 추정 (프로그램명에서)
+            let sessionCount = '';
+            const progName = g.program;
+            if (progName.includes('월요일')) {
+                const cnt = dayCountInMonth(parseInt(yr), parseInt(mo), 1);
+                sessionCount = `(${monthLabel} 수업 ${cnt}회)`;
+            } else if (progName.includes('화') && progName.includes('목')) {
+                const tue = dayCountInMonth(parseInt(yr), parseInt(mo), 2);
+                const thu = dayCountInMonth(parseInt(yr), parseInt(mo), 4);
+                sessionCount = `(${monthLabel} 수업 ${tue+thu}회)`;
+            } else if (progName.includes('수') && progName.includes('금')) {
+                const wed = dayCountInMonth(parseInt(yr), parseInt(mo), 3);
+                const fri = dayCountInMonth(parseInt(yr), parseInt(mo), 5);
+                sessionCount = `(${monthLabel} 수업 ${wed+fri}회)`;
+            }
+
+            // 정렬: 동 → 호
+            g.members.sort((a, b) => {
+                const da = String(a.dong||''), db = String(b.dong||'');
+                if (da !== db) return da.localeCompare(db, 'ko');
+                return String(a.ho||'').localeCompare(String(b.ho||''), 'ko', {numeric:true});
+            });
+
+            html += `
+            <div style="margin-bottom:20px">
+                <div style="background:#1abc9c;color:#fff;padding:8px 14px;border-radius:6px 6px 0 0;font-weight:700;font-size:.92rem">
+                    ${g.program} · ${g.time} <span style="font-weight:400;font-size:.82rem;opacity:.9">${sessionCount}</span>
+                    <span style="float:right;font-size:.82rem;opacity:.9">${g.members.length}명</span>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+                    <thead>
+                        <tr style="background:#f0fdf9">
+                            <th style="padding:7px 10px;border:1px solid #d5f5e3;text-align:center;width:36px">No.</th>
+                            <th style="padding:7px 10px;border:1px solid #d5f5e3;text-align:center;width:90px">동/호수</th>
+                            <th style="padding:7px 10px;border:1px solid #d5f5e3;text-align:center;width:80px">이름</th>
+                            <th style="padding:7px 10px;border:1px solid #d5f5e3;text-align:center;width:110px">연락처</th>
+                            ${Array.from({length:6}, (_,i) => `<th style="padding:7px 5px;border:1px solid #d5f5e3;text-align:center;min-width:34px">${i+1}회</th>`).join('')}
+                            <th style="padding:7px 8px;border:1px solid #d5f5e3;text-align:center;min-width:50px">서명</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${g.members.map((m, idx) => `
+                        <tr style="${idx%2===0?'background:#fff':'background:#f9fffe'}">
+                            <td style="padding:8px 10px;border:1px solid #e8f8f5;text-align:center;color:#888">${idx+1}</td>
+                            <td style="padding:8px 10px;border:1px solid #e8f8f5;text-align:center">${m.dong||''}동 ${m.ho||''}호</td>
+                            <td style="padding:8px 10px;border:1px solid #e8f8f5;text-align:center;font-weight:600">${m.name||''}</td>
+                            <td style="padding:8px 10px;border:1px solid #e8f8f5;text-align:center;color:#555;font-size:.82rem">${fmtPhone(m.phone||'')}</td>
+                            ${Array.from({length:6}, () => `<td style="padding:8px 5px;border:1px solid #e8f8f5;text-align:center"></td>`).join('')}
+                            <td style="padding:8px;border:1px solid #e8f8f5"></td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>
+            </div>`;
+        });
+
+        container.innerHTML = html;
+    },
+
+    // 출석부 PDF 다운로드 (인쇄 창 활용)
+    _downloadAttendancePDF() {
+        const prog  = document.getElementById('attProgram')?.value || '';
+        const time  = document.getElementById('attTime')?.value || '';
+        const month = document.getElementById('attMonth')?.value || '';
+        const apps  = applications._attApps || [];
+        const complexName = applications._attComplexName || '';
+
+        // 필터링
+        let filtered = apps;
+        if (prog) filtered = filtered.filter(a => a.program_name === prog);
+        if (time) filtered = filtered.filter(a => a.preferred_time === time);
+
+        if (!filtered.length) { showToast('출력할 회원이 없습니다', 'error'); return; }
+
+        // 요일·시간대별 그룹화
+        const groups = {};
+        filtered.forEach(a => {
+            const key = `${a.program_name||''}__${a.preferred_time||''}`;
+            if (!groups[key]) groups[key] = { program: a.program_name||'프로그램 미지정', time: a.preferred_time||'시간 미지정', members: [] };
+            groups[key].members.push(a);
+        });
+
+        const [yr, mo] = month ? month.split('-') : [new Date().getFullYear(), String(new Date().getMonth()+1).padStart(2,'0')];
+        const monthLabel = `${yr}년 ${parseInt(mo)}월`;
+
+        const dayCountInMonth = (year, month, dayOfWeek) => {
+            const date = new Date(year, month - 1, 1);
+            let count = 0;
+            while (date.getMonth() === month - 1) {
+                if (date.getDay() === dayOfWeek) count++;
+                date.setDate(date.getDate() + 1);
+            }
+            return count;
+        };
+
+        // 수업 날짜 생성 (해당 월 요일별)
+        const getSessionDates = (progName, year, month) => {
+            const days = [];
+            if (progName.includes('월요일')) {
+                for (let d = new Date(year, month-1, 1); d.getMonth() === month-1; d.setDate(d.getDate()+1)) {
+                    if (d.getDay() === 1) days.push(`${month}/${d.getDate()}`);
+                }
+            } else if (progName.includes('화') && progName.includes('목')) {
+                for (let d = new Date(year, month-1, 1); d.getMonth() === month-1; d.setDate(d.getDate()+1)) {
+                    if (d.getDay() === 2 || d.getDay() === 4) days.push(`${month}/${d.getDate()}`);
+                }
+            } else if (progName.includes('수') && progName.includes('금')) {
+                for (let d = new Date(year, month-1, 1); d.getMonth() === month-1; d.setDate(d.getDate()+1)) {
+                    if (d.getDay() === 3 || d.getDay() === 5) days.push(`${month}/${d.getDate()}`);
+                }
+            }
+            return days;
+        };
+
+        let printContent = '';
+        const groupArr = Object.values(groups);
+
+        groupArr.forEach((g, gi) => {
+            g.members.sort((a, b) => {
+                const da = String(a.dong||''), db = String(b.dong||'');
+                if (da !== db) return da.localeCompare(db, 'ko');
+                return String(a.ho||'').localeCompare(String(b.ho||''), 'ko', {numeric:true});
+            });
+
+            const dates = getSessionDates(g.program, parseInt(yr), parseInt(mo));
+            const totalCols = Math.max(dates.length, 4); // 최소 4칸
+            const colWidth = totalCols > 0 ? Math.floor(280 / totalCols) : 30;
+
+            const dateHeaders = dates.map(d =>
+                `<th style="padding:5px 2px;text-align:center;border:1px solid #ccc;font-size:9pt;min-width:${colWidth}px;max-width:${colWidth}px">${d}</th>`
+            ).join('');
+
+            const dateCells = () => dates.map(() =>
+                `<td style="border:1px solid #ccc;height:28px"></td>`
+            ).join('');
+
+            const rows = g.members.map((m, idx) => `
+            <tr style="${idx%2===0?'':'background:#f9f9f9'}">
+                <td style="padding:5px 6px;border:1px solid #ccc;text-align:center;font-size:9pt">${idx+1}</td>
+                <td style="padding:5px 6px;border:1px solid #ccc;text-align:center;font-size:9pt">${m.dong||''}동 ${m.ho||''}호</td>
+                <td style="padding:5px 6px;border:1px solid #ccc;text-align:center;font-size:10pt;font-weight:bold">${m.name||''}</td>
+                <td style="padding:5px 6px;border:1px solid #ccc;text-align:center;font-size:8.5pt;color:#444">${fmtPhone(m.phone||'')}</td>
+                ${dateCells()}
+                <td style="border:1px solid #ccc;min-width:50px"></td>
+            </tr>`).join('');
+
+            printContent += `
+            <div style="margin-bottom:0;${gi > 0 ? 'page-break-before:always' : ''}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div>
+                        <h2 style="margin:0;font-size:14pt;color:#1a1a1a">${complexName} 출석부</h2>
+                        <p style="margin:3px 0 0;font-size:10pt;color:#444">
+                            ${g.program} &nbsp;·&nbsp; ${g.time} &nbsp;·&nbsp; ${monthLabel}
+                        </p>
+                    </div>
+                    <div style="text-align:right;font-size:9pt;color:#666">
+                        총 <strong>${g.members.length}</strong>명 &nbsp;|&nbsp; 수업 <strong>${dates.length||'?'}</strong>회
+                    </div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+                    <thead>
+                        <tr style="background:#1abc9c;color:#fff">
+                            <th style="padding:6px 4px;text-align:center;border:1px solid #ccc;width:32px;font-size:9pt">No.</th>
+                            <th style="padding:6px 4px;text-align:center;border:1px solid #ccc;width:80px;font-size:9pt">동/호수</th>
+                            <th style="padding:6px 4px;text-align:center;border:1px solid #ccc;width:64px;font-size:9pt">이름</th>
+                            <th style="padding:6px 4px;text-align:center;border:1px solid #ccc;width:90px;font-size:9pt">연락처</th>
+                            ${dateHeaders}
+                            <th style="padding:6px 4px;text-align:center;border:1px solid #ccc;width:54px;font-size:9pt">서명</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div style="margin-top:6px;font-size:8pt;color:#999;text-align:right">출력일: ${new Date().toLocaleDateString('ko-KR')}</div>
+            </div>`;
+        });
+
+        // 새 창에서 인쇄
+        const win = window.open('', '_blank', 'width=1000,height=700');
+        win.document.write(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>${complexName} 출석부 ${monthLabel}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; margin: 10mm 12mm; color: #111; }
+  @media print {
+    body { margin: 8mm 10mm; }
+    @page { size: A4 landscape; margin: 10mm; }
+    button { display: none !important; }
+  }
+  table { border-collapse: collapse; }
+</style>
+</head>
+<body>
+  <div style="text-align:right;margin-bottom:12px">
+    <button onclick="window.print()" style="padding:8px 18px;background:#1abc9c;color:#fff;border:none;border-radius:6px;font-size:11pt;cursor:pointer;margin-right:8px">
+      🖨️ 인쇄 / PDF 저장
+    </button>
+    <button onclick="window.close()" style="padding:8px 14px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:11pt;cursor:pointer">
+      닫기
+    </button>
+  </div>
+  ${printContent}
+</body>
+</html>`);
+        win.document.close();
+        win.focus();
     }
 };
