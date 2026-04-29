@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.6 출석부 프로그램별 수업요일 자동감지+달력 자동선택 */
+/** 신청 관리 페이지 - v3.7 출석부 요일파싱버그수정+수업횟수인당표기 */
 const applications = {
     data: [],
     filtered: [],
@@ -1689,29 +1689,38 @@ ${(() => {
     //     "월수금"         → [1,3,5]
     _parseProgramDows(name) {
         if (!name) return [];
-        const n = name.replace(/\s/g, '');
-        // 복합 패턴 먼저 (긴 것 먼저)
+        // Step 1: 'X요일' → 'X' 로 정규화 (월요일→월, 수요일→수 등)
+        let n = name.replace(/s/g, '')
+            .replace(/월요일/g,'월').replace(/화요일/g,'화')
+            .replace(/수요일/g,'수').replace(/목요일/g,'목')
+            .replace(/금요일/g,'금').replace(/토요일/g,'토')
+            .replace(/일요일/g,'일');
+        // Step 2: 요일이 아닌 단어에서 오탐 제거
+        // '수' 뒤에 업/강/련/영/준/행/시/학/료 가 오면 요일 아님
+        n = n.replace(/수(?=업|강|련|영|준|행|시|학|료)/g, '');
+        // '월' 뒤에 세/별/간/급/납/정/수 가 오면 요일 아님 (월세, 월정액 등)
+        n = n.replace(/월(?=세|별|간|급|납|정)/g, '');
+        // Step 3: 복합 패턴 (긴 것 먼저)
         const PATTERNS = [
-            { re: /월.*수.*금|수.*금.*월|월수금/,  dows: [1,3,5] },
-            { re: /화.*목.*토|화목토/,             dows: [2,4,6] },
-            { re: /월.*수|수.*월/,                 dows: [1,3]   },
-            { re: /화.*목|목.*화/,                 dows: [2,4]   },
-            { re: /수.*금|금.*수/,                 dows: [3,5]   },
-            { re: /월.*금|금.*월/,                 dows: [1,5]   },
-            { re: /화.*금|금.*화/,                 dows: [2,5]   },
-            { re: /목.*토|토.*목/,                 dows: [4,6]   },
+            { re: /월.*수.*금|월수금/,  dows: [1,3,5] },
+            { re: /화.*목.*토|화목토/,  dows: [2,4,6] },
+            { re: /월.*수/,             dows: [1,3]   },
+            { re: /화.*목|목.*화/,      dows: [2,4]   },
+            { re: /수.*금/,             dows: [3,5]   },
+            { re: /월.*금/,             dows: [1,5]   },
+            { re: /화.*금/,             dows: [2,5]   },
+            { re: /목.*토/,             dows: [4,6]   },
         ];
         for (const p of PATTERNS) {
             if (p.re.test(n)) return p.dows;
         }
-        // 단일 요일
+        // Step 4: 단일 요일
         if (/월/.test(n)) return [1];
         if (/화/.test(n)) return [2];
         if (/수/.test(n)) return [3];
         if (/목/.test(n)) return [4];
         if (/금/.test(n)) return [5];
         if (/토/.test(n)) return [6];
-        if (/일/.test(n)) return [0];
         return [];
     },
 
@@ -2114,7 +2123,7 @@ ${(() => {
                 '<div style="margin-bottom:18px">' +
                 '<div style="background:#1abc9c;color:#fff;padding:7px 14px;border-radius:6px 6px 0 0;font-weight:700;font-size:.9rem">' +
                 g.program + ' · ' + g.time +
-                (rawDates.length ? '<span style="font-weight:400;opacity:.85;font-size:.8rem;margin-left:6px">수업 ' + rawDates.length + '회</span>' : '') +
+                (rawDates.length ? '<span style="font-weight:400;opacity:.85;font-size:.8rem;margin-left:6px">월 ' + rawDates.length + '회</span>' : '') +
                 '<span style="float:right;font-size:.82rem;opacity:.9">' + g.members.length + '명</span></div>' +
                 '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem;min-width:460px">' +
                 '<thead><tr style="background:#f0fdf9">' +
@@ -2188,7 +2197,7 @@ ${(() => {
                 '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:5px;border-bottom:2px solid #1abc9c;padding-bottom:4px">' +
                 '<div><div style="font-size:15pt;font-weight:bold;color:#111">' + complexName + ' 출석부</div>' +
                 '<div style="font-size:9.5pt;color:#444;margin-top:2px">' + g.program + ' · ' + g.time + ' · ' + monthLabel + '</div></div>' +
-                '<div style="font-size:8.5pt;color:#666;text-align:right">총 <strong>' + g.members.length + '</strong>명 | 수업 <strong>' + dateCols.length + '</strong>회<br>' +
+                '<div style="font-size:8.5pt;color:#666;text-align:right">총 <strong>' + g.members.length + '</strong>명 | 인당 <strong>' + dateCols.length + '</strong>회<br>' +
                 '<span style="font-size:7.5pt">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</span></div></div>' +
                 '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
                 '<thead><tr style="background:#1abc9c;color:#fff">' +
