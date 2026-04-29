@@ -745,6 +745,23 @@ router.get('/settlement-report', async (req, res) => {
         const nextKey = `${nextYr}-${String(nextMo).padStart(2,'0')}`;
 
         // ────────────────────────────────────────────────
+        // 0. 프로그램 가격 매핑 (monthly_fee null 보완용)
+        // ────────────────────────────────────────────────
+        const progPriceMap = {}; // { program_name: price }
+        {
+            const { data: progs } = await sb
+                .from('programs')
+                .select('name, price')
+                .eq('complex_id', cid);
+            (progs || []).forEach(p => { if (p.name) progPriceMap[p.name] = p.price || 0; });
+        }
+        const getFee = (app) => {
+            const f = app.monthly_fee;
+            if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
+            return progPriceMap[app.program_name] || 0;
+        };
+
+        // ────────────────────────────────────────────────
         // A. 현재 수강자 전체 (status='approved')
         //    → 조회월 말일 기준 수강 중인 사람들
         // ────────────────────────────────────────────────
@@ -852,13 +869,14 @@ router.get('/settlement-report', async (req, res) => {
             const key = `${a.dong}_${a.ho}`;
             if (!donghoMap.has(key)) donghoMap.set(key, { dong: a.dong, ho: a.ho, items: [] });
             const isMid = midCancelKey.has(`${a.dong}_${a.ho}_${a.name}`);
+            const fee = getFee(a);
             donghoMap.get(key).items.push({
-                name:         a.name,
-                program_name: a.program_name,
+                name:           a.name,
+                program_name:   a.program_name,
                 preferred_time: a.preferred_time,
-                monthly_fee:  a.monthly_fee || null,
-                is_mid_cancel: isMid,
-                is_next_new:   nextNewList.some(n => n.id === a.id),
+                monthly_fee:    fee || null,
+                is_mid_cancel:  isMid,
+                is_next_new:    nextNewList.some(n => n.id === a.id),
             });
         });
 
@@ -872,7 +890,7 @@ router.get('/settlement-report', async (req, res) => {
         // 총 부과 금액 계산
         let totalCharge = 0;
         donghoRows.forEach(row => {
-            row.total_fee = row.items.reduce((sum, it) => sum + (it.monthly_fee || 0), 0);
+            row.total_fee = row.items.reduce((sum, it) => sum + (Number(it.monthly_fee) || 0), 0);
             totalCharge += row.total_fee;
         });
 
@@ -898,7 +916,7 @@ router.get('/settlement-report', async (req, res) => {
                 phone:          a.phone,
                 program_name:   a.program_name,
                 preferred_time: a.preferred_time,
-                monthly_fee:    a.monthly_fee || null,
+                monthly_fee:    getFee(a) || null,
                 approved_at:    (a.approved_at || a.created_at || '').slice(0, 10),
             })),
             mid_cancel:   midCancel,
@@ -910,7 +928,7 @@ router.get('/settlement-report', async (req, res) => {
                 phone:          a.phone,
                 program_name:   a.program_name,
                 preferred_time: a.preferred_time,
-                monthly_fee:    a.monthly_fee || null,
+                monthly_fee:    getFee(a) || null,
                 approved_at:    (a.approved_at || a.created_at || '').slice(0, 10),
                 note:           `${nextKey}부터 수강`,
             })),
