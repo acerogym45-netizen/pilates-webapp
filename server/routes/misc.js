@@ -691,6 +691,162 @@ router.get('/stats/dashboard', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════
+// 월별 정산 리포트 API
+// ═══════════════════════════════════════════════════════
+
+/**
+ * GET /api/settlement-report
+ * 월별 중도해지자 / 차월해지자 / 차월신규접수자 분류
+ * query: complexId, year, month
+ *
+ * 분류 기준:
+ *  - 중도해지자  : cancellations.status='approved' AND termination_month=해당월
+ *                  AND termination_date가 해당월 1일~말일 사이 (월 중간 해지)
+ *                  → 일할 계산 대상
+ *  - 차월해지자  : cancellations.status='approved' AND termination_month=해당월
+ *                  AND termination_date가 해당월 말일 (월말 해지, 다음달 수강 안 함)
+ *                  → 전액 부과 후 다음달 미부과
+ *  - 차월신규접수: applications.status='approved' AND approved_at이 해당월 내
+ *                  → 다음달부터 부과 대상 (이번달 신청 완료)
+ */
+router.get('/settlement-report', async (req, res) => {
+    try {
+        const { complexId, complexCode, year, month } = req.query;
+        if (!year || !month) return res.status(400).json({ success: false, error: 'year, month 필수' });
+
+        const sb = getSupabase();
+        const yr = parseInt(year), mo = parseInt(month);
+
+        // 단지 ID 확정
+        let cid = complexId;
+        if (!cid && complexCode) {
+            const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
+            if (cx) cid = cx.id;
+        }
+        if (!cid) return res.status(400).json({ success: false, error: 'complexId 또는 complexCode 필수' });
+
+        // 해당월 1일 / 말일
+        const monthStart = `${yr}-${String(mo).padStart(2,'0')}-01`;
+        const lastDay    = new Date(yr, mo, 0).getDate();
+        const monthEnd   = `${yr}-${String(mo).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+        const monthKey   = `${yr}-${String(mo).padStart(2,'0')}`;
+
+        // 다음달 키
+        const nextMo  = mo === 12 ? 1 : mo + 1;
+        const nextYr  = mo === 12 ? yr + 1 : yr;
+        const nextKey = `${nextYr}-${String(nextMo).padStart(2,'0')}`;
+
+        // ── 1. 해당월 승인된 해지 전체 (termination_month = 해당월)
+        const { data: cancels, error: cErr } = await sb
+            .from('cancellations')
+            .select('id, dong, ho, name, phone, program_name, preferred_time, termination_month, termination_date, refund_amount, total_sessions_in_month, attended_sessions, created_at, approved_at, status, request_type')
+            .eq('complex_id', cid)
+            .eq('status', 'approved')
+            .eq('termination_month', monthKey)
+            .order('termination_date', { ascending: true });
+        if (cErr) throw cErr;
+
+        // ── 2. 해당월 승인된 신규접수 (applications.status='approved', approved_at이 해당월 내)
+        //    created_at 기준으로 해당월 내 신규 승인된 것
+        const { data: newApps, error: aErr } = await sb
+            .from('applications')
+            .select('id, dong, ho, name, phone, program_name, preferred_time, status, monthly_fee, created_at, approved_at')
+            .eq('complex_id', cid)
+            .eq('status', 'approved')
+            .gte('approved_at', monthStart + 'T00:00:00')
+            .lte('approved_at', monthEnd   + 'T23:59:59')
+            .order('approved_at', { ascending: true });
+        if (aErr) {
+            // approved_at 컬럼 없으면 created_at으로 fallback
+            const { data: newApps2, error: aErr2 } = await sb
+                .from('applications')
+                .select('id, dong, ho, name, phone, program_name, preferred_time, status, monthly_fee, created_at')
+                .eq('complex_id', cid)
+                .eq('status', 'approved')
+                .gte('created_at', monthStart + 'T00:00:00')
+                .lte('created_at', monthEnd   + 'T23:59:59')
+                .order('created_at', { ascending: true });
+            if (aErr2) throw aErr2;
+            var newAppsData = newApps2 || [];
+        } else {
+            var newAppsData = newApps || [];
+        }
+
+        // ── 분류 처리
+        const midCancel  = []; // 중도해지자 (월 중간 해지 → 일할 계산)
+        const endCancel  = []; // 차월해지자 (월말 해지 → 다음달 미부과)
+
+        (cancels || []).forEach(c => {
+            const tDate = c.termination_date ? c.termination_date.slice(0,10) : null;
+            const isLastDay = tDate === monthEnd;
+
+            // 총 수업횟수 / 수강횟수 / 일할금액 계산
+            const totalSess   = c.total_sessions_in_month || 0;
+            const attendedSess= c.attended_sessions || 0;
+
+            // 수강료 추정: refund_amount 있으면 역산, 없으면 null
+            let monthlyFee = null;
+            if (c.refund_amount && totalSess > 0 && attendedSess < totalSess) {
+                // refund_amount = 환불액 = monthlyFee × (총-수강) / 총
+                monthlyFee = Math.round(c.refund_amount * totalSess / (totalSess - attendedSess));
+            }
+            const chargeAmt = (totalSess > 0 && monthlyFee)
+                ? Math.round(monthlyFee * attendedSess / totalSess)
+                : null;
+
+            const row = {
+                dong:          c.dong,
+                ho:            c.ho,
+                name:          c.name,
+                phone:         c.phone,
+                program_name:  c.program_name,
+                preferred_time:c.preferred_time,
+                termination_date: tDate,
+                total_sessions:   totalSess,
+                attended_sessions:attendedSess,
+                monthly_fee:      monthlyFee,
+                charge_amount:    chargeAmt,
+                refund_amount:    c.refund_amount,
+                note: ''
+            };
+
+            if (isLastDay) {
+                endCancel.push({ ...row, note: '월말해지-차월미부과' });
+            } else {
+                midCancel.push({ ...row, note: tDate ? `${tDate} 해지` : '해지일미상' });
+            }
+        });
+
+        // 차월신규접수: 해당월에 승인된 신규 → 다음달부터 부과
+        const nextApps = newAppsData.map(a => ({
+            dong:           a.dong,
+            ho:             a.ho,
+            name:           a.name,
+            phone:          a.phone,
+            program_name:   a.program_name,
+            preferred_time: a.preferred_time,
+            approved_at:    (a.approved_at || a.created_at || '').slice(0,10),
+            monthly_fee:    a.monthly_fee || null,
+            note:           `${nextKey}부터 수강`
+        }));
+
+        res.json({
+            success: true,
+            year: yr, month: mo,
+            monthKey, nextKey,
+            summary: {
+                mid_cancel_count:  midCancel.length,
+                end_cancel_count:  endCancel.length,
+                next_new_count:    nextApps.length,
+            },
+            mid_cancel:  midCancel,
+            end_cancel:  endCancel,
+            next_new:    nextApps,
+        });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ═══════════════════════════════════════════════════════
 // SMS 설정 관리
 // ═══════════════════════════════════════════════════════
 
