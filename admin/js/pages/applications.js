@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.7 출석부 요일파싱버그수정+수업횟수인당표기 */
+/** 신청 관리 페이지 - v3.8 출석부PDF그룹별날짜수정+시간표달력PDF */
 const applications = {
     data: [],
     filtered: [],
@@ -24,6 +24,9 @@ const applications = {
                     </button>
                     <button class="btn-sm" onclick="applications.showAttendanceModal()" style="background:#1abc9c;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
                         <i class="fas fa-clipboard-list"></i> 출석부
+                    </button>
+                    <button class="btn-sm" onclick="applications.showTimetableModal()" style="background:#3498db;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
+                        <i class="fas fa-calendar-alt"></i> 시간표
                     </button>
                     <button class="btn-secondary btn-sm" onclick="applications.showImportModal()">
                         <i class="fas fa-upload"></i> 가져오기
@@ -2144,10 +2147,12 @@ ${(() => {
         const time        = document.getElementById('attTime')?.value   || '';
         const apps        = applications._attApps || [];
         const complexName = applications._attComplexName || '';
-        const rawDates    = (applications._attCustomDates || []).slice().sort();
-        const dateCols    = rawDates.length
-            ? rawDates.map(k => applications._dateLabel(k))
-            : ['1회','2회','3회','4회'];
+        // 달력에서 수동 선택한 날짜 (기준)
+        const manualDates = (applications._attCustomDates || []).slice().sort();
+        // 월 정보: 달력 월 selector
+        const calMonthEl  = document.getElementById('attCalMonth');
+        const calMonthVal = calMonthEl ? calMonthEl.value : '';
+        const [calYr, calMo] = calMonthVal ? calMonthVal.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth()+1];
 
         let filtered = apps;
         if (prog) filtered = filtered.filter(a => a.program_name === prog);
@@ -2161,13 +2166,36 @@ ${(() => {
             groups[key].members.push(a);
         });
 
-        let monthLabel = '';
-        if (rawDates.length) {
-            const [y, m] = rawDates[0].split('-');
-            monthLabel = y + '년 ' + parseInt(m) + '월';
-        } else {
-            const n = new Date(); monthLabel = n.getFullYear() + '년 ' + (n.getMonth()+1) + '월';
-        }
+        const monthLabel = calYr + '년 ' + calMo + '월';
+
+        // 그룹별 날짜 계산 함수
+        // - 달력에서 수동 선택한 날짜가 있으면 해당 요일과 교집합으로 필터
+        // - 없으면 프로그램명에서 요일 감지 후 해당월 날짜 자동 계산
+        const getGroupDates = (programName) => {
+            const dows = applications._parseProgramDows(programName);
+            if (!dows.length) {
+                // 요일 감지 불가: 수동 선택 날짜 그대로 사용, 없으면 빈 4컬럼
+                return manualDates.length ? manualDates : null;
+            }
+            if (manualDates.length) {
+                // 수동 선택 날짜 중 해당 요일만 필터
+                const filtered2 = manualDates.filter(k => {
+                    const [y,m,d] = k.split('-').map(Number);
+                    return dows.includes(new Date(y,m-1,d).getDay());
+                });
+                return filtered2.length ? filtered2 : null;
+            }
+            // 수동 선택 없음: 해당 월에서 요일에 맞는 날짜 자동 계산
+            const lastDate = new Date(calYr, calMo, 0).getDate();
+            const dates = [];
+            for (let d = 1; d <= lastDate; d++) {
+                const date = new Date(calYr, calMo-1, d);
+                if (dows.includes(date.getDay())) {
+                    dates.push(calYr + '-' + String(calMo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
+                }
+            }
+            return dates.length ? dates : null;
+        };
 
         const sortM = arr => arr.sort((a, b) => {
             const da = String(a.dong||'').replace(/동$/,''), db = String(b.dong||'').replace(/동$/,'');
@@ -2178,6 +2206,11 @@ ${(() => {
         let printContent = '';
         Object.values(groups).forEach((g, gi) => {
             sortM(g.members);
+            // 그룹별 날짜 계산
+            const groupRaw  = getGroupDates(g.program) || [];
+            const dateCols  = groupRaw.length
+                ? groupRaw.map(k => applications._dateLabel(k))
+                : ['1회','2회','3회','4회'];
             // A4 landscape ~247mm 유효. 고정열: No(10)+동호(24)+이름(18)+연락처(18)+서명(16)=86mm → 나머지 161mm를 날짜열로
             const dateMm = Math.max(9, Math.floor(161 / dateCols.length));
             const thDates = dateCols.map(d =>
@@ -2208,9 +2241,10 @@ ${(() => {
                 thDates +
                 '<th style="padding:5px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:8.5pt">서명</th></tr></thead>' +
                 '<tbody>' + rows + '</tbody></table></div>';
-        });
+        });  // ← forEach 종료 (버그수정: win.open을 루프 밖으로)
 
         const win = window.open('','_blank','width=1150,height=780');
+        if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
         win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
             '<title>' + complexName + ' 출석부 ' + monthLabel + '</title>' +
             '<style>*{box-sizing:border-box}' +
@@ -2223,5 +2257,245 @@ ${(() => {
             printContent + '</body></html>');
         win.document.close();
         win.focus();
-    }
+    },
+
+    // ══════════════════════════════════════════════════════════════════
+    // 시간표 달력 PDF
+    // ══════════════════════════════════════════════════════════════════
+    async showTimetableModal() {
+        const complexId = Admin.selectedComplexId || Admin.complex?.id;
+        if (!complexId) { showToast('단지를 먼저 선택해주세요','error'); return; }
+
+        showGlobalModal('시간표 PDF 출력', '<div style="text-align:center;padding:40px"><i class="fas fa-spinner fa-spin fa-2x"></i></div>', '');
+
+        let apps = [];
+        try {
+            const res = await API.applications.list({ complexId, status: 'approved', limit: 500 });
+            apps = res.applications || res || [];
+        } catch(e) { showToast('데이터 로드 실패','error'); return; }
+
+        if (!apps.length) {
+            document.getElementById('globalModalBody').innerHTML = '<p style="text-align:center;padding:30px;color:#888">승인된 회원이 없습니다.</p>';
+            return;
+        }
+
+        const complexName = (Admin.role === 'superadmin' ? (Admin.complex?.name||'') : (Admin.complex?.name||''));
+        const now = new Date();
+        const defaultMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+        // 프로그램+시간 조합 목록
+        const combos = {};
+        apps.forEach(a => {
+            const k = (a.program_name||'') + '__' + (a.preferred_time||'');
+            if (!combos[k]) combos[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정', count: 0 };
+            combos[k].count++;
+        });
+
+        applications._ttApps = apps;
+        applications._ttComplexName = complexName;
+
+        const comboRows = Object.values(combos).map(c =>
+            '<tr style="border-bottom:1px solid #f0f0f0">' +
+            '<td style="padding:6px 10px;font-size:.88rem">' + c.program + '</td>' +
+            '<td style="padding:6px 10px;font-size:.88rem;color:#555">' + c.time + '</td>' +
+            '<td style="padding:6px 10px;font-size:.88rem;text-align:center;color:#1abc9c;font-weight:600">' + c.count + '명</td></tr>'
+        ).join('');
+
+        const body =
+            '<div style="padding:4px 0 8px">' +
+            '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">' +
+            '<label style="font-size:.88rem;color:#555">출력 월:</label>' +
+            '<input type="month" id="ttMonth" value="' + defaultMonth + '" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">' +
+            '<label style="font-size:.88rem;color:#555;margin-left:10px">표시 스타일:</label>' +
+            '<select id="ttStyle" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:.88rem">' +
+            '<option value="calendar">달력형</option>' +
+            '<option value="list">목록형</option>' +
+            '</select></div>' +
+            '<div style="background:#f8f9fa;border-radius:8px;padding:10px 14px;margin-bottom:10px">' +
+            '<div style="font-size:.82rem;color:#888;margin-bottom:6px">개설 강좌 목록 (승인 회원 기준)</div>' +
+            '<table style="width:100%;border-collapse:collapse">' +
+            '<thead><tr style="background:#eee"><th style="padding:5px 10px;text-align:left;font-size:.82rem">프로그램</th>' +
+            '<th style="padding:5px 10px;text-align:left;font-size:.82rem">시간</th>' +
+            '<th style="padding:5px 10px;text-align:center;font-size:.82rem">수강인원</th></tr></thead>' +
+            '<tbody>' + comboRows + '</tbody></table></div></div>';
+
+        const footer =
+            '<button onclick="closeGlobalModal()" style="padding:8px 18px;background:#95a5a6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem;margin-right:8px">닫기</button>' +
+            '<button onclick="applications._downloadTimetablePDF()" style="padding:8px 20px;background:#3498db;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem"><i class="fas fa-calendar-alt"></i> 시간표 PDF 다운로드</button>';
+
+        document.getElementById('globalModalBody').innerHTML = body;
+        document.getElementById('globalModalFooter').innerHTML = footer;
+    },
+
+    _downloadTimetablePDF() {
+        const monthEl = document.getElementById('ttMonth');
+        const styleEl = document.getElementById('ttStyle');
+        const monthVal = monthEl ? monthEl.value : (new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0'));
+        const printStyle = styleEl ? styleEl.value : 'calendar';
+        const [yr, mo] = monthVal.split('-').map(Number);
+        const complexName = applications._ttComplexName || '';
+        const apps = applications._ttApps || [];
+
+        // 강좌별 그룹화
+        const groups = {};
+        apps.forEach(a => {
+            const k = (a.program_name||'') + '__' + (a.preferred_time||'');
+            if (!groups[k]) groups[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정', members: [] };
+            groups[k].members.push(a);
+        });
+
+        const monthLabel = yr + '년 ' + mo + '월';
+        const DOW_KR = ['일','월','화','수','목','금','토'];
+        const DOW_COLOR = ['#e74c3c','#2c3e50','#2c3e50','#2c3e50','#2c3e50','#2c3e50','#2980b9'];
+        const DOW_BG    = ['#fdecea','#f8f9fa','#f8f9fa','#f8f9fa','#f8f9fa','#f8f9fa','#eaf3fb'];
+
+        // 달력 날짜 → 해당일의 강좌 목록 매핑
+        const firstDay = new Date(yr, mo-1, 1).getDay();
+        const lastDate = new Date(yr, mo, 0).getDate();
+
+        // 날짜별 강좌 계산
+        const dayClasses = {};  // key: day(1~31), value: [{program, time, count}]
+        Object.values(groups).forEach(g => {
+            const dows = applications._parseProgramDows(g.program);
+            if (!dows.length) return;
+            for (let d = 1; d <= lastDate; d++) {
+                const dow = new Date(yr, mo-1, d).getDay();
+                if (dows.includes(dow)) {
+                    if (!dayClasses[d]) dayClasses[d] = [];
+                    dayClasses[d].push({ program: g.program, time: g.time, count: g.members.length });
+                }
+            }
+        });
+
+        let content = '';
+
+        if (printStyle === 'calendar') {
+            // ── 달력형 ──────────────────────────────────────────
+            const cellH = 90; // px (화면용, 인쇄는 mm)
+            let calRows = '';
+            let cellIdx = 0;
+            let row = '<tr>';
+            // 첫 주 빈 칸
+            for (let i = 0; i < firstDay; i++) {
+                row += '<td style="border:1px solid #e0e0e0;height:24mm;vertical-align:top;background:#fafafa"></td>';
+                cellIdx++;
+            }
+            for (let d = 1; d <= lastDate; d++) {
+                const dow = new Date(yr, mo-1, d).getDay();
+                const isSun = dow === 0, isSat = dow === 6;
+                const dayColor = isSun ? '#e74c3c' : (isSat ? '#2980b9' : '#2c3e50');
+                const classes = dayClasses[d] || [];
+                const classHtml = classes.map(c => {
+                    const progDows = applications._parseProgramDows(c.program);
+                    const dotColor = '#1abc9c';
+                    return '<div style="margin:1px 2px;padding:2px 4px;background:#e8faf5;border-left:3px solid #1abc9c;border-radius:2px;font-size:7pt;line-height:1.3;overflow:hidden">' +
+                        '<div style="font-weight:600;color:#0e6655;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.program + '</div>' +
+                        '<div style="color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + c.time + ' · ' + c.count + '명</div></div>';
+                }).join('');
+                row += '<td style="border:1px solid #e0e0e0;height:24mm;vertical-align:top;padding:2px">' +
+                    '<div style="font-size:9pt;font-weight:700;color:' + dayColor + ';padding:1px 3px 2px">' + d + '</div>' +
+                    classHtml + '</td>';
+                cellIdx++;
+                if (cellIdx % 7 === 0) {
+                    row += '</tr>';
+                    calRows += row;
+                    row = '<tr>';
+                }
+            }
+            // 마지막 주 나머지 칸
+            if (cellIdx % 7 !== 0) {
+                while (cellIdx % 7 !== 0) {
+                    row += '<td style="border:1px solid #e0e0e0;height:24mm;vertical-align:top;background:#fafafa"></td>';
+                    cellIdx++;
+                }
+                row += '</tr>';
+                calRows += row;
+            }
+
+            const dowHeaders = DOW_KR.map((d, i) =>
+                '<th style="padding:6px 2px;text-align:center;font-size:9pt;color:' + DOW_COLOR[i] + ';background:' + DOW_BG[i] + ';border:1px solid #e0e0e0;width:14.28%">' + d + '</th>'
+            ).join('');
+
+            // 강좌 범례
+            const legendItems = Object.values(groups).map(g =>
+                '<span style="display:inline-flex;align-items:center;margin:2px 5px 2px 0;font-size:7.5pt">' +
+                '<span style="display:inline-block;width:10px;height:10px;background:#1abc9c;border-radius:2px;margin-right:3px"></span>' +
+                g.program + ' ' + g.time + ' (' + g.members.length + '명)</span>'
+            ).join('');
+
+            content =
+                '<div style="margin-bottom:8mm">' +
+                // 헤더
+                '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #3498db;padding-bottom:5px;margin-bottom:8px">' +
+                '<div>' +
+                '<div style="font-size:16pt;font-weight:bold;color:#1a252f">' + complexName + '</div>' +
+                '<div style="font-size:11pt;color:#3498db;font-weight:600;margin-top:1px">' + monthLabel + ' 강좌 시간표</div>' +
+                '</div>' +
+                '<div style="text-align:right;font-size:7.5pt;color:#888">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</div>' +
+                '</div>' +
+                // 달력
+                '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+                '<thead><tr>' + dowHeaders + '</tr></thead>' +
+                '<tbody>' + calRows + '</tbody></table>' +
+                // 범례
+                '<div style="margin-top:6px;padding:5px 8px;background:#f0faf8;border:1px solid #d1f0e8;border-radius:6px">' +
+                '<span style="font-size:7.5pt;color:#888;margin-right:6px">강좌:</span>' + legendItems + '</div>' +
+                '</div>';
+
+        } else {
+            // ── 목록형 ──────────────────────────────────────────
+            // 요일별로 강좌를 정리
+            const byDow = { 1:[], 2:[], 3:[], 4:[], 5:[], 6:[], 0:[] };
+            Object.values(groups).forEach(g => {
+                const dows = applications._parseProgramDows(g.program);
+                dows.forEach(d => { byDow[d].push(g); });
+                if (!dows.length) byDow[1].push(g); // 요일 불명 → 월요일
+            });
+            const dowOrder = [1,2,3,4,5,6,0];
+            let listHtml = '';
+            dowOrder.forEach(dow => {
+                if (!byDow[dow].length) return;
+                const dColor = DOW_COLOR[dow];
+                listHtml += '<div style="margin-bottom:8px">' +
+                    '<div style="background:' + (dow===0?'#e74c3c':(dow===6?'#2980b9':'#3498db')) + ';color:#fff;padding:5px 12px;border-radius:6px 6px 0 0;font-size:10pt;font-weight:700">' +
+                    DOW_KR[dow] + '요일 강좌</div>' +
+                    '<table style="width:100%;border-collapse:collapse">' +
+                    '<thead><tr style="background:#f0f4f8">' +
+                    '<th style="padding:5px 10px;text-align:left;border:1px solid #dde;font-size:8pt">프로그램</th>' +
+                    '<th style="padding:5px 10px;text-align:left;border:1px solid #dde;font-size:8pt">시간</th>' +
+                    '<th style="padding:5px 10px;text-align:center;border:1px solid #dde;font-size:8pt">수강 인원</th>' +
+                    '</tr></thead><tbody>';
+                byDow[dow].forEach((g, i) => {
+                    listHtml +=
+                        '<tr style="' + (i%2?'background:#fafafa':'') + '">' +
+                        '<td style="padding:6px 10px;border:1px solid #dde;font-size:9pt">' + g.program + '</td>' +
+                        '<td style="padding:6px 10px;border:1px solid #dde;font-size:9pt;color:#555">' + g.time + '</td>' +
+                        '<td style="padding:6px 10px;border:1px solid #dde;font-size:9pt;text-align:center;color:#1abc9c;font-weight:600">' + g.members.length + '명</td></tr>';
+                });
+                listHtml += '</tbody></table></div>';
+            });
+            content =
+                '<div style="display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #3498db;padding-bottom:5px;margin-bottom:10px">' +
+                '<div><div style="font-size:16pt;font-weight:bold;color:#1a252f">' + complexName + '</div>' +
+                '<div style="font-size:11pt;color:#3498db;font-weight:600;margin-top:1px">' + monthLabel + ' 강좌 시간표</div></div>' +
+                '<div style="text-align:right;font-size:7.5pt;color:#888">출력일: ' + new Date().toLocaleDateString('ko-KR') + '</div></div>' +
+                listHtml;
+        }
+
+        const win = window.open('','_blank','width=820,height=1060');
+        if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
+        win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
+            '<title>' + complexName + ' 시간표 ' + monthLabel + '</title>' +
+            '<style>*{box-sizing:border-box}' +
+            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:10mm 12mm;color:#111}' +
+            '@media print{body{margin:0}@page{size:A4 portrait;margin:10mm 12mm}.no-print{display:none!important}}' +
+            'table{border-collapse:collapse}' +
+            'td,th{word-break:break-all}</style></head><body>' +
+            '<div class="no-print" style="text-align:right;margin-bottom:10px">' +
+            '<button onclick="window.print()" style="padding:8px 20px;background:#3498db;color:#fff;border:none;border-radius:6px;font-size:11pt;cursor:pointer;margin-right:8px">🖨️ 인쇄 / PDF 저장</button>' +
+            '<button onclick="window.close()" style="padding:8px 14px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:11pt;cursor:pointer">닫기</button></div>' +
+            content + '</body></html>');
+        win.document.close();
+        win.focus();
+    },
 };
