@@ -50,7 +50,7 @@ const settlement = {
         resEl.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa"><i class="fas fa-spinner fa-spin fa-2x"></i><br><br>데이터 조회 중...</div>`;
 
         try {
-            const cid = getCurrentComplexId();
+            const cid = getEffectiveComplexId();
             const resp = await fetch(`/api/settlement-report?complexId=${cid}&year=${yr}&month=${mo}`);
             const json = await resp.json();
             if (!json.success) throw new Error(json.error);
