@@ -736,59 +736,64 @@ router.get('/settlement-report', async (req, res) => {
         const nextYr  = mo === 12 ? yr + 1 : yr;
         const nextKey = `${nextYr}-${String(nextMo).padStart(2,'0')}`;
 
-        // ── 1. 해당월 승인된 해지 전체 (termination_month = 해당월)
-        //    preferred_time 컬럼 없음 주의 - cancellations 테이블에는 없는 컬럼
-        let cancels = [], cErrFinal = null;
+        // ── 1. 해당월 승인된 해지 전체
+        //    select('*')로 실제 컬럼만 조회 후 JS에서 필터링 (컬럼 부재 오류 방지)
+        let cancels = [];
         {
-            // termination_month 컬럼 있는 경우 시도
+            // 1차 시도: termination_month 컬럼 기준
             const { data: c1, error: e1 } = await sb
                 .from('cancellations')
-                .select('id, dong, ho, name, phone, program_name, reason, termination_month, termination_date, refund_amount, total_sessions_in_month, attended_sessions, session_fee, billing_amount, created_at, approved_at, status, request_type')
+                .select('*')
                 .eq('complex_id', cid)
                 .eq('status', 'approved')
                 .eq('termination_month', monthKey)
-                .order('termination_date', { ascending: true });
-            if (e1) {
-                // termination_month 컬럼 없으면 approved_at 기준 fallback
+                .order('created_at', { ascending: true });
+
+            if (!e1) {
+                cancels = c1 || [];
+            } else {
+                // 2차 시도: created_at 기준 (termination_month 컬럼 없는 경우)
                 const { data: c2, error: e2 } = await sb
                     .from('cancellations')
-                    .select('id, dong, ho, name, phone, program_name, reason, refund_amount, created_at, approved_at, status, request_type')
+                    .select('*')
                     .eq('complex_id', cid)
                     .eq('status', 'approved')
-                    .gte('approved_at', monthStart + 'T00:00:00')
-                    .lte('approved_at', monthEnd   + 'T23:59:59')
-                    .order('approved_at', { ascending: true });
-                if (e2) { cErrFinal = e2; } else { cancels = c2 || []; }
-            } else {
-                cancels = c1 || [];
+                    .gte('created_at', monthStart + 'T00:00:00')
+                    .lte('created_at', monthEnd   + 'T23:59:59')
+                    .order('created_at', { ascending: true });
+                if (e2) throw e2;
+                cancels = c2 || [];
             }
         }
-        if (cErrFinal) throw cErrFinal;
 
-        // ── 2. 해당월 승인된 신규접수 (applications.status='approved', approved_at이 해당월 내)
-        //    created_at 기준으로 해당월 내 신규 승인된 것
-        const { data: newApps, error: aErr } = await sb
-            .from('applications')
-            .select('id, dong, ho, name, phone, program_name, preferred_time, status, monthly_fee, created_at, approved_at')
-            .eq('complex_id', cid)
-            .eq('status', 'approved')
-            .gte('approved_at', monthStart + 'T00:00:00')
-            .lte('approved_at', monthEnd   + 'T23:59:59')
-            .order('approved_at', { ascending: true });
-        if (aErr) {
-            // approved_at 컬럼 없으면 created_at으로 fallback
-            const { data: newApps2, error: aErr2 } = await sb
+        // ── 2. 해당월 승인된 신규접수
+        let newAppsData = [];
+        {
+            // 1차 시도: approved_at 기준
+            const { data: a1, error: e1 } = await sb
                 .from('applications')
-                .select('id, dong, ho, name, phone, program_name, preferred_time, status, monthly_fee, created_at')
+                .select('*')
                 .eq('complex_id', cid)
                 .eq('status', 'approved')
-                .gte('created_at', monthStart + 'T00:00:00')
-                .lte('created_at', monthEnd   + 'T23:59:59')
-                .order('created_at', { ascending: true });
-            if (aErr2) throw aErr2;
-            var newAppsData = newApps2 || [];
-        } else {
-            var newAppsData = newApps || [];
+                .gte('approved_at', monthStart + 'T00:00:00')
+                .lte('approved_at', monthEnd   + 'T23:59:59')
+                .order('approved_at', { ascending: true });
+
+            if (!e1) {
+                newAppsData = a1 || [];
+            } else {
+                // 2차 시도: created_at 기준
+                const { data: a2, error: e2 } = await sb
+                    .from('applications')
+                    .select('*')
+                    .eq('complex_id', cid)
+                    .eq('status', 'approved')
+                    .gte('created_at', monthStart + 'T00:00:00')
+                    .lte('created_at', monthEnd   + 'T23:59:59')
+                    .order('created_at', { ascending: true });
+                if (e2) throw e2;
+                newAppsData = a2 || [];
+            }
         }
 
         // ── 분류 처리
