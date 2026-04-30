@@ -882,9 +882,11 @@ router.get('/settlement-report', async (req, res) => {
         });
 
         // ────────────────────────────────────────────────
-        // B. 해지 전체 (cancellations.status='approved')
+        // B. 해지 전체 (cancellations.status='approved', request_type='cancel')
         //    termination_month = monthKey 기준 우선
         //    없으면 processed_at(승인일) 기준 fallback
+        //    ※ request_type='refund'(환불)는 해지 인원에서 제외
+        //    ※ request_type 컬럼이 없는 구버전 데이터는 기본값 'cancel' 로 취급
         // ────────────────────────────────────────────────
         let cancels = [];
         {
@@ -927,6 +929,12 @@ router.get('/settlement-report', async (req, res) => {
                 }
             }
         }
+        // request_type='refund'(환불) 는 해지 인원 집계에서 제외
+        // request_type 컬럼이 없는 구버전 레코드는 'cancel'로 간주
+        cancels = cancels.filter(c => {
+            const rt = c.request_type || 'cancel';
+            return rt === 'cancel';
+        });
 
         // ────────────────────────────────────────────────
         // C. 중도해지 / 차월해지 분류
