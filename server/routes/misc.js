@@ -512,6 +512,78 @@ router.post('/cancellations', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ── 해지자 일괄 등록 ─────────────────────────────────────────────────────────
+// POST /api/cancellations/bulk
+// body: { complex_id, items: [{ dong, ho, name, phone, program_name, termination_type, termination_date, termination_month }] }
+router.post('/cancellations/bulk', async (req, res) => {
+    try {
+        const { complex_id, items } = req.body;
+        if (!complex_id) return res.status(400).json({ success: false, error: 'complex_id 누락' });
+        if (!Array.isArray(items) || items.length === 0)
+            return res.status(400).json({ success: false, error: 'items 배열 필요' });
+
+        const sb = getSupabase();
+        const results = [];
+        const errors  = [];
+
+        for (const item of items) {
+            const { dong, ho, name, phone, program_name, termination_type, termination_date, termination_month } = item;
+            if (!dong || !ho || !name || !phone) {
+                errors.push({ item, reason: '필수 항목 누락 (dong/ho/name/phone)' });
+                continue;
+            }
+
+            // 이미 같은 월에 해지 등록된 건이 있으면 스킵
+            if (termination_month) {
+                const { data: existing } = await sb.from('cancellations')
+                    .select('id')
+                    .eq('complex_id', complex_id)
+                    .eq('dong', dong).eq('ho', ho).eq('name', name)
+                    .eq('termination_month', termination_month)
+                    .limit(1);
+                if (existing && existing.length > 0) {
+                    errors.push({ item, reason: '이미 해당 월에 해지 등록됨 (스킵)' });
+                    continue;
+                }
+            }
+
+            const isMid = termination_type === 'mid';   // 중도해지 vs 차월해지
+            const insertData = {
+                complex_id,
+                application_id: null,
+                dong, ho, name, phone,
+                program_name: program_name || '',
+                reason: isMid ? '중도해지 (일괄등록)' : '차월해지 (일괄등록)',
+                request_type: 'cancel',
+                status: 'approved',
+                processed_at: new Date().toISOString(),
+                termination_month: termination_month || null,
+                termination_date:  termination_date  || null,
+            };
+
+            let { data, error } = await sb.from('cancellations').insert(insertData).select().single();
+            if (error && error.message && error.message.includes('request_type')) {
+                const { request_type: _rt, ...fallback } = insertData;
+                const retry = await sb.from('cancellations').insert(fallback).select().single();
+                if (retry.error) { errors.push({ item, reason: retry.error.message }); continue; }
+                data = retry.data;
+            } else if (error) {
+                errors.push({ item, reason: error.message });
+                continue;
+            }
+            results.push(data);
+        }
+
+        res.status(201).json({
+            success: true,
+            inserted: results.length,
+            skipped:  errors.length,
+            errors,
+            data: results,
+        });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 router.put('/cancellations/:id', async (req, res) => {
     try {
         const {

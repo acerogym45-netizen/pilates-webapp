@@ -1,4 +1,4 @@
-/** 월별 정산 리포트 - v4.0
+/** 월별 정산 리포트 - v4.2
  *  엑셀 통합 2시트:
  *    시트1) 동호수별 부과내역  (동↑ 호↑, 전화번호 포함, 프로그램별 소계)
  *    시트2) 상세내역          (수강자현황 + 중도해지 + 차월해지 + 차월신규접수)
@@ -16,6 +16,7 @@
 const settlement = {
     _data:        null,
     _midEdits:    {},   // { cancellation_id: { attended, billing } } — 로컬 편집 상태
+    _bulkItems:   [],   // 일괄등록 파싱된 항목
     SESSION_FEE:  15000, // 회당 단가 (원)
     PENALTY_RATE: 0.10,  // 위약금 비율 (10%)
 
@@ -54,6 +55,82 @@ const settlement = {
               padding:8px 22px;background:#27ae60;color:#fff;border:none;border-radius:7px;font-size:.9rem;font-weight:700;cursor:pointer">
               <i class="fas fa-file-excel"></i> 엑셀 다운로드 (2시트 통합)
             </button>
+            <button onclick="settlement.openBulkModal()"
+              style="padding:8px 18px;background:#8e44ad;color:#fff;border:none;border-radius:7px;font-size:.9rem;font-weight:700;cursor:pointer">
+              <i class="fas fa-upload"></i> 해지자 일괄등록
+            </button>
+          </div>
+
+          <!-- 일괄등록 모달 -->
+          <div id="bulkCancelModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+               z-index:9999;overflow-y:auto;padding:20px">
+            <div style="max-width:860px;margin:0 auto;background:#fff;border-radius:14px;
+                        box-shadow:0 8px 40px rgba(0,0,0,.25);overflow:hidden">
+
+              <!-- 모달 헤더 -->
+              <div style="background:#8e44ad;color:#fff;padding:16px 22px;
+                          display:flex;align-items:center;justify-content:space-between">
+                <span style="font-size:1.05rem;font-weight:800">
+                  <i class="fas fa-upload" style="margin-right:8px"></i>해지자 일괄등록
+                </span>
+                <button onclick="settlement.closeBulkModal()"
+                  style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1">✕</button>
+              </div>
+
+              <!-- STEP 1: 등록 월 + 엑셀 업로드 -->
+              <div style="padding:20px 22px;border-bottom:1px solid #eee">
+                <div style="font-weight:700;font-size:.9rem;color:#555;margin-bottom:12px">
+                  <span style="background:#8e44ad;color:#fff;border-radius:50%;width:20px;height:20px;
+                    display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;margin-right:6px">1</span>
+                  등록 월 선택 &amp; 엑셀 파일 업로드
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                  <div>
+                    <label style="font-size:.82rem;color:#666;font-weight:600">해지 처리 월</label><br>
+                    <input type="month" id="bulkTermMonth"
+                      style="margin-top:4px;padding:7px 10px;border:1.5px solid #ddd;border-radius:7px;
+                             font-size:.9rem;font-weight:700;color:#333">
+                  </div>
+                  <div>
+                    <label style="font-size:.82rem;color:#666;font-weight:600">
+                      엑셀 파일 <span style="font-size:.72rem;font-weight:400;color:#999">(xlsx / cell)</span>
+                    </label><br>
+                    <input type="file" id="bulkFileInput" accept=".xlsx,.xls,.cell"
+                      onchange="settlement.onBulkFileChange(event)"
+                      style="margin-top:4px;font-size:.85rem">
+                  </div>
+                </div>
+                <div style="margin-top:10px;padding:10px 14px;background:#f9f0ff;border:1px solid #d8b4fe;
+                            border-radius:8px;font-size:.78rem;color:#6b21a8;line-height:1.7">
+                  <b>📌 파일 형식 안내</b><br>
+                  • 필수 컬럼: <b>동 / 호수 / 이름 / 전화번호 / 프로그램종류</b><br>
+                  • 선택 컬럼: <b>구분</b> (중도해지 / 차월해지 등), <b>해지일</b> (YYYY-MM-DD)<br>
+                  • 헤더 행이 포함된 일반 엑셀 형식 (보내주신 모집현황 파일 그대로 사용 가능)
+                </div>
+              </div>
+
+              <!-- STEP 2: 미리보기 -->
+              <div id="bulkPreviewArea" style="padding:20px 22px;border-bottom:1px solid #eee;display:none">
+                <div style="font-weight:700;font-size:.9rem;color:#555;margin-bottom:12px">
+                  <span style="background:#8e44ad;color:#fff;border-radius:50%;width:20px;height:20px;
+                    display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;margin-right:6px">2</span>
+                  파싱 결과 미리보기 — 등록할 항목을 확인하세요
+                </div>
+                <div id="bulkPreviewTable"></div>
+              </div>
+
+              <!-- 모달 푸터 -->
+              <div style="padding:16px 22px;display:flex;justify-content:flex-end;gap:10px">
+                <button onclick="settlement.closeBulkModal()"
+                  style="padding:9px 22px;background:#f0f0f0;border:none;border-radius:7px;
+                         font-size:.9rem;font-weight:600;cursor:pointer;color:#555">취소</button>
+                <button id="bulkSubmitBtn" onclick="settlement.submitBulk()" style="display:none;
+                  padding:9px 22px;background:#8e44ad;color:#fff;border:none;border-radius:7px;
+                  font-size:.9rem;font-weight:700;cursor:pointer">
+                  <i class="fas fa-check"></i> 확인 등록
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- 요약 뱃지 -->
@@ -480,6 +557,258 @@ const settlement = {
           </div>
           ${tableHtml}
         </div>`;
+    },
+
+    // ══════════════════════════════════════════════════════
+    // 해지자 일괄등록
+    // ══════════════════════════════════════════════════════
+    openBulkModal() {
+        // 현재 조회 월을 기본값으로 세팅
+        const monthVal = document.getElementById('settlementMonth')?.value || '';
+        const tm = document.getElementById('bulkTermMonth');
+        if (tm && !tm.value && monthVal) tm.value = monthVal;
+        document.getElementById('bulkCancelModal').style.display = 'block';
+    },
+
+    closeBulkModal() {
+        document.getElementById('bulkCancelModal').style.display = 'none';
+        // 초기화
+        const fi = document.getElementById('bulkFileInput');
+        if (fi) fi.value = '';
+        document.getElementById('bulkPreviewArea').style.display = 'none';
+        const sb = document.getElementById('bulkSubmitBtn');
+        if (sb) sb.style.display = 'none';
+        this._bulkItems = [];
+    },
+
+    // 엑셀 파일 → 파싱
+    async onBulkFileChange(evt) {
+        const file = evt.target.files?.[0];
+        if (!file) return;
+        try {
+            await this._loadSheetJS();
+            const XLSX = window.XLSX;
+            const ab   = await file.arrayBuffer();
+            const wb   = XLSX.read(ab, { type: 'array' });
+
+            // 모집현황 파일: 시트3 우선, 없으면 첫 시트
+            let wsName = wb.SheetNames[0];
+            if (wb.SheetNames.length >= 3) wsName = wb.SheetNames[2];  // 시트3
+            const ws   = wb.Sheets[wsName];
+            const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+            this._parseBulkRows(rows);
+        } catch(e) {
+            showToast('파일 파싱 오류: ' + e.message, 'error');
+            console.error(e);
+        }
+    },
+
+    // 행 배열 → _bulkItems 변환 + 미리보기 렌더
+    _parseBulkRows(rows) {
+        // 헤더 행 찾기 (동/호수/이름 포함한 행)
+        let headerIdx = -1;
+        let colMap    = {};  // { dong, ho, name, phone, program, gubun, date }
+
+        for (let i = 0; i < Math.min(rows.length, 10); i++) {
+            const r = rows[i].map(c => String(c).replace(/\s/g,''));
+            const dongIdx    = r.findIndex(c => c === '동');
+            const hoIdx      = r.findIndex(c => c === '호수');
+            const nameIdx    = r.findIndex(c => c === '이름');
+            if (dongIdx >= 0 && hoIdx >= 0 && nameIdx >= 0) {
+                headerIdx = i;
+                colMap = {
+                    dong:    dongIdx,
+                    ho:      hoIdx,
+                    name:    nameIdx,
+                    phone:   r.findIndex(c => c === '전화번호'),
+                    program: r.findIndex(c => c.includes('프로그램')),
+                    gubun:   r.findIndex(c => c === '구분'),
+                    date:    r.findIndex(c => c === '해지일'),
+                };
+                break;
+            }
+        }
+        if (headerIdx < 0) {
+            showToast('헤더를 찾을 수 없습니다. 동/호수/이름 열이 있는지 확인해주세요', 'error');
+            return;
+        }
+
+        const CANCEL_KEYWORDS = ['해지','중도해지','중도 해지','5월 수강 해지','차월해지'];
+        const MID_KEYWORDS    = ['중도해지','중도 해지','중도'];
+
+        const items = [];
+        for (let i = headerIdx + 1; i < rows.length; i++) {
+            const r    = rows[i];
+            const dong = String(r[colMap.dong] ?? '').replace(/동/g,'').trim();
+            const ho   = String(r[colMap.ho]   ?? '').replace(/호/g,'').trim();
+            const name = String(r[colMap.name] ?? '').trim();
+            if (!dong || !ho || !name) continue;
+            // 헤더 재등장 방지
+            if (dong === '동' || name === '이름') continue;
+
+            const phone   = colMap.phone   >= 0 ? String(r[colMap.phone]   ?? '').trim() : '';
+            const program = colMap.program >= 0 ? String(r[colMap.program] ?? '').trim() : '';
+            const gubun   = colMap.gubun   >= 0 ? String(r[colMap.gubun]   ?? '').trim() : '';
+            const dateRaw = colMap.date    >= 0 ? String(r[colMap.date]    ?? '').trim() : '';
+
+            // 구분 컬럼 없으면 전체 행을 해지자로 간주
+            // 구분 컬럼 있으면 해지 키워드 포함 행만
+            if (colMap.gubun >= 0 && gubun && !CANCEL_KEYWORDS.some(k => gubun.includes(k))) continue;
+
+            const isMid = MID_KEYWORDS.some(k => gubun.toLowerCase().includes(k.toLowerCase()));
+
+            // 해지일 정리 (숫자형 시리얼 → 날짜 변환)
+            let termDate = '';
+            if (dateRaw && dateRaw !== '' && dateRaw !== '0') {
+                const asNum = Number(dateRaw);
+                if (!isNaN(asNum) && asNum > 40000) {
+                    // Excel date serial → JS Date
+                    const d = new Date(Math.round((asNum - 25569) * 86400 * 1000));
+                    termDate = d.toISOString().slice(0, 10);
+                } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+                    termDate = dateRaw;
+                }
+            }
+
+            items.push({ dong, ho, name, phone, program, gubun, termDate, isMid, _selected: true });
+        }
+
+        this._bulkItems = items;
+        this._renderBulkPreview();
+    },
+
+    _renderBulkPreview() {
+        const area    = document.getElementById('bulkPreviewArea');
+        const tableEl = document.getElementById('bulkPreviewTable');
+        const submitBtn = document.getElementById('bulkSubmitBtn');
+
+        if (!this._bulkItems.length) {
+            tableEl.innerHTML = `<div style="color:#e74c3c;padding:12px">파싱된 해지자가 없습니다. 파일과 구분 컬럼을 확인해주세요.</div>`;
+            area.style.display = 'block';
+            if (submitBtn) submitBtn.style.display = 'none';
+            return;
+        }
+
+        const midCount = this._bulkItems.filter(i => i.isMid).length;
+        const endCount = this._bulkItems.length - midCount;
+
+        const thS = `padding:7px 8px;border:1px solid #ddd;font-size:.75rem;font-weight:700;
+                     background:#f7f7f7;white-space:nowrap;text-align:center`;
+        const thead = `<tr>
+          <th style="${thS}"><input type="checkbox" id="bulkChkAll" checked
+            onchange="settlement.toggleAllBulk(this.checked)"></th>
+          <th style="${thS}">동</th><th style="${thS}">호수</th><th style="${thS}">이름</th>
+          <th style="${thS}">전화번호</th><th style="${thS}">프로그램</th>
+          <th style="${thS}">구분</th><th style="${thS}">해지일</th>
+          <th style="${thS}">유형</th>
+        </tr>`;
+
+        const tbody = this._bulkItems.map((it, idx) => {
+            const tdS = `padding:5px 7px;border:1px solid #eee;font-size:.8rem;text-align:center;${idx%2?'background:#fafafa':''}`;
+            const badge = it.isMid
+                ? `<span style="background:#e74c3c;color:#fff;font-size:.68rem;padding:1px 7px;border-radius:10px">중도해지</span>`
+                : `<span style="background:#e67e22;color:#fff;font-size:.68rem;padding:1px 7px;border-radius:10px">차월해지</span>`;
+            return `<tr id="bulk-row-${idx}">
+              <td style="${tdS}"><input type="checkbox" ${it._selected ? 'checked' : ''}
+                onchange="settlement.toggleBulkRow(${idx}, this.checked)"></td>
+              <td style="${tdS}">${it.dong}</td>
+              <td style="${tdS}">${it.ho}</td>
+              <td style="${tdS};font-weight:600">${it.name}</td>
+              <td style="${tdS}">${it.phone}</td>
+              <td style="${tdS};font-size:.75rem">${it.program}</td>
+              <td style="${tdS};font-size:.72rem;color:#777">${it.gubun}</td>
+              <td style="${tdS}">${it.termDate || '-'}</td>
+              <td style="${tdS}">${badge}</td>
+            </tr>`;
+        }).join('');
+
+        tableEl.innerHTML = `
+          <div style="margin-bottom:8px;font-size:.82rem;color:#555">
+            총 <b>${this._bulkItems.length}</b>건 파싱됨
+            (<span style="color:#e74c3c">중도해지 ${midCount}건</span> /
+             <span style="color:#e67e22">차월해지 ${endCount}건</span>)
+            — 등록할 항목만 체크하세요
+          </div>
+          <div style="overflow-x:auto;max-height:340px;overflow-y:auto">
+            <table style="width:100%;border-collapse:collapse;min-width:680px">
+              <thead>${thead}</thead>
+              <tbody>${tbody}</tbody>
+            </table>
+          </div>`;
+
+        area.style.display = 'block';
+        if (submitBtn) submitBtn.style.display = '';
+    },
+
+    toggleAllBulk(checked) {
+        this._bulkItems.forEach((it, idx) => {
+            it._selected = checked;
+            const cb = document.querySelector(`#bulk-row-${idx} input[type=checkbox]`);
+            if (cb) cb.checked = checked;
+        });
+    },
+
+    toggleBulkRow(idx, checked) {
+        if (this._bulkItems[idx]) this._bulkItems[idx]._selected = checked;
+    },
+
+    // 확인 등록 실행
+    async submitBulk() {
+        const cid = getEffectiveComplexId();
+        if (!cid) { showToast('단지를 선택해주세요', 'error'); return; }
+
+        const termMonth = document.getElementById('bulkTermMonth')?.value;
+        if (!termMonth) { showToast('해지 처리 월을 선택해주세요', 'error'); return; }
+
+        const selected = this._bulkItems.filter(it => it._selected);
+        if (!selected.length) { showToast('등록할 항목을 선택해주세요', 'error'); return; }
+
+        const btn = document.getElementById('bulkSubmitBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 등록 중...'; }
+
+        try {
+            const items = selected.map(it => ({
+                dong:             it.dong,
+                ho:               it.ho,
+                name:             it.name,
+                phone:            it.phone || '-',
+                program_name:     it.program,
+                termination_type: it.isMid ? 'mid' : 'end',
+                termination_date: it.termDate || null,
+                termination_month: termMonth,
+            }));
+
+            const res  = await fetch('/api/cancellations/bulk', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ complex_id: cid, items }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || '등록 실패');
+
+            const msg = `✅ ${json.inserted}건 등록 완료` +
+                (json.skipped ? ` / ${json.skipped}건 스킵(중복)` : '');
+            showToast(msg, 'success');
+            this.closeBulkModal();
+
+            // 결과 상세 콘솔 출력
+            if (json.errors?.length) {
+                console.warn('[일괄등록 스킵/오류]', json.errors);
+            }
+
+            // 정산 리포트 새로고침
+            await this.load();
+
+        } catch(e) {
+            showToast('등록 오류: ' + e.message, 'error');
+            console.error(e);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check"></i> 확인 등록';
+            }
+        }
     },
 
     _parseDong(d) { return parseInt((d || '').replace(/[^0-9]/g, '')) || 0; },
