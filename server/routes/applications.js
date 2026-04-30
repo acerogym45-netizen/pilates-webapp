@@ -844,15 +844,16 @@ router.post('/:id/cancel-approved', async (req, res) => {
         }
 
         // ── 삭제 대신 status='cancelled' 로 변경 (수강 기록 보존) ──
-        // 이유: 취소 전까지의 수강 이력이 관리비 부과 근거로 필요
-        //       관리자 페이지 > 신청관리 > 해지 탭에서 cancelled 레코드 조회 가능
+        // cancel_type 구분:
+        //   'pre_start' = 수강 시작 전 신청 철회 (20~27일, 관리비 부과 없음, 정산 제외)
+        //   'approved'  = (구버전 호환용, pre_start 와 동일하게 취급)
+        //   → cancellations 테이블의 해지(3~10일 접수)와 완전히 별개
         const cancelledAt = new Date().toISOString();
-        // notes 컬럼에 취소 메타데이터 기록 (DB 스키마 변경 없이 보존)
         const cancelMeta = JSON.stringify({
             cancelled_at: cancelledAt,
             cancelled_by: 'user',
-            cancel_type: 'approved',
-            cancel_reason: '입주민 직접 취소 (20~27일 접수기간)'
+            cancel_type: 'pre_start',
+            cancel_reason: '입주민 신청 철회 (20~27일 접수기간, 수강 시작 전)'
         });
         const prevNotes = app.notes || '';
         const newNotes = prevNotes

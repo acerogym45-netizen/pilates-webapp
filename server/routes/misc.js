@@ -473,6 +473,21 @@ router.post('/cancellations', async (req, res) => {
     try {
         const { complex_id, application_id, dong, ho, name, phone, program_name, reason, request_type, refund_reason, refund_detail, reason_detail } = req.body;
         if (!complex_id || !dong || !ho || !name || !phone) return res.status(400).json({ success: false, error: '필수 항목 누락' });
+
+        // ── 입주민 해지신청 기간 체크 (3~10일만 허용) ──────────────────
+        // request_type='cancel' 이고 application_id 없는 경우 = 입주민 직접 신청
+        // 관리자 등록(application_id 있거나 bulk) 또는 환불은 기간 제한 없음
+        if ((request_type === 'cancel' || !request_type) && !application_id) {
+            const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+            const dayKst = nowKst.getUTCDate();
+            if (dayKst < 3 || dayKst > 10) {
+                return res.status(400).json({
+                    success: false,
+                    error: `해지 신청은 매월 3일~10일에만 가능합니다. (현재 ${dayKst}일)\n다음 해지 신청 기간에 다시 시도해 주세요.`
+                });
+            }
+        }
+
         const sb = getSupabase();
 
         // reason 필드 구성
@@ -793,7 +808,10 @@ router.get('/stats/dashboard', async (req, res) => {
  *               → 다음달 미부과 대상
  *
  *  [취소(excluded)] applications.status='cancelled'
- *               → 수강 시작 전 취소, 부과 없음, 해지 아님 → 집계 제외
+ *               → 수강 시작 전 신청 철회 (20~27일 접수기간 취소)
+ *               → notes 에 cancel_type='pre_start' 기록됨
+ *               → 부과 없음, 해지 아님 → 완전 집계 제외
+ *               ※ cancellations 테이블의 해지(3~10일)와 완전히 별개
  */
 router.get('/settlement-report', async (req, res) => {
     try {

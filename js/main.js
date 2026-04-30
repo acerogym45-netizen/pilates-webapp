@@ -1383,11 +1383,12 @@ async function loadMyManageList() {
                             <button onclick="confirmCancelApplication('${a.id}','${(a.program_name||'').replace(/'/g,"\\'")}','${a.status}')"
                                     style="padding:8px;background:#fef2f2;border:1.5px solid #ef4444;
                                            color:#ef4444;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer">
-                                <i class="fas fa-times-circle"></i> ${isWaiting ? '대기 취소' : '신청 취소'}
+                                <i class="fas fa-times-circle"></i> ${isWaiting ? '대기 취소' : '신청 철회'}
                             </button>
                         </div>` : `
                         <div style="text-align:center;font-size:.78rem;color:#9ca3af;padding:4px 0">
-                            <i class="fas fa-lock"></i> 취소·변경은 매월 20~27일에 가능합니다
+                            <i class="fas fa-lock"></i> 신청 철회·변경은 매월 20~27일에 가능합니다<br>
+                            <span style="font-size:.72rem;color:#c0c0c0">※ 수강 중 해지는 매월 3~10일 해지 신청 기간에 접수하세요</span>
                         </div>`}
                     </div>`;
                 }).join('')}
@@ -1405,14 +1406,20 @@ async function loadMyManageList() {
 }
 
 // 신청 취소 확인 (대기/승인 모두)
+// ※ 이 취소는 "수강 시작 전 신청 철회" 입니다.
+//   - 수강을 중단하는 "해지"(매월 3~10일)와 완전히 다릅니다.
+//   - 관리비 부과 없음, 정산 집계 제외.
 async function confirmCancelApplication(appId, programName, status) {
     const isWaiting = (status === 'waiting');
     const phone4 = window._managePhone4;
     if (!phone4) { alert('먼저 전화번호를 입력하여 조회해 주세요.'); return; }
 
     const confirmed = confirm(
-        `[${programName}] ${isWaiting ? '대기 신청' : '수강 신청'}을 취소하시겠습니까?\n\n` +
-        (isWaiting ? '취소하면 대기 순번이 제거됩니다.' : '취소하면 다음 달 수강이 종료됩니다.\n다시 신청하려면 접수 기간(20~27일)에 신청하세요.')
+        isWaiting
+            ? `[${programName}] 대기 신청을 취소하시겠습니까?\n\n취소하면 대기 순번이 제거됩니다.`
+            : `[${programName}] 신청을 철회하시겠습니까?\n\n` +
+              `※ 이 기능은 수강 시작 전 신청을 철회하는 것입니다.\n` +
+              `수강 중 해지는 매월 3일~10일 해지 신청 기간에 별도 접수하세요.`
     );
     if (!confirmed) return;
 
