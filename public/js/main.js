@@ -30,20 +30,16 @@ function setupEventListeners() {
     const form = document.getElementById('contractForm');
     form.addEventListener('submit', handlePage1Submit);
     
-    // Phone number formatting
+    // Phone number formatting (oninput 속성으로도 등록되어 있으나 누락 방지용 유지)
     const phoneInput = document.getElementById('phone');
-    phoneInput.addEventListener('input', formatPhoneNumber);
+    if (phoneInput) phoneInput.addEventListener('input', formatPhoneNumber);
     
     // Update time slots when program changes
     const lessonTypeSelect = document.getElementById('lessonType');
     if (lessonTypeSelect) {
         lessonTypeSelect.addEventListener('change', function() {
-            // Reset time slot selection
             const timeSlotSelect = document.getElementById('preferredTime');
-            if (timeSlotSelect) {
-                timeSlotSelect.value = '';
-            }
-            // Update options
+            if (timeSlotSelect) timeSlotSelect.value = '';
             updateTimeSlotOptions();
         });
     }
@@ -63,15 +59,62 @@ function setSignatureDate() {
 
 // Format phone number
 function formatPhoneNumber(e) {
-    let value = e.target.value.replace(/[^0-9]/g, '');
-    
+    const target = e ? e.target : document.getElementById('phone');
+    if (!target) return;
+    let value = target.value.replace(/[^0-9]/g, '');
     if (value.length <= 3) {
-        e.target.value = value;
+        target.value = value;
     } else if (value.length <= 7) {
-        e.target.value = value.slice(0, 3) + '-' + value.slice(3);
+        target.value = value.slice(0, 3) + '-' + value.slice(3);
     } else {
-        e.target.value = value.slice(0, 3) + '-' + value.slice(3, 7) + '-' + value.slice(7, 11);
+        target.value = value.slice(0, 3) + '-' + value.slice(3, 7) + '-' + value.slice(7, 11);
     }
+}
+
+// ── 입력 확인 필드 일치 검사 ──────────────────────────────────────────────────
+function checkConfirmMatch(id1, id2, wrapId) {
+    const v1   = (document.getElementById(id1)?.value  || '').trim();
+    const v2   = (document.getElementById(id2)?.value  || '').trim();
+    const inp2 = document.getElementById(id2);
+    const wrap = document.getElementById(wrapId);
+    if (!inp2 || !wrap) return;
+    if (!v2) {
+        inp2.classList.remove('field-mismatch', 'field-match');
+        wrap.classList.remove('mismatch');
+        return;
+    }
+    if (v1 === v2) {
+        inp2.classList.remove('field-mismatch');
+        inp2.classList.add('field-match');
+        wrap.classList.remove('mismatch');
+    } else {
+        inp2.classList.remove('field-match');
+        inp2.classList.add('field-mismatch');
+        wrap.classList.add('mismatch');
+    }
+}
+
+function allConfirmFieldsMatch() {
+    const pairs = [
+        { id1: 'dong',  id2: 'dongConfirm',  label: '동' },
+        { id1: 'ho',    id2: 'hoConfirm',    label: '호수' },
+        { id1: 'phone', id2: 'phoneConfirm', label: '전화번호' },
+    ];
+    for (const { id1, id2, label } of pairs) {
+        const v1 = (document.getElementById(id1)?.value  || '').trim();
+        const v2 = (document.getElementById(id2)?.value  || '').trim();
+        if (!v2) {
+            alert(`${label} 확인란을 입력해 주세요.\n\n관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.`);
+            document.getElementById(id2)?.focus();
+            return false;
+        }
+        if (v1 !== v2) {
+            alert(`${label}이(가) 일치하지 않습니다.\n\n관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.`);
+            document.getElementById(id2)?.focus();
+            return false;
+        }
+    }
+    return true;
 }
 
 // Handle page 1 form submission (move to page 2)
@@ -126,7 +169,10 @@ function handlePage1Submit(e) {
             return;
         }
     }
-    
+
+    // ── 동/호수/전화번호 확인 필드 일치 검증 ──────────────────────────────────
+    if (!allConfirmFieldsMatch()) return;
+
     // Move to page 2
     goToPage2();
 }
