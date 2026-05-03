@@ -8,7 +8,6 @@ scripts/
 migrations/
 dist/
 src/
-public/
 server.js
 supabase_migration.sql
 vite.config.ts
