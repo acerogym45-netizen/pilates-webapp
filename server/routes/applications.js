@@ -591,6 +591,26 @@ router.put('/:id', async (req, res) => {
         if (transfer_memo !== undefined)      updates.transfer_memo = transfer_memo;
         if (transfer_date !== undefined)      updates.transfer_date = transfer_date;
 
+        // ── cancelled 직접 변경 방어 로직 ─────────────────────────────────────
+        // applications 상태를 직접 cancelled로 바꾸려면 반드시 cancellations 테이블에
+        // 해당 신청(application_id 또는 phone+complex_id 매칭)이 있어야 함.
+        // 정산 작업 중 실수로 일괄 cancelled 처리하는 사고(2026-04-30 사례) 재발 방지.
+        if (status === 'cancelled' && current.status !== 'cancelled') {
+            const { data: cancelRecord, error: cancelCheckErr } = await sb
+                .from('cancellations')
+                .select('id, status')
+                .or(`application_id.eq.${req.params.id},and(phone.eq.${current.phone || ''},complex_id.eq.${current.complex_id || ''})`)
+                .limit(1);
+
+            if (!cancelCheckErr && (!cancelRecord || cancelRecord.length === 0)) {
+                return res.status(400).json({
+                    success: false,
+                    error: `[차단] cancellations 테이블에 해지 신청 기록이 없습니다. 해지 처리는 반드시 해지 관리 탭에서 먼저 등록하세요. (신청자: ${current.name}, ${current.dong} ${current.ho})`,
+                    blocked: true
+                });
+            }
+        }
+
         // ── 관리자 편집 변경 이력 자동 기록 ──────────────────────────
         const editedAt = new Date().toISOString();
         const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
@@ -1110,8 +1130,17 @@ router.post('/:id/change-time', async (req, res) => {
 
         // ── 변경 이력 notes 컬럼에 누적 저장 ───────────────────────────────
         const changed = [];
-        if (targetProgram.name !== oldProgramName)   changed.push(`프로그램: ${oldProgramName} → ${targetProgram.name}`);
-        if (new_preferred_time !== oldTime)           changed.push(`시간대: ${oldTime} → ${new_preferred_time}`);
+        const isProgramChange = targetProgram.name !== oldProgramName;
+        const isTimeChange    = new_preferred_time !== oldTime;
+
+        if (isProgramChange) changed.push(`요일: ${oldProgramName} → ${targetProgram.name}`);
+        if (isTimeChange)    changed.push(`시간대: ${oldTime} → ${new_preferred_time}`);
+
+        // 태그 구분: 요일만 변경 → [요일변경], 시간대만 변경 → [시간변경], 둘 다 → [요일+시간변경]
+        let changeTag = '[변경]';
+        if (isProgramChange && isTimeChange)  changeTag = '[요일+시간변경]';
+        else if (isProgramChange)             changeTag = '[요일변경]';
+        else if (isTimeChange)                changeTag = '[시간변경]';
 
         const changeMeta = JSON.stringify({
             changed_at:       changedAt,
@@ -1124,8 +1153,8 @@ router.post('/:id/change-time', async (req, res) => {
         });
         const prevNotes = app.notes || '';
         const newNotes  = prevNotes
-            ? prevNotes + '\n[변경] ' + changeMeta
-            : '[변경] ' + changeMeta;
+            ? prevNotes + `\n${changeTag} ` + changeMeta
+            : `${changeTag} ` + changeMeta;
 
         // 변경 실행 (notes에 이력 포함)
         const { error: updateErr } = await sb

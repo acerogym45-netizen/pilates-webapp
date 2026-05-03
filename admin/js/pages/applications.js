@@ -1258,13 +1258,41 @@ ${(() => {
     },
 
     async changeStatus(id, status) {
+        // ── cancelled 직접 변경 사전 경고 ─────────────────────────────────────
+        // 서버에서 cancellations 테이블 확인 후 차단하지만, 클라이언트에서도
+        // 한 번 더 확인 대화상자를 띄워 실수 방지 (2026-04-30 사례 재발 방지)
+        if (status === 'cancelled') {
+            const a = this.data.find(x => x.id === id);
+            const name = a ? `${a.name} (${a.dong || ''} ${a.ho || ''})` : id;
+            const confirmed = await new Promise(resolve => {
+                showConfirm(
+                    '⚠️ 해지 처리 확인',
+                    `${name} 을(를) 직접 해지 처리하려 합니다.\n\n` +
+                    `반드시 [해지 관리 탭]에서 해지 신청이 먼저 등록되어 있어야 합니다.\n` +
+                    `시간대/요일 변경자를 해지로 처리하는 실수를 주의하세요.\n\n` +
+                    `계속하시겠습니까?`,
+                    () => resolve(true),
+                    () => resolve(false)
+                );
+            });
+            if (!confirmed) return;
+        }
+
         try {
             await API.applications.update(id, { status });
             closeGlobalModal();
             showToast(`상태가 "${statusLabel(status)}"으로 변경되었습니다`);
             await this.load();
             loadBadges();
-        } catch (e) { showToast('변경 실패: ' + e.message, 'error'); }
+        } catch (e) {
+            // 서버 차단 응답 (blocked: true) 시 상세 안내
+            let msg = e.message || '변경 실패';
+            if (msg.includes('[차단]')) {
+                showToast(msg, 'error');
+            } else {
+                showToast('변경 실패: ' + msg, 'error');
+            }
+        }
     },
 
     // 취소 메타데이터 파싱 (notes 컬럼에서 [취소] JSON 블록 추출)
