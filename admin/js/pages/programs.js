@@ -118,7 +118,24 @@ const programs = {
             </div>
             <div class="form-group"><label>설명</label><textarea id="pDesc" rows="3">${p ? escHtml(p.description||'') : ''}</textarea></div>
             <div class="form-group"><label>표시 순서</label><input type="number" id="pOrder" value="${p?.display_order||0}"></div>
-            ${p ? `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="pActive" ${p.is_active?'checked':''}><span>활성화 <small style="color:#888;font-weight:normal">(비활성 시 신규 접수만 차단 · 기존 수강자 해지 신청 가능)</small></span></label></div>` : ''}` ;
+            ${p ? `
+            <div class="form-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="pActive" ${p.is_active?'checked':''}>
+                    <span>활성화 <small style="color:#888;font-weight:normal">(비활성 시 신규 접수만 차단 · 기존 수강자 해지 신청 가능)</small></span>
+                </label>
+            </div>
+            <div class="form-group" id="showOnInactiveGroup" style="${p.is_active ? 'display:none' : ''};margin-left:16px;padding:10px 14px;background:#fff8e1;border:1px solid #ffe082;border-radius:8px">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="pShowOnInactive" ${p.show_on_inactive !== false ? 'checked' : ''}>
+                    <span style="font-size:.88rem">입주민 페이지에 표시
+                        <small style="color:#888;font-weight:normal;display:block;margin-top:2px">
+                            체크 시: 비활성이어도 신청폼에 프로그램이 보임 (신규접수 차단 안내 표시)<br>
+                            체크 해제 시: 입주민 페이지에서 완전 숨김 (관리자 화면에는 항상 표시)
+                        </small>
+                    </span>
+                </label>
+            </div>` : ''}` ;
         const footer = `
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
             <button class="btn-primary" onclick="programs.save('${p?.id||''}')"><i class="fas fa-save"></i> 저장</button>`;
@@ -128,6 +145,15 @@ const programs = {
         slots.forEach(s => {
             if (!PRESET_TIMES.includes(s)) programs._addCustomSlotCheckbox(s, true);
         });
+
+        // pActive 토글 시 showOnInactiveGroup 표시/숨김
+        const pActiveEl = document.getElementById('pActive');
+        const showGrp   = document.getElementById('showOnInactiveGroup');
+        if (pActiveEl && showGrp) {
+            pActiveEl.addEventListener('change', () => {
+                showGrp.style.display = pActiveEl.checked ? 'none' : '';
+            });
+        }
     },
 
     /** 유형 변경 시 시간대 섹션 토글 */
@@ -185,6 +211,8 @@ const programs = {
             if (id) {
                 const activeEl = document.getElementById('pActive');
                 if (activeEl) data.is_active = activeEl.checked;
+                const showOnInactiveEl = document.getElementById('pShowOnInactive');
+                if (showOnInactiveEl) data.show_on_inactive = showOnInactiveEl.checked;
                 await API.programs.update(id, data);
             } else {
                 // 단지 ID: hidden input 우선, 없으면 Admin.complex.id

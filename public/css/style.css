@@ -512,3 +512,29 @@ input.field-match {
     20%      { transform: translateX(-4px); }
     60%      { transform: translateX(4px); }
 }
+
+/* ── 비활성 프로그램 카드 ── */
+.program-card-inactive {
+    background: #f7f7f7;
+    border: 1.5px dashed #ccc !important;
+}
+.program-badge-inactive {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #e0e0e0;
+    color: #888;
+    border-radius: 20px;
+    font-size: .75rem;
+    font-weight: 600;
+}
+.program-inactive-notice {
+    margin-top: 8px;
+    padding: 7px 10px;
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 7px;
+    font-size: .78rem;
+    color: #795548;
+    line-height: 1.5;
+}
+.program-inactive-notice i { margin-right: 4px; }

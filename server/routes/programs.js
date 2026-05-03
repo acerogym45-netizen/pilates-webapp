@@ -15,9 +15,9 @@ router.get('/', async (req, res) => {
 
         if (complexId)           query = query.eq('complex_id', complexId);
         if (complexCode)         query = query.eq('complexes.code', complexCode);
-        // activeOnly=true → 활성 프로그램만 (신규 접수 드롭다운용)
-        // includeInactive=true → 비활성 포함 전체 (해지 신청 드롭다운 / 관리자 현황용)
-        // 둘 다 없으면 → 전체 반환 (기존 동작 유지)
+        // activeOnly=true  → 활성만 (신규 접수용)
+        // includeInactive=true → 비활성 포함 전체 (입주민 해지 드롭다운 / 관리자 현황용)
+        // 둘 다 없으면 → 전체 반환
         if (activeOnly === 'true' && includeInactive !== 'true') {
             query = query.eq('is_active', true);
         }
@@ -88,16 +88,20 @@ router.post('/', async (req, res) => {
 // ── 프로그램 수정 ─────────────────────────────────────────────
 router.put('/:id', async (req, res) => {
     try {
-        const { name, type, description, days, time_slots, price, capacity, display_order, is_active } = req.body;
+        const { name, type, description, days, time_slots, price, capacity, display_order, is_active, show_on_inactive } = req.body;
         const sb = getSupabase();
+        const updateObj = {
+            name, type, description, days,
+            time_slots: Array.isArray(time_slots) ? time_slots : [],
+            price, capacity, display_order,
+            is_active: is_active !== undefined ? Boolean(is_active) : true
+        };
+        // show_on_inactive: 비활성 상태일 때도 입주민 페이지에 표시할지 여부
+        // undefined이면 DB 기본값(true) 유지
+        if (show_on_inactive !== undefined) updateObj.show_on_inactive = Boolean(show_on_inactive);
         const { data, error } = await sb
             .from('programs')
-            .update({
-                name, type, description, days,
-                time_slots: Array.isArray(time_slots) ? time_slots : [],
-                price, capacity, display_order,
-                is_active: is_active !== undefined ? Boolean(is_active) : true
-            })
+            .update(updateObj)
             .eq('id', req.params.id)
             .select()
             .single();
