@@ -99,11 +99,10 @@ router.get('/program-summary', async (req, res) => {
             return res.json({ success: true, data: [], warning: '단지를 선택해주세요' });
         }
 
-        // 활성 프로그램 목록 조회 (해당 단지만)
+        // 전체 프로그램 목록 조회 (활성 + 비활성 모두 — 해지/현황 파악용)
         const { data: rawPrograms, error: progErr } = await sb
             .from('programs')
-            .select('id, name, capacity, time_slots, price, display_order')
-            .eq('is_active', true)
+            .select('id, name, capacity, time_slots, price, display_order, is_active')
             .eq('complex_id', cxId)          // ← 단지 필터 필수
             .order('display_order')
             .order('name');
@@ -191,6 +190,7 @@ router.get('/program-summary', async (req, res) => {
                 program_name:          prog.name,
                 program_price:         prog.price || 0,
                 estimated_monthly_fee: prog.price || 0,
+                is_active:             prog.is_active !== false,
                 capacity,
                 total_approved:        approved.length,
                 total_waiting:         waiting.length,

@@ -59,26 +59,34 @@ router.get('/:id', async (req, res) => {
 // ── 프로그램 생성 ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
     try {
-        const { complex_id, name, type, description, days, time_slots, price, capacity, display_order } = req.body;
+        const { complex_id, name, type, description, days, time_slots, price, capacity, display_order, show_on_inactive } = req.body;
         if (!complex_id || !name || !type) return res.status(400).json({ success: false, error: 'complex_id, name, type 필수' });
 
         const sb = getSupabase();
-        const { data, error } = await sb
-            .from('programs')
-            .insert({
-                complex_id, name, type,
-                description: description || '',
-                days: days || '',
-                time_slots: Array.isArray(time_slots) ? time_slots : [],
-                price: price || 0,
-                capacity: capacity || 6,
-                display_order: display_order || 0
-            })
-            .select()
-            .single();
+        const insertObj = {
+            complex_id, name, type,
+            description: description || '',
+            days: days || '',
+            time_slots: Array.isArray(time_slots) ? time_slots : [],
+            price: price || 0,
+            capacity: capacity || 6,
+            display_order: display_order || 0
+        };
+        // show_on_inactive 컬럼이 있으면 포함
+        if (show_on_inactive !== undefined) insertObj.show_on_inactive = Boolean(show_on_inactive);
+
+        let { data, error } = await sb.from('programs').insert(insertObj).select().single();
+
+        // 컬럼 없으면 제거 후 재시도
+        if (error && error.message && error.message.includes('show_on_inactive')) {
+            delete insertObj.show_on_inactive;
+            const fallback = await sb.from('programs').insert(insertObj).select().single();
+            data  = fallback.data;
+            error = fallback.error;
+        }
 
         if (error) throw sbErr(error, 'POST /programs');
-        const result = { ...data, time_slots: Array.isArray(data.time_slots) ? data.time_slots : [] };
+        const result = { ...data, time_slots: Array.isArray(data.time_slots) ? data.time_slots : [], show_on_inactive: data.show_on_inactive !== undefined ? data.show_on_inactive : true };
         res.status(201).json({ success: true, data: result });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -96,18 +104,40 @@ router.put('/:id', async (req, res) => {
             price, capacity, display_order,
             is_active: is_active !== undefined ? Boolean(is_active) : true
         };
+
         // show_on_inactive: 비활성 상태일 때도 입주민 페이지에 표시할지 여부
-        // undefined이면 DB 기본값(true) 유지
+        // 컬럼이 DB에 없으면 무시 (에러 방지)
         if (show_on_inactive !== undefined) updateObj.show_on_inactive = Boolean(show_on_inactive);
-        const { data, error } = await sb
+
+        // 1차 시도: show_on_inactive 포함
+        let { data, error } = await sb
             .from('programs')
             .update(updateObj)
             .eq('id', req.params.id)
             .select()
             .single();
 
+        // show_on_inactive 컬럼이 DB에 없으면 해당 필드 제거 후 재시도
+        if (error && error.message && error.message.includes('show_on_inactive')) {
+            const fallbackObj = { ...updateObj };
+            delete fallbackObj.show_on_inactive;
+            const fallback = await sb
+                .from('programs')
+                .update(fallbackObj)
+                .eq('id', req.params.id)
+                .select()
+                .single();
+            data  = fallback.data;
+            error = fallback.error;
+        }
+
         if (error) throw sbErr(error, 'PUT /programs/:id');
-        const result = { ...data, time_slots: Array.isArray(data.time_slots) ? data.time_slots : [] };
+        const result = {
+            ...data,
+            time_slots: Array.isArray(data.time_slots) ? data.time_slots : [],
+            // 컬럼이 없을 경우 요청값을 그대로 반환해 UI 상태 유지
+            show_on_inactive: data.show_on_inactive !== undefined ? data.show_on_inactive : (show_on_inactive !== undefined ? Boolean(show_on_inactive) : true)
+        };
         res.json({ success: true, data: result });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });

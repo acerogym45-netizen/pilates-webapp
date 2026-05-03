@@ -211,10 +211,16 @@ const applications = {
                             ? `<span style="font-size:.78rem;color:#8e44ad;font-weight:600">₩${prog.estimated_monthly_fee.toLocaleString()}/월</span>`
                             : '';
 
+                        const isInactive = prog.is_active === false;
+                        const cardBorder = isInactive ? '1px solid #f0c0c0' : '1px solid #e8ecef';
+                        const cardBg     = isInactive ? '#fff8f8' : '#fff';
+                        const inactiveBadge = isInactive
+                            ? `<span style="font-size:.72rem;background:#fdecea;color:#c0392b;border-radius:4px;padding:2px 6px;margin-left:6px">비활성</span>`
+                            : '';
                         return `
-                            <div style="border:1px solid #e8ecef;border-radius:8px;padding:12px;background:#fff">
+                            <div style="border:${cardBorder};border-radius:8px;padding:12px;background:${cardBg}">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                                    <span style="font-weight:700;font-size:.88rem;color:#2c3e50">${prog.program_name}</span>
+                                    <span style="font-weight:700;font-size:.88rem;color:#2c3e50">${prog.program_name}${inactiveBadge}</span>
                                     ${feeText}
                                 </div>
                                 <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
