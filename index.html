@@ -142,20 +142,20 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="dong">동 <span class="required">*</span></label>
-                            <input type="text" id="dong" placeholder="예: 101동" autocomplete="off"
-                                   oninput="checkConfirmMatch('dong','dongConfirm','dongConfirmWrap')">
+                            <input type="text" id="dong" placeholder="예: 101" inputmode="numeric" autocomplete="off"
+                                   oninput="filterNumericOnly(this); checkConfirmMatch('dong','dongConfirm','dongConfirmWrap')">
                         </div>
                         <div class="form-group">
                             <label for="ho">호수 <span class="required">*</span></label>
-                            <input type="text" id="ho" placeholder="예: 1001호" autocomplete="off"
-                                   oninput="checkConfirmMatch('ho','hoConfirm','hoConfirmWrap')">
+                            <input type="text" id="ho" placeholder="예: 1001" inputmode="numeric" autocomplete="off"
+                                   oninput="filterNumericOnly(this); checkConfirmMatch('ho','hoConfirm','hoConfirmWrap')">
                         </div>
                     </div>
                     <div class="form-row" id="dongHoConfirmRow">
                         <div class="form-group" id="dongConfirmWrap">
                             <label for="dongConfirm">동 확인 <span class="required">*</span></label>
-                            <input type="text" id="dongConfirm" placeholder="동을 다시 입력하세요" autocomplete="off"
-                                   oninput="checkConfirmMatch('dong','dongConfirm','dongConfirmWrap')">
+                            <input type="text" id="dongConfirm" placeholder="동을 다시 입력하세요" inputmode="numeric" autocomplete="off"
+                                   oninput="filterNumericOnly(this); checkConfirmMatch('dong','dongConfirm','dongConfirmWrap')">
                             <div class="mismatch-msg" id="dongMismatch">
                                 <i class="fas fa-exclamation-circle"></i>
                                 일치하지 않습니다. 관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.
@@ -163,8 +163,8 @@
                         </div>
                         <div class="form-group" id="hoConfirmWrap">
                             <label for="hoConfirm">호수 확인 <span class="required">*</span></label>
-                            <input type="text" id="hoConfirm" placeholder="호수를 다시 입력하세요" autocomplete="off"
-                                   oninput="checkConfirmMatch('ho','hoConfirm','hoConfirmWrap')">
+                            <input type="text" id="hoConfirm" placeholder="호수를 다시 입력하세요" inputmode="numeric" autocomplete="off"
+                                   oninput="filterNumericOnly(this); checkConfirmMatch('ho','hoConfirm','hoConfirmWrap')">
                             <div class="mismatch-msg" id="hoMismatch">
                                 <i class="fas fa-exclamation-circle"></i>
                                 일치하지 않습니다. 관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.
@@ -187,7 +187,7 @@
                     <div class="form-group" id="phoneConfirmWrap">
                         <label for="phoneConfirm">전화번호 확인 <span class="required">*</span></label>
                         <input type="tel" id="phoneConfirm" placeholder="전화번호를 다시 입력하세요" autocomplete="off"
-                               oninput="checkConfirmMatch('phone','phoneConfirm','phoneConfirmWrap')">
+                               oninput="formatPhoneNumber(event); checkConfirmMatch('phone','phoneConfirm','phoneConfirmWrap')">
                         <div class="mismatch-msg" id="phoneMismatch">
                             <i class="fas fa-exclamation-circle"></i>
                             일치하지 않습니다. 관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.

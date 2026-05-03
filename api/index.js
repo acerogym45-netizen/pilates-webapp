@@ -33,7 +33,15 @@ const app = express();
 const ROOT_DIR = path.resolve(__dirname, '..');
 
 // ── 미들웨어 ──────────────────────────────────────────────────────────────────
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+    contentSecurityPolicy: false,
+    frameguard: false
+}));
+// X-Frame-Options 헤더 강제 제거 (Vercel이 SAMEORIGIN을 자동 삽입하므로 명시적 제거)
+app.use((req, res, next) => {
+    res.removeHeader('X-Frame-Options');
+    next();
+});
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

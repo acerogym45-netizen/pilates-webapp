@@ -61,9 +61,14 @@ function setupEventListeners() {
     const form = document.getElementById('contractForm');
     form.addEventListener('submit', handlePage1Submit);
     
-    // Phone number formatting (oninput 속성으로도 등록되어 있으나, 혹시 누락 방지용 유지)
+    // 전화번호 포맷 (원본 + 확인 필드 모두)
     const phoneInput = document.getElementById('phone');
     if (phoneInput) phoneInput.addEventListener('input', formatPhoneNumber);
+    const phoneConfirmInput = document.getElementById('phoneConfirm');
+    if (phoneConfirmInput) phoneConfirmInput.addEventListener('input', function(e) {
+        formatPhoneNumber(e);
+        checkConfirmMatch('phone', 'phoneConfirm', 'phoneConfirmWrap');
+    });
     
     // Update time slots when program changes
     const lessonTypeSelect = document.getElementById('lessonType');
@@ -90,6 +95,11 @@ function setSignatureDate() {
     const signatureDateInput = document.getElementById('signatureDate');
     const today = new Date().toISOString().split('T')[0];
     signatureDateInput.value = today;
+}
+
+// 숫자 전용 입력 필터 (동/호수 필드용)
+function filterNumericOnly(input) {
+    input.value = input.value.replace(/[^0-9]/g, '');
 }
 
 // Format phone number
@@ -2180,8 +2190,8 @@ async function loadPrograms() {
             return;
         }
         
-        // /api/programs 엔드포인트로 단지별 프로그램 조회
-        const response = await fetch(`/api/programs?complexCode=${complexCode}`);
+        // /api/programs 엔드포인트로 단지별 프로그램 조회 (비활성 포함)
+        const response = await fetch(`/api/programs?complexCode=${complexCode}&includeInactive=true`);
         const result = await response.json();
         
         // 승인된 신청 수 조회
@@ -2191,9 +2201,10 @@ async function loadPrograms() {
         
         console.log(`📊 Found ${approvedContracts.length} approved contracts for complex ${complexCode}`);
         
-        // Filter programs: active OR (inactive but display_on_inactive=true)
+        // Filter programs: active OR (inactive but show_on_inactive=true/null/undefined)
+        // show_on_inactive가 명시적으로 false일 때만 입주민 페이지에서 숨김
         const programs = (result.data || [])
-            .filter(p => p.is_active || p.display_on_inactive)
+            .filter(p => p.is_active || p.show_on_inactive === true || p.show_on_inactive === null || p.show_on_inactive === undefined)
             .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
         
         console.log(`✅ Filtered programs: ${programs.length} (active or display_on_inactive)`);
