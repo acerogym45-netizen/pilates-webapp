@@ -2818,9 +2818,14 @@ ${(() => {
         });
 
         // ── 시간대 블록 하나의 HTML + 예상 높이(mm) 반환 ──────────────────
-        // A4 가로 기준: 실제 출력 너비 약 1050px (297mm - 여백 2×10mm)
-        // 헤더 바 약 9mm, 테이블 헤더 약 8mm, 행 1개 약 8.5mm (실측값, padding 3px×2=6px + border + 22px셀 ≈ 8.5mm)
-        const ROW_H_MM = 8.5;  // 데이터 행 1개 실측 높이(mm)
+        // 실측 기반 높이 (96dpi: 1px=0.2646mm)
+        // 시간대 헤더 div: 10pt폰트(13.3px)*1.4 + padding8px = 26.6px ≈ 7.0mm
+        // 테이블 헤더 tr: 7.5pt폰트(10px)*1.2 + padding8px = 20px ≈ 5.3mm
+        // 데이터 행: height:22px셀 + border공유 = 23px ≈ 6.1mm
+        // 타이틀바: 12pt폰트(16px)*1.4 + padding6px + border2px = 30.4px ≈ 8.0mm
+        const ROW_H_MM     = 6.1;   // 데이터 행 1개 실측 높이(mm)
+        const SLOT_HEAD_MM = 7.0;   // 시간대 헤더 div 높이(mm)
+        const TBL_HEAD_MM  = 5.3;   // 테이블 헤더 tr 높이(mm)
         const tsBlockHtml = (ts, dateCols, dateMm, isFirst) => {
             sortM(ts.members);
             const rows = ts.members.map((m, i) =>
@@ -2849,17 +2854,17 @@ ${(() => {
                 '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:7.5pt">연락처</th>' +
                 thDates +
                 '</tr></thead><tbody>' + rows + '</tbody></table></div>';
-            // 예상 높이(mm): 시간대 헤더 9mm + 테이블 헤더 8mm + 행당 8.5mm + 간격
-            const estimatedMm = 9 + 8 + ts.members.length * ROW_H_MM + (!isFirst ? 4 : 0);
+            // 예상 높이(mm): 간격 + 시간대헤더 + 테이블헤더 + 행당 높이
+            const estimatedMm = (!isFirst ? 4 : 0) + SLOT_HEAD_MM + TBL_HEAD_MM + ts.members.length * ROW_H_MM;
             return { html, estimatedMm };
         };
 
         // ── page-block 생성: 각 프로그램을 슬라이드로, 넘치면 자동 분할 ──
-        // A4 가로: 210mm 높이에서 헤더 15mm + 상하여백 16mm = 사용 가능 약 179mm
-        // 안전 마진 8mm 추가 → 실질 사용 가능 171mm
-        const PAGE_H_MM = 171;
-        // 프로그램 타이틀 바 높이 약 13mm
-        const TITLE_H_MM = 13;
+        // A4 가로 210mm - page-block padding(8mm*2) = 194mm 사용 가능
+        // html2canvas가 scrollHeight 기준으로 캡처 후 ratio fit하므로
+        // 194mm 이하면 A4에 꽉 차게, 초과 시 축소됨
+        const PAGE_H_MM  = 194;  // page-block 내부 실사용 높이(mm)
+        const TITLE_H_MM = 8.0;  // 프로그램 타이틀바 높이(mm)
 
         let printContent = '';
 
