@@ -8,14 +8,19 @@ const { getSupabase, sbErr } = require('../db-supabase');
 // ── 단지별 프로그램 목록 ──────────────────────────────────────
 router.get('/', async (req, res) => {
     try {
-        const { complexId, complexCode, activeOnly } = req.query;
+        const { complexId, complexCode, activeOnly, includeInactive } = req.query;
         const sb = getSupabase();
 
         let query = sb.from('programs').select('*, complexes!inner(code)');
 
         if (complexId)           query = query.eq('complex_id', complexId);
         if (complexCode)         query = query.eq('complexes.code', complexCode);
-        if (activeOnly === 'true') query = query.eq('is_active', true);
+        // activeOnly=true → 활성 프로그램만 (신규 접수 드롭다운용)
+        // includeInactive=true → 비활성 포함 전체 (해지 신청 드롭다운 / 관리자 현황용)
+        // 둘 다 없으면 → 전체 반환 (기존 동작 유지)
+        if (activeOnly === 'true' && includeInactive !== 'true') {
+            query = query.eq('is_active', true);
+        }
 
         query = query.order('display_order').order('name');
 

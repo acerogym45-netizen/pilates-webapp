@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.23 출석부PDF가로꽉채움+여백제거 */
+/** 신청 관리 페이지 - v3.25 출석부PDF슬라이드분할개선+관리비출석통합 */
 const applications = {
     data: [],
     filtered: [],
@@ -24,6 +24,9 @@ const applications = {
                     </button>
                     <button class="btn-sm" onclick="applications.showAttendanceModal()" style="background:#1abc9c;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
                         <i class="fas fa-clipboard-list"></i> 출석부
+                    </button>
+                    <button class="btn-sm" onclick="applications.showAttendanceBilling()" style="background:#e67e22;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
+                        <i class="fas fa-clipboard-check"></i> 출석 관리비
                     </button>
                     <button class="btn-sm" onclick="applications.showTimetableModal()" style="background:#3498db;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
                         <i class="fas fa-calendar-alt"></i> 시간표
@@ -1255,13 +1258,41 @@ ${(() => {
     },
 
     async changeStatus(id, status) {
+        // ── cancelled 직접 변경 사전 경고 ─────────────────────────────────────
+        // 서버에서 cancellations 테이블 확인 후 차단하지만, 클라이언트에서도
+        // 한 번 더 확인 대화상자를 띄워 실수 방지 (2026-04-30 사례 재발 방지)
+        if (status === 'cancelled') {
+            const a = this.data.find(x => x.id === id);
+            const name = a ? `${a.name} (${a.dong || ''} ${a.ho || ''})` : id;
+            const confirmed = await new Promise(resolve => {
+                showConfirm(
+                    '⚠️ 해지 처리 확인',
+                    `${name} 을(를) 직접 해지 처리하려 합니다.\n\n` +
+                    `반드시 [해지 관리 탭]에서 해지 신청이 먼저 등록되어 있어야 합니다.\n` +
+                    `시간대/요일 변경자를 해지로 처리하는 실수를 주의하세요.\n\n` +
+                    `계속하시겠습니까?`,
+                    () => resolve(true),
+                    () => resolve(false)
+                );
+            });
+            if (!confirmed) return;
+        }
+
         try {
             await API.applications.update(id, { status });
             closeGlobalModal();
             showToast(`상태가 "${statusLabel(status)}"으로 변경되었습니다`);
             await this.load();
             loadBadges();
-        } catch (e) { showToast('변경 실패: ' + e.message, 'error'); }
+        } catch (e) {
+            // 서버 차단 응답 (blocked: true) 시 상세 안내
+            let msg = e.message || '변경 실패';
+            if (msg.includes('[차단]')) {
+                showToast(msg, 'error');
+            } else {
+                showToast('변경 실패: ' + msg, 'error');
+            }
+        }
     },
 
     // 취소 메타데이터 파싱 (notes 컬럼에서 [취소] JSON 블록 추출)
@@ -1972,6 +2003,603 @@ ${(() => {
         applications._renderAttendancePreview();
     },
 
+    // ══════════════════════════════════════════════════════════════════
+    // 출석 관리비 부과 (v2.0 - 출석부 달력+O/X/E 통합)
+    //  규칙:
+    //   - 총 8회 수업, (출석O + 노쇼X) × 회당 단가 = 관리비 / 사전고지E → 면제
+    //   - 월 3회 이상 결석(X+E 합계) → 다음달 자동 해지 플래그
+    // ══════════════════════════════════════════════════════════════════
+    async showAttendanceBilling() {
+        const complexId = getEffectiveComplexId();
+        if (!complexId) { showToast('단지를 먼저 선택해주세요', 'error'); return; }
+
+        openGlobalModal(
+            '<i class="fas fa-clipboard-check" style="color:#e67e22"></i> 출석 관리비 부과',
+            '<div style="text-align:center;padding:30px">' +
+            '<i class="fas fa-spinner fa-spin" style="font-size:2rem;color:#e67e22"></i>' +
+            '<p style="margin-top:12px;color:#666">승인 회원 목록을 불러오는 중...</p></div>',
+            ''
+        );
+
+        try {
+            const res  = await API.applications.list({ complexId, status: 'approved', limit: 500 });
+            const apps = res.data || res.applications || [];
+            if (!apps.length) {
+                document.getElementById('globalModalBody').innerHTML =
+                    '<p style="padding:20px;text-align:center;color:#999">승인된 회원이 없습니다.</p>';
+                return;
+            }
+
+            const now = new Date();
+            const defMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+            // 상태 저장소
+            applications._billingApps      = apps;
+            applications._billingComplexId  = complexId;
+            applications._billingRecords    = {};   // { appId: { dates:{}, attended, absent_noshow, absent_excused, charge, auto_cancel } }
+            applications._billingCustomDates = [];  // 수동 선택 날짜 배열
+
+            const programs = [...new Set(apps.map(a => a.program_name).filter(Boolean))].sort();
+            const progOpts = programs.map(p => `<option value="${p}">${p}</option>`).join('');
+
+            const body =
+                // ── 상단 컨트롤
+                `<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
+                  <div style="display:flex;flex-direction:column;gap:4px">
+                    <label style="font-size:.8rem;color:#666;font-weight:600">조회 월</label>
+                    <input type="month" id="billingMonth" value="${defMonth}"
+                      onchange="applications._onBillingMonthChange()"
+                      style="padding:7px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:.9rem;font-weight:600">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:4px">
+                    <label style="font-size:.8rem;color:#666;font-weight:600">프로그램</label>
+                    <select id="billingProgram" onchange="applications._onBillingProgramChange()"
+                      style="padding:7px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:.88rem;min-width:200px">
+                      <option value="">-- 전체 프로그램 --</option>${progOpts}
+                    </select>
+                  </div>
+                  <button onclick="applications._renderBillingTable()"
+                    style="padding:7px 14px;background:#e67e22;color:#fff;border:none;border-radius:6px;font-size:.85rem;cursor:pointer;height:34px;align-self:flex-end">
+                    <i class="fas fa-search"></i> 조회
+                  </button>
+                </div>` +
+
+                // ── 달력 패널 (수업 날짜 선택)
+                `<div style="background:#fffbf5;border:1px solid #fde8c8;border-radius:8px;padding:10px 14px;margin-bottom:10px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+                    <div style="font-size:.85rem;font-weight:700;color:#c0392b">
+                      <i class="fas fa-calendar-alt"></i> 수업 날짜 선택
+                      <span id="billingDateCount" style="font-weight:400;color:#999;font-size:.8rem;margin-left:6px"></span>
+                    </div>
+                    <div style="font-size:.78rem;color:#7d4f1a;line-height:1.6">
+                      <span style="background:#d4efdf;padding:1px 5px;border-radius:3px;font-weight:700">O</span> 출석·부과 &nbsp;
+                      <span style="background:#fadbd8;padding:1px 5px;border-radius:3px;font-weight:700">X</span> 노쇼·부과 &nbsp;
+                      <span style="background:#d6eaf8;padding:1px 5px;border-radius:3px;font-weight:700">E</span> 사전고지·면제 &nbsp;
+                      <strong>3회↑ 결석</strong> → 다음달 자동해지
+                    </div>
+                  </div>
+                  <div id="billingCalGrid" style="margin-bottom:8px"></div>
+                  <div style="font-size:.75rem;color:#888;font-weight:600;margin-bottom:4px">선택된 수업 날짜</div>
+                  <div id="billingCalTags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:24px;padding:4px 6px;
+                    background:#fff;border:1px solid #fde8c8;border-radius:6px">
+                    <span style="color:#ccc;font-size:.8rem">날짜를 선택하세요</span>
+                  </div>
+                </div>` +
+
+                // ── 요약 집계 바
+                `<div id="billingSummaryBar" style="display:none;background:#fff8ee;border:1px solid #fde8c8;border-radius:8px;
+                  padding:8px 14px;margin-bottom:10px;display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+                </div>` +
+
+                // ── 테이블 영역
+                `<div id="billingTableArea" style="max-height:430px;overflow-y:auto;border:1px solid #eee;border-radius:8px;padding:4px">
+                  <p style="padding:18px;text-align:center;color:#aaa;font-size:.9rem">월과 프로그램을 선택 후 [조회]를 누르세요.</p>
+                </div>`;
+
+            const footer =
+                '<button class="btn-secondary" onclick="closeGlobalModal()">닫기</button>' +
+                '<button onclick="applications._saveBillingRecords()" ' +
+                'style="padding:7px 18px;background:#e67e22;color:#fff;border:none;border-radius:6px;font-size:.9rem;cursor:pointer;font-weight:600">' +
+                '<i class="fas fa-save"></i> 저장</button>' +
+                '<button onclick="applications._exportBillingExcel()" ' +
+                'style="padding:7px 14px;background:#27ae60;color:#fff;border:none;border-radius:6px;font-size:.9rem;cursor:pointer;margin-left:6px;font-weight:600">' +
+                '<i class="fas fa-file-excel"></i> 엑셀 다운로드</button>';
+
+            document.getElementById('globalModalBody').innerHTML  = body;
+            document.getElementById('globalModalFooter').innerHTML = footer;
+
+            // 기존 저장 데이터 로드 후 첫 렌더
+            await applications._loadBillingRecords();
+            if (programs.length) {
+                document.getElementById('billingProgram').value = programs[0];
+                applications._onBillingProgramChange();  // 달력 + 테이블 초기 렌더
+            } else {
+                applications._renderBillingCalendar();
+                applications._renderBillingTable();
+            }
+
+        } catch (e) {
+            document.getElementById('globalModalBody').innerHTML =
+                `<p style="padding:20px;text-align:center;color:#e74c3c">불러오기 실패: ${e.message}</p>`;
+        }
+    },
+
+    // ── 프로그램 변경 시 달력 + 테이블 동기화 ────────────────────────
+    _onBillingProgramChange() {
+        const prog = document.getElementById('billingProgram')?.value || '';
+        const monthVal = document.getElementById('billingMonth')?.value || '';
+        applications._billingCustomDates = [];
+
+        // 프로그램 요일 자동감지 후 해당 월 날짜 계산
+        if (prog && monthVal) {
+            const [y, m] = monthVal.split('-').map(Number);
+            const dows = applications._parseProgramDows(prog);
+            if (dows.length) {
+                const last = new Date(y, m, 0).getDate();
+                for (let d = 1; d <= last; d++) {
+                    const dt = new Date(y, m-1, d);
+                    if (dows.includes(dt.getDay()))
+                        applications._billingCustomDates.push(
+                            y + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0')
+                        );
+                }
+            }
+        }
+        applications._renderBillingCalendar();
+        applications._renderBillingTable();
+    },
+
+    // ── 월 변경 시 달력 + 날짜 초기화 ────────────────────────────────
+    _onBillingMonthChange() {
+        applications._billingCustomDates = [];
+        applications._onBillingProgramChange();
+    },
+
+    // ── 달력 렌더 ─────────────────────────────────────────────────────
+    _renderBillingCalendar() {
+        const grid   = document.getElementById('billingCalGrid');
+        const tags   = document.getElementById('billingCalTags');
+        const countEl= document.getElementById('billingDateCount');
+        if (!grid) return;
+
+        const monthVal = document.getElementById('billingMonth')?.value || '';
+        if (!monthVal) { grid.innerHTML = ''; return; }
+
+        const [y, m] = monthVal.split('-').map(Number);
+        const selected = new Set(applications._billingCustomDates || []);
+        const firstDow = new Date(y, m-1, 1).getDay();
+        const lastDate = new Date(y, m, 0).getDate();
+        const DAYS = ['일','월','화','수','목','금','토'];
+
+        let cal = '<table style="border-collapse:collapse;width:100%;font-size:.78rem"><thead><tr>';
+        DAYS.forEach((d,i) => {
+            const c = i===0?'#e74c3c':i===6?'#2980b9':'#555';
+            cal += `<th style="text-align:center;padding:3px 2px;color:${c};font-weight:600;width:14.28%">${d}</th>`;
+        });
+        cal += '</tr></thead><tbody><tr>';
+        for (let i = 0; i < firstDow; i++) cal += '<td></td>';
+        let col = firstDow;
+        for (let d = 1; d <= lastDate; d++) {
+            const key = y + '-' + String(m).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+            const dow = new Date(y,m-1,d).getDay();
+            const isSel = selected.has(key);
+            const isWeekend = dow===0||dow===6;
+            cal += `<td style="text-align:center;padding:2px">
+              <button onclick="applications._toggleBillingDate('${key}')"
+                id="bcal_${key.replace(/-/g,'_')}"
+                style="width:28px;height:28px;border-radius:50%;border:${isSel?'2px solid #e67e22':'1px solid #eee'};
+                  background:${isSel?'#e67e22':'#fafafa'};color:${isSel?'#fff':(isWeekend?(dow===0?'#e74c3c':'#2980b9'):'#333')};
+                  cursor:pointer;font-size:.8rem;font-weight:${isSel?'700':'400'}">${d}</button>
+            </td>`;
+            col++;
+            if (col === 7 && d < lastDate) { cal += '</tr><tr>'; col = 0; }
+        }
+        cal += '</tr></tbody></table>';
+        grid.innerHTML = cal;
+
+        // 태그 갱신
+        const sorted = [...selected].sort();
+        if (sorted.length) {
+            tags.innerHTML = sorted.map(k => {
+                const [,, dd] = k.split('-').map(Number);
+                const dow2 = DAYS[new Date(k).getDay()];
+                return `<span style="background:#e67e22;color:#fff;padding:2px 8px;border-radius:10px;
+                  font-size:.78rem;cursor:pointer" onclick="applications._toggleBillingDate('${k}')"
+                  title="클릭하여 제거">${dd}일(${dow2}) ×</span>`;
+            }).join('');
+        } else {
+            tags.innerHTML = '<span style="color:#ccc;font-size:.8rem">날짜를 선택하세요</span>';
+        }
+        if (countEl) countEl.textContent = sorted.length ? `(${sorted.length}회 선택됨)` : '';
+    },
+
+    // ── 달력 날짜 토글 ────────────────────────────────────────────────
+    _toggleBillingDate(dateKey) {
+        const arr = applications._billingCustomDates || [];
+        const idx = arr.indexOf(dateKey);
+        if (idx >= 0) arr.splice(idx, 1);
+        else arr.push(dateKey);
+        applications._billingCustomDates = arr;
+        applications._renderBillingCalendar();
+        applications._renderBillingTable();
+    },
+
+    // ── 저장된 출석 데이터 로드 ───────────────────────────────────────
+    async _loadBillingRecords() {
+        try {
+            const complexId = applications._billingComplexId;
+            const monthEl   = document.getElementById('billingMonth');
+            const monthVal  = monthEl ? monthEl.value : '';
+            if (!complexId || !monthVal) return;
+            const [y, m] = monthVal.split('-');
+            const res = await fetch(`/api/applications/attendance?complexId=${complexId}&year=${y}&month=${m}`);
+            const json = await res.json();
+            if (!json.success) return;
+            (json.data || []).forEach(r => {
+                applications._billingRecords[r.application_id] = {
+                    dates:          r.dates || {},
+                    attended:       r.attended       || 0,
+                    absent_noshow:  r.absent_noshow  || 0,
+                    absent_excused: r.absent_excused || 0,
+                    charge:         r.charge_amount  || 0,
+                    auto_cancel:    r.auto_cancel    || false
+                };
+            });
+        } catch (e) { /* 서버 미지원 시 무시 */ }
+    },
+
+    // ── 출석 테이블 렌더 (v2.0 - 날짜별 O/X/E 클릭 + 요약) ──────────
+    _renderBillingTable() {
+        const container = document.getElementById('billingTableArea');
+        if (!container) return;
+
+        const progFilter  = document.getElementById('billingProgram')?.value || '';
+        const monthVal    = document.getElementById('billingMonth')?.value || '';
+        const apps        = applications._billingApps || [];
+        const dateCols    = (applications._billingCustomDates || []).slice().sort();
+
+        let filtered = apps;
+        if (progFilter) filtered = filtered.filter(a => a.program_name === progFilter);
+        filtered = filtered.slice().sort((a, b) => {
+            const da = String(a.preferred_time||''), db = String(b.preferred_time||'');
+            if (da !== db) return da.localeCompare(db,'ko');
+            const dda = String(a.dong||'').replace(/동$/,''), ddb = String(b.dong||'').replace(/동$/,'');
+            if (dda !== ddb) return dda.localeCompare(ddb,'ko',{numeric:true});
+            return String(a.ho||'').replace(/호$/,'').localeCompare(String(b.ho||'').replace(/호$/,''),'ko',{numeric:true});
+        });
+
+        if (!filtered.length) {
+            container.innerHTML = '<p style="padding:18px;text-align:center;color:#999">해당 조건의 회원이 없습니다.</p>';
+            applications._updateBillingSummary([]);
+            return;
+        }
+
+        // 시간대별 그룹화
+        const groups = {};
+        filtered.forEach(a => {
+            const key = a.preferred_time || '시간 미지정';
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(a);
+        });
+
+        const SESSION_FEE = (a) => {
+            const fee = Number(a.monthly_fee) || 0;
+            return fee > 0 ? Math.round(fee / 8) : 0;
+        };
+
+        // 날짜 헤더
+        const dateHeads = dateCols.map(d => {
+            const [,, dd] = d.split('-').map(Number);
+            const dow = ['일','월','화','수','목','금','토'][new Date(d).getDay()];
+            const isWeekend = new Date(d).getDay() === 0 || new Date(d).getDay() === 6;
+            return `<th style="text-align:center;padding:3px 1px;font-size:.73rem;min-width:34px;border:1px solid #ddd;
+              white-space:nowrap;background:#fef6ee;color:${isWeekend?'#e74c3c':'#555'}">${dd}일<br><span style="font-size:.68rem;color:#aaa">(${dow})</span></th>`;
+        }).join('');
+
+        let html = '';
+        const allMemberRows = [];
+
+        Object.entries(groups).sort((a,b) => a[0].localeCompare(b[0],'ko')).forEach(([time, members]) => {
+            html += `<div style="margin-bottom:14px">
+              <div style="background:linear-gradient(135deg,#e67e22,#d35400);color:#fff;padding:6px 12px;
+                border-radius:6px 6px 0 0;font-weight:700;font-size:.9rem;display:flex;justify-content:space-between;align-items:center">
+                <span><i class="fas fa-clock" style="margin-right:5px;opacity:.8"></i>${time}</span>
+                <span style="font-size:.8rem;opacity:.85;font-weight:400">${members.length}명</span>
+              </div>
+              <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:.82rem">
+                <thead>
+                  <tr style="background:#fef6ee">
+                    <th style="padding:5px 4px;border:1px solid #ddd;text-align:center;width:26px;font-size:.75rem">No.</th>
+                    <th style="padding:5px 6px;border:1px solid #ddd;text-align:center;min-width:76px">동/호수</th>
+                    <th style="padding:5px 6px;border:1px solid #ddd;text-align:center;min-width:48px">이름</th>
+                    <th style="padding:5px 4px;border:1px solid #ddd;text-align:center;min-width:50px;font-size:.75rem">월수강료</th>
+                    <th style="padding:5px 4px;border:1px solid #ddd;text-align:center;min-width:42px;font-size:.75rem">회당단가</th>
+                    ${dateHeads.length ? dateHeads : '<th style="border:1px solid #ddd;padding:4px;text-align:center;color:#bbb;font-size:.75rem">날짜 선택 필요</th>'}
+                    <th style="padding:4px 3px;border:1px solid #ddd;text-align:center;min-width:32px;background:#e8f8e8;color:#1e8449;font-size:.75rem">출석<br>O</th>
+                    <th style="padding:4px 3px;border:1px solid #ddd;text-align:center;min-width:32px;background:#fde8e8;color:#c0392b;font-size:.75rem">노쇼<br>X</th>
+                    <th style="padding:4px 3px;border:1px solid #ddd;text-align:center;min-width:32px;background:#e8f0fd;color:#1a5276;font-size:.75rem">고지<br>E</th>
+                    <th style="padding:4px 5px;border:1px solid #ddd;text-align:center;min-width:70px;background:#fff3e0;color:#c0392b;font-weight:700;font-size:.78rem">부과액</th>
+                    <th style="padding:4px 3px;border:1px solid #ddd;text-align:center;min-width:42px;font-size:.75rem">다음달<br>해지</th>
+                  </tr>
+                </thead>
+                <tbody>`;
+
+            members.forEach((m, idx) => {
+                const rec     = applications._billingRecords[m.id] || { dates: {}, attended: 0, absent_noshow: 0, absent_excused: 0, charge: 0 };
+                const perFee  = SESSION_FEE(m);
+                const monthFee= Number(m.monthly_fee) || 0;
+
+                const dateCells = dateCols.map(d => {
+                    const val = rec.dates[d] || '';
+                    const btnStyle = {
+                        'O': 'background:#d4efdf;color:#1e8449;font-weight:700;border:1px solid #a9dfbf',
+                        'X': 'background:#fadbd8;color:#c0392b;font-weight:700;border:1px solid #f5b7b1',
+                        'E': 'background:#d6eaf8;color:#1a5276;font-weight:700;border:1px solid #aed6f1',
+                        '':  'background:#f9f9f9;color:#ccc;border:1px solid #eee'
+                    };
+                    return `<td style="border:1px solid #eee;text-align:center;padding:1px">
+                      <button onclick="applications._toggleAttendance('${m.id}','${d}')"
+                        id="att_${m.id}_${d.replace(/-/g,'_')}"
+                        style="width:32px;height:30px;border-radius:4px;cursor:pointer;font-size:.82rem;${btnStyle[val]||btnStyle['']}">
+                        ${val || '·'}
+                      </button>
+                    </td>`;
+                }).join('');
+
+                const attended      = Object.values(rec.dates).filter(v=>v==='O').length;
+                const absent_noshow = Object.values(rec.dates).filter(v=>v==='X').length;
+                const absent_excused= Object.values(rec.dates).filter(v=>v==='E').length;
+                const totalAbsent   = absent_noshow + absent_excused;
+                const charge        = (attended + absent_noshow) * perFee;
+                const autoCancel    = totalAbsent >= 3;
+
+                allMemberRows.push({ charge, autoCancel, perFee });
+
+                const rowBg = autoCancel ? 'background:#fff5f5' : (idx%2===0?'background:#fff':'background:#fffcf9');
+                const borderStyle = autoCancel ? 'box-shadow:inset 0 0 0 2px #e74c3c' : '';
+                html += `<tr style="${rowBg};${borderStyle}">
+                  <td style="border:1px solid #eee;text-align:center;color:#ccc;font-size:.75rem;padding:3px 2px">${idx+1}</td>
+                  <td style="border:1px solid #eee;text-align:center;font-size:.8rem;padding:3px 4px;white-space:nowrap;font-weight:600">${applications._fmtDongHo(m.dong,m.ho)}</td>
+                  <td style="border:1px solid #eee;text-align:center;font-weight:700;padding:3px 4px">${m.name||''}</td>
+                  <td style="border:1px solid #eee;text-align:right;padding:3px 5px;font-size:.78rem;color:#888">${monthFee ? monthFee.toLocaleString()+'원' : '-'}</td>
+                  <td style="border:1px solid #eee;text-align:right;padding:3px 5px;font-size:.78rem;color:#c0392b;font-weight:600">${perFee ? perFee.toLocaleString()+'원' : '-'}</td>
+                  ${dateCols.length ? dateCells : '<td style="border:1px solid #eee;text-align:center;color:#ccc;padding:4px">-</td>'}
+                  <td id="sum_O_${m.id}" style="border:1px solid #eee;text-align:center;font-weight:700;color:#1e8449;background:#f4fdf4;font-size:.9rem">${attended}</td>
+                  <td id="sum_X_${m.id}" style="border:1px solid #eee;text-align:center;font-weight:700;color:#c0392b;background:#fdf5f5;font-size:.9rem">${absent_noshow}</td>
+                  <td id="sum_E_${m.id}" style="border:1px solid #eee;text-align:center;font-weight:700;color:#1a5276;background:#f5f8fd;font-size:.9rem">${absent_excused}</td>
+                  <td id="sum_C_${m.id}" style="border:1px solid #eee;text-align:right;font-weight:700;color:#c0392b;padding:3px 7px;background:#fff8f0;font-size:.88rem">${charge ? charge.toLocaleString()+'원' : '<span style="color:#ccc">-</span>'}</td>
+                  <td style="border:1px solid #eee;text-align:center;padding:2px">
+                    ${autoCancel
+                        ? `<span id="cancel_flag_${m.id}" style="display:inline-block;background:#e74c3c;color:#fff;padding:2px 5px;border-radius:8px;font-size:.68rem;font-weight:700;white-space:nowrap;animation:pulse 1.5s infinite">⚠ 해지</span>`
+                        : `<span id="cancel_flag_${m.id}" style="color:#ddd;font-size:.75rem">-</span>`
+                    }
+                  </td>
+                </tr>`;
+            });
+
+            html += `</tbody></table></div></div>`;
+        });
+
+        container.innerHTML = html +
+            '<style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}</style>';
+
+        applications._updateBillingSummary(allMemberRows);
+    },
+
+    // ── 요약 집계 바 갱신 ─────────────────────────────────────────────
+    _updateBillingSummary(rows) {
+        const bar = document.getElementById('billingSummaryBar');
+        if (!bar) return;
+        if (!rows.length) { bar.style.display = 'none'; return; }
+        const totalCharge   = rows.reduce((s,r) => s + (r.charge||0), 0);
+        const cancelCount   = rows.filter(r => r.autoCancel).length;
+        const chargedCount  = rows.filter(r => r.charge > 0).length;
+        bar.style.display = 'flex';
+        bar.innerHTML =
+            `<span style="font-size:.82rem;color:#7d4f1a"><strong style="font-size:1rem;color:#c0392b">${rows.length}</strong>명 조회</span>` +
+            `<span style="color:#ddd">|</span>` +
+            `<span style="font-size:.82rem;color:#7d4f1a">부과 대상 <strong style="font-size:1rem;color:#e67e22">${chargedCount}</strong>명</span>` +
+            `<span style="color:#ddd">|</span>` +
+            `<span style="font-size:.82rem;color:#7d4f1a">총 부과액 <strong style="font-size:1.05rem;color:#c0392b">${totalCharge.toLocaleString()}</strong>원</span>` +
+            (cancelCount > 0
+                ? `<span style="color:#ddd">|</span><span style="font-size:.82rem;background:#e74c3c;color:#fff;padding:2px 8px;border-radius:8px;font-weight:700">⚠ 다음달 해지 ${cancelCount}명</span>`
+                : '');
+    },
+
+    // ── O/X/E 토글 (클릭: 공백→O→X→E→공백 순환) ────────────────────
+    _toggleAttendance(appId, dateStr) {
+        if (!applications._billingRecords[appId])
+            applications._billingRecords[appId] = { dates: {}, attended: 0, absent_noshow: 0, absent_excused: 0, charge: 0 };
+
+        const rec  = applications._billingRecords[appId];
+        const cur  = rec.dates[dateStr] || '';
+        const next = cur === '' ? 'O' : cur === 'O' ? 'X' : cur === 'X' ? 'E' : '';
+
+        if (next === '') delete rec.dates[dateStr];
+        else rec.dates[dateStr] = next;
+
+        // 집계 갱신
+        const app    = (applications._billingApps || []).find(a => a.id === appId);
+        const perFee = app ? Math.round((Number(app.monthly_fee)||0) / 8) : 0;
+        rec.attended       = Object.values(rec.dates).filter(v => v === 'O').length;
+        rec.absent_noshow  = Object.values(rec.dates).filter(v => v === 'X').length;
+        rec.absent_excused = Object.values(rec.dates).filter(v => v === 'E').length;
+        const chargeCount  = rec.attended + rec.absent_noshow;
+        rec.charge         = chargeCount * perFee;
+        rec.auto_cancel    = (rec.absent_noshow + rec.absent_excused) >= 3;
+
+        // 버튼 UI 갱신
+        const btnId = `att_${appId}_${dateStr.replace(/-/g,'_')}`;
+        const btn   = document.getElementById(btnId);
+        if (btn) {
+            const btnStyle = {
+                'O': 'background:#d4efdf;color:#1e8449;font-weight:700;border:1px solid #a9dfbf',
+                'X': 'background:#fadbd8;color:#c0392b;font-weight:700;border:1px solid #f5b7b1',
+                'E': 'background:#d6eaf8;color:#1a5276;font-weight:700;border:1px solid #aed6f1',
+                '':  'background:#f9f9f9;color:#ccc;border:1px solid #eee'
+            };
+            btn.style.cssText = `width:32px;height:30px;border-radius:4px;cursor:pointer;font-size:.82rem;${btnStyle[next]||btnStyle['']}`;
+            btn.textContent   = next || '·';
+        }
+
+        // 집계 셀 실시간 갱신
+        const setCell = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        setCell(`sum_O_${appId}`, rec.attended);
+        setCell(`sum_X_${appId}`, rec.absent_noshow);
+        setCell(`sum_E_${appId}`, rec.absent_excused);
+        const chargeEl = document.getElementById(`sum_C_${appId}`);
+        if (chargeEl) chargeEl.innerHTML = rec.charge
+            ? rec.charge.toLocaleString() + '원'
+            : '<span style="color:#ccc">-</span>';
+
+        // 해지 플래그 갱신
+        const flagEl = document.getElementById(`cancel_flag_${appId}`);
+        if (flagEl) {
+            if (rec.auto_cancel) {
+                flagEl.style.cssText = 'display:inline-block;background:#e74c3c;color:#fff;padding:2px 5px;border-radius:8px;font-size:.68rem;font-weight:700;white-space:nowrap';
+                flagEl.textContent   = '⚠ 해지';
+            } else {
+                flagEl.style.cssText = 'color:#ddd;font-size:.75rem';
+                flagEl.textContent   = '-';
+            }
+        }
+
+        // 행 하이라이트
+        const row = btn?.closest('tr');
+        if (row) {
+            row.style.background  = rec.auto_cancel ? '#fff5f5' : '';
+            row.style.boxShadow   = rec.auto_cancel ? 'inset 0 0 0 2px #e74c3c' : '';
+        }
+
+        // 요약 바 재계산
+        const allRecs = Object.values(applications._billingRecords);
+        const progFilter = document.getElementById('billingProgram')?.value || '';
+        const appsForSummary = (applications._billingApps || []).filter(a => !progFilter || a.program_name === progFilter);
+        const summaryRows = appsForSummary.map(a => {
+            const r = applications._billingRecords[a.id] || {};
+            const pf = Math.round((Number(a.monthly_fee)||0) / 8);
+            const xCount = Object.values(r.dates||{}).filter(v=>v==='X').length;
+            const oCount = Object.values(r.dates||{}).filter(v=>v==='O').length;
+            const eCount = Object.values(r.dates||{}).filter(v=>v==='E').length;
+            return { charge: (oCount+xCount)*pf, autoCancel: (xCount+eCount)>=3, perFee: pf };
+        });
+        applications._updateBillingSummary(summaryRows);
+    },
+
+    // ── 출석 데이터 저장 ─────────────────────────────────────────────
+    async _saveBillingRecords() {
+        const complexId = applications._billingComplexId;
+        const monthVal  = document.getElementById('billingMonth')?.value || '';
+        if (!complexId || !monthVal) { showToast('저장 실패: 단지 또는 월 정보 없음', 'error'); return; }
+        const [y, m] = monthVal.split('-');
+
+        const records = Object.entries(applications._billingRecords || {}).map(([id, r]) => ({
+            id,
+            dates:          r.dates          || {},
+            attended:       r.attended       || 0,
+            absent_noshow:  r.absent_noshow  || 0,
+            absent_excused: r.absent_excused || 0,
+            charge_amount:  r.charge         || 0,
+            auto_cancel:    r.auto_cancel    || false
+        }));
+
+        if (!records.length) { showToast('저장할 출석 데이터가 없습니다', 'error'); return; }
+
+        try {
+            const res  = await fetch('/api/applications/attendance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ complex_id: complexId, year: y, month: m, records })
+            });
+            const json = await res.json();
+            if (json.success) {
+                showToast(`✅ ${json.saved}명 출석 데이터 저장 완료`, 'success');
+            } else {
+                if (json.sql) {
+                    alert('⚠ attendance_records 테이블이 없습니다.\n\nSupabase SQL Editor에서 아래 쿼리를 실행해주세요:\n\n' + json.sql);
+                } else {
+                    showToast('저장 실패: ' + (json.error || '알 수 없는 오류'), 'error');
+                }
+            }
+        } catch (e) { showToast('저장 실패: ' + e.message, 'error'); }
+    },
+
+    // ── 엑셀 다운로드 (관리비 부과 내역) ────────────────────────────
+    _exportBillingExcel() {
+        const monthVal = document.getElementById('billingMonth')?.value || '';
+        const apps     = applications._billingApps || [];
+        const recs     = applications._billingRecords || {};
+        const dateCols = (applications._billingCustomDates || []).slice().sort();
+        if (!apps.length) { showToast('데이터가 없습니다', 'error'); return; }
+
+        applications._loadSheetJS().then(() => {
+            const wb  = XLSX.utils.book_new();
+
+            // ── 시트1: 요약 (기존 형식 유지)
+            const rows = [['동', '호수', '이름', '연락처', '프로그램', '시간대', '월수강료', '회당단가', '출석(O)', '노쇼(X)', '사전고지(E)', '부과액(원)', '다음달해지']];
+            const progFilter = document.getElementById('billingProgram')?.value || '';
+            apps.filter(a => !progFilter || a.program_name === progFilter)
+                .slice().sort((a,b) => {
+                    const da = String(a.preferred_time||''), db = String(b.preferred_time||'');
+                    if (da!==db) return da.localeCompare(db,'ko');
+                    return String(a.dong||'').localeCompare(String(b.dong||''),'ko',{numeric:true});
+                }).forEach(a => {
+                    const r = recs[a.id] || {};
+                    const perFee = Math.round((Number(a.monthly_fee)||0) / 8);
+                    const attended      = Object.values(r.dates||{}).filter(v=>v==='O').length;
+                    const absent_noshow = Object.values(r.dates||{}).filter(v=>v==='X').length;
+                    const absent_excused= Object.values(r.dates||{}).filter(v=>v==='E').length;
+                    const charge = (attended + absent_noshow) * perFee;
+                    rows.push([
+                        a.dong||'', a.ho||'', a.name||'', a.phone||'',
+                        a.program_name||'', a.preferred_time||'',
+                        Number(a.monthly_fee)||0, perFee||0,
+                        attended, absent_noshow, absent_excused,
+                        charge||0,
+                        (absent_noshow+absent_excused)>=3 ? '해지대상' : ''
+                    ]);
+                });
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            ws['!cols'] = [8,8,8,13,18,10,9,8,6,6,8,10,10].map(w=>({wch:w}));
+            XLSX.utils.book_append_sheet(wb, ws, '관리비부과요약');
+
+            // ── 시트2: 날짜별 상세 (dateCols가 있을 때만)
+            if (dateCols.length) {
+                const hdrs = ['동','호수','이름','연락처','프로그램','시간대'];
+                dateCols.forEach(d => {
+                    const [,, dd] = d.split('-').map(Number);
+                    const dow = ['일','월','화','수','목','금','토'][new Date(d).getDay()];
+                    hdrs.push(dd+'일('+dow+')');
+                });
+                hdrs.push('출석','노쇼','사전고지','부과액','다음달해지');
+                const rows2 = [hdrs];
+                apps.filter(a => !progFilter || a.program_name === progFilter)
+                    .forEach(a => {
+                        const r = recs[a.id] || {};
+                        const perFee = Math.round((Number(a.monthly_fee)||0) / 8);
+                        const dateCells2 = dateCols.map(d => r.dates?.[d] || '');
+                        const attended      = dateCells2.filter(v=>v==='O').length;
+                        const absent_noshow = dateCells2.filter(v=>v==='X').length;
+                        const absent_excused= dateCells2.filter(v=>v==='E').length;
+                        const charge = (attended + absent_noshow) * perFee;
+                        rows2.push([
+                            a.dong||'', a.ho||'', a.name||'', a.phone||'',
+                            a.program_name||'', a.preferred_time||'',
+                            ...dateCells2,
+                            attended, absent_noshow, absent_excused, charge||0,
+                            (absent_noshow+absent_excused)>=3 ? '해지대상' : ''
+                        ]);
+                    });
+                const ws2 = XLSX.utils.aoa_to_sheet(rows2);
+                XLSX.utils.book_append_sheet(wb, ws2, '날짜별출석상세');
+            }
+
+            XLSX.writeFile(wb, `${monthVal}_출석관리비부과.xlsx`);
+            showToast('✅ 엑셀 다운로드 완료', 'success');
+        }).catch(() => showToast('SheetJS 로드 실패', 'error'));
+    },
+
     // ── 출석부 모달 진입점 ─────────────────────────────────────────────
     async showAttendanceModal() {
         const complexId = getEffectiveComplexId();
@@ -2142,15 +2770,13 @@ ${(() => {
         container.innerHTML = html;
     },
 
-    // ── PDF 다운로드 ───────────────────────────────────────────────────
+    // ── PDF 다운로드 (v3.24 - 요일별 1슬라이드, 높이 초과 시 자동 분할) ──────
     _downloadAttendancePDF() {
         const prog        = document.getElementById('attProgram')?.value || '';
         const time        = document.getElementById('attTime')?.value   || '';
         const apps        = applications._attApps || [];
         const complexName = applications._attComplexName || '';
-        // 달력에서 수동 선택한 날짜 (기준)
         const manualDates = (applications._attCustomDates || []).slice().sort();
-        // 월 정보: 달력 월 selector
         const calMonthEl  = document.getElementById('attCalMonth');
         const calMonthVal = calMonthEl ? calMonthEl.value : '';
         const [calYr, calMo] = calMonthVal ? calMonthVal.split('-').map(Number) : [new Date().getFullYear(), new Date().getMonth()+1];
@@ -2168,7 +2794,7 @@ ${(() => {
             timeGroups[key].members.push(a);
         });
 
-        // ── 2단계: 프로그램명 기준으로 상위 그룹화 (시간대는 하위 배열)
+        // ── 2단계: 프로그램명 기준으로 상위 그룹화
         const progGroups = {};
         Object.values(timeGroups).forEach(tg => {
             const pname = tg.program;
@@ -2178,26 +2804,23 @@ ${(() => {
 
         const monthLabel = calYr + '년 ' + calMo + '월';
 
-        // 그룹별 날짜 계산 함수
+        // 그룹별 날짜 계산
         const getGroupDates = (programName) => {
             const dows = applications._parseProgramDows(programName);
-            if (!dows.length) {
-                return manualDates.length ? manualDates : null;
-            }
+            if (!dows.length) return manualDates.length ? manualDates : null;
             if (manualDates.length) {
-                const filtered2 = manualDates.filter(k => {
+                const f2 = manualDates.filter(k => {
                     const [y,m,d] = k.split('-').map(Number);
                     return dows.includes(new Date(y,m-1,d).getDay());
                 });
-                return filtered2.length ? filtered2 : null;
+                return f2.length ? f2 : null;
             }
             const lastDate = new Date(calYr, calMo, 0).getDate();
             const dates = [];
             for (let d = 1; d <= lastDate; d++) {
                 const date = new Date(calYr, calMo-1, d);
-                if (dows.includes(date.getDay())) {
+                if (dows.includes(date.getDay()))
                     dates.push(calYr + '-' + String(calMo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
-                }
             }
             return dates.length ? dates : null;
         };
@@ -2208,86 +2831,134 @@ ${(() => {
             return String(a.ho||'').replace(/호$/,'').localeCompare(String(b.ho||'').replace(/호$/,''),'ko',{numeric:true});
         });
 
-        // ── 프로그램 정렬 (요일 우선순위)
+        // 프로그램 정렬 (요일 우선순위)
         const getDowPriority = (programName) => {
             const dows = applications._parseProgramDows(programName);
             if (!dows.length) return 99;
             const first = Math.min(...dows);
             return first === 0 ? 98 : first;
         };
-        const sortedProgGroups = Object.values(progGroups).sort((a, b) => {
-            return getDowPriority(a.program) - getDowPriority(b.program);
-        });
-        // 각 프로그램 내 시간대도 오름차순 정렬
+        const sortedProgGroups = Object.values(progGroups).sort((a, b) =>
+            getDowPriority(a.program) - getDowPriority(b.program)
+        );
         sortedProgGroups.forEach(pg => {
             pg.timeSlots.sort((a, b) => (a.time||'').localeCompare(b.time||'', 'ko'));
         });
 
-        let printContent = '';
-        sortedProgGroups.forEach(pg => {
-            // 날짜 컬럼은 프로그램명 기준으로 계산 (공통)
-            const groupRaw = getGroupDates(pg.program) || [];
-            const dateCols = groupRaw.length
-                ? groupRaw.map(k => applications._dateLabel(k))
-                : ['1회','2회','3회','4회'];
-            const dateMm = Math.max(9, Math.floor(185 / dateCols.length));
+        // ── 시간대 블록 하나의 HTML + 예상 높이(mm) 반환 ──────────────────
+        // 실측 기반 높이 (96dpi: 1px=0.2646mm)
+        // 시간대 헤더 div: 10pt폰트(13.3px)*1.4 + padding8px = 26.6px ≈ 7.0mm
+        // 테이블 헤더 tr: 7.5pt폰트(10px)*1.2 + padding8px = 20px ≈ 5.3mm
+        // 데이터 행: height:22px셀 + border공유 = 23px ≈ 6.1mm
+        // 타이틀바: 12pt폰트(16px)*1.4 + padding6px + border2px = 30.4px ≈ 8.0mm
+        const ROW_H_MM     = 6.1;   // 데이터 행 1개 실측 높이(mm)
+        const SLOT_HEAD_MM = 7.0;   // 시간대 헤더 div 높이(mm)
+        const TBL_HEAD_MM  = 5.3;   // 테이블 헤더 tr 높이(mm)
+        const tsBlockHtml = (ts, dateCols, dateMm, isFirst) => {
+            sortM(ts.members);
+            const rows = ts.members.map((m, i) =>
+                '<tr style="' + (i%2 ? 'background:#f5fdfb' : '') + '">' +
+                '<td style="padding:3px 2px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#999;width:8mm">' + (i+1) + '</td>' +
+                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:8pt;white-space:nowrap;width:22mm">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
+                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:9.5pt;font-weight:bold;width:16mm">' + (m.name||'') + '</td>' +
+                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#555;width:16mm">' + applications._fmtPhoneLast4(m.phone) + '</td>' +
+                dateCols.map(() => '<td style="border:1px solid #ccc;height:22px;width:' + dateMm + 'mm"></td>').join('') +
+                '</tr>'
+            ).join('');
             const thDates = dateCols.map(d =>
                 '<th style="padding:3px 1px;text-align:center;border:1px solid #bbb;font-size:7pt;width:' + dateMm + 'mm;white-space:nowrap">' + d + '</th>'
             ).join('');
+            const html =
+                '<div style="' + (!isFirst ? 'margin-top:4mm;' : '') + '">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;' +
+                'background:#1abc9c;color:#fff;padding:4px 8px;border-radius:3px 3px 0 0">' +
+                '<span style="font-size:10pt;font-weight:700">' + ts.time + '</span>' +
+                '<span style="font-size:8pt;opacity:.9">' + ts.members.length + '명</span></div>' +
+                '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+                '<thead><tr style="background:#e8f8f2">' +
+                '<th style="padding:4px 2px;text-align:center;border:1px solid #bbb;width:8mm;font-size:7.5pt">No.</th>' +
+                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:22mm;font-size:8pt">동/호수</th>' +
+                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:8.5pt">이름</th>' +
+                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:7.5pt">연락처</th>' +
+                thDates +
+                '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+            // 예상 높이(mm): 간격 + 시간대헤더 + 테이블헤더 + 행당 높이
+            const estimatedMm = (!isFirst ? 4 : 0) + SLOT_HEAD_MM + TBL_HEAD_MM + ts.members.length * ROW_H_MM;
+            return { html, estimatedMm };
+        };
 
-            // 시간대별 테이블 HTML 생성
+        // ── page-block 생성: 각 프로그램을 슬라이드로, 넘치면 자동 분할 ──
+        // A4 가로 210mm - page-block padding(8mm*2) = 194mm 사용 가능
+        // html2canvas가 scrollHeight 기준으로 캡처 후 ratio fit하므로
+        // 194mm 이하면 A4에 꽉 차게, 초과 시 축소됨
+        const PAGE_H_MM  = 194;  // page-block 내부 실사용 높이(mm)
+        const TITLE_H_MM = 8.0;  // 프로그램 타이틀바 높이(mm)
+
+        let printContent = '';
+
+        sortedProgGroups.forEach(pg => {
+            const groupRaw  = getGroupDates(pg.program) || [];
+            const dateCols  = groupRaw.length ? groupRaw.map(k => applications._dateLabel(k)) : ['1회','2회','3회','4회'];
+            const dateMm    = Math.max(9, Math.floor(185 / dateCols.length));
             const totalMembers = pg.timeSlots.reduce((s, ts) => s + ts.members.length, 0);
-            let tablesHtml = '';
-            pg.timeSlots.forEach((ts, ti) => {
-                sortM(ts.members);
-                const rows = ts.members.map((m, i) =>
-                    '<tr style="' + (i%2?'background:#f0fdf8':'') + '">' +
-                    '<td style="padding:3px 2px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#999">' + (i+1) + '</td>' +
-                    '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:8pt;white-space:nowrap">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
-                    '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:9.5pt;font-weight:bold">' + (m.name||'') + '</td>' +
-                    '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#555">' + applications._fmtPhoneLast4(m.phone) + '</td>' +
-                    dateCols.map(() => '<td style="border:1px solid #ccc;height:22px;width:' + dateMm + 'mm"></td>').join('') +
-                    '</tr>'
-                ).join('');
-                // 시간대 구분 헤더 (두 번째 이상은 위쪽 여백 추가)
-                tablesHtml +=
-                    '<div style="' + (ti > 0 ? 'margin-top:6mm;' : '') + '">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:center;background:#e8f8f2;border-left:4px solid #1abc9c;padding:3px 6px;margin-bottom:3px">' +
-                    '<span style="font-size:9pt;font-weight:700;color:#1e8449">' + ts.time + '</span>' +
-                    '<span style="font-size:8pt;color:#666">' + ts.members.length + '명</span></div>' +
-                    '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-                    '<thead><tr style="background:#1abc9c;color:#fff">' +
-                    '<th style="padding:4px 2px;text-align:center;border:1px solid #bbb;width:8mm;font-size:7.5pt">No.</th>' +
-                    '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:22mm;font-size:8pt">동/호수</th>' +
-                    '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:8.5pt">이름</th>' +
-                    '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:7.5pt">연락처</th>' +
-                    thDates +
-                    '</tr></thead>' +
-                    '<tbody>' + rows + '</tbody></table></div>';
+
+            // 슬라이드 분할: 시간대를 순서대로 쌓으면서 PAGE_H_MM 초과 시 새 슬라이드
+            let slides = [];          // 슬라이드 배열 [ [{html,mm}, ...], ... ]
+            let curSlide = [];        // 현재 슬라이드에 쌓인 블록들
+            let curH = TITLE_H_MM;   // 현재 슬라이드 누적 높이 (타이틀 포함)
+
+            pg.timeSlots.forEach((ts) => {
+                const isFirstInSlide = curSlide.length === 0;
+                const block = tsBlockHtml(ts, dateCols, dateMm, isFirstInSlide);
+
+                if (!isFirstInSlide && curH + block.estimatedMm > PAGE_H_MM) {
+                    // 현재 슬라이드 저장 후 새 슬라이드 시작
+                    slides.push(curSlide);
+                    curSlide = [];
+                    curH = TITLE_H_MM;
+                    // 새 슬라이드에서의 첫 블록이므로 isFirst=true 로 재생성
+                    const blockNew = tsBlockHtml(ts, dateCols, dateMm, true);
+                    curSlide.push(blockNew);
+                    curH += blockNew.estimatedMm;
+                } else {
+                    curSlide.push(block);
+                    curH += block.estimatedMm;
+                }
             });
+            if (curSlide.length) slides.push(curSlide);
 
-            // 프로그램 page-block (PDF 1페이지)
-            printContent +=
-                '<div class=\"page-block\">' +
-                '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:4px;border-bottom:2px solid #1abc9c;padding-bottom:3px">' +
-                '<span style="font-size:12pt;font-weight:bold;color:#1e8449">' + pg.program + '</span>' +
-                '<span style="font-size:8pt;color:#888">' + monthLabel + ' &nbsp;|&nbsp; 총 <strong style=\"color:#333\">' + totalMembers + '</strong>명 | 인당 <strong style=\"color:#333\">' + dateCols.length + '</strong>회</span></div>' +
-                tablesHtml +
-                '</div>';
-        });  // ← forEach 종료
+            // 슬라이드 → page-block HTML
+            slides.forEach((blocks, si) => {
+                const slideLabel = slides.length > 1 ? ' (' + (si+1) + '/' + slides.length + ')' : '';
+                printContent +=
+                    '<div class="page-block">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-end;' +
+                    'margin-bottom:4px;border-bottom:2px solid #1abc9c;padding-bottom:3px">' +
+                    '<span style="font-size:12pt;font-weight:bold;color:#1e8449">' +
+                    pg.program + slideLabel + '</span>' +
+                    '<span style="font-size:8pt;color:#888">' + monthLabel +
+                    ' &nbsp;|&nbsp; 총 <strong style="color:#333">' + totalMembers + '</strong>명' +
+                    ' | 인당 <strong style="color:#333">' + dateCols.length + '</strong>회</span></div>' +
+                    blocks.map(b => b.html).join('') +
+                    '</div>';
+            });
+        });
 
-        const win = window.open('','_blank','width=1150,height=780');
+        const win = window.open('','_blank','width=1150,height=820');
         if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
-        // 출석부 제목 (단지명 + 출석부)
         const attTitle = complexName + ' 출석부';
-        win.document.write('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
+        win.document.write(
+            '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
             '<title>' + attTitle + ' ' + monthLabel + '</title>' +
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>' +
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>' +
-            '<style>*{box-sizing:border-box}' +
-            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:0;padding:0;color:#111}' +
-            '.page-block{padding:8mm 10mm;background:#fff}' +
-            'table{border-collapse:collapse}</style>' +
+            '<style>' +
+            '*{box-sizing:border-box}' +
+            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:0;padding:0;color:#111;background:#f0f0f0}' +
+            '.page-block{width:277mm;padding:8mm 10mm;background:#fff;margin:0 auto 4mm;box-shadow:0 1px 4px rgba(0,0,0,.1)}'  /* min-height 제거: 내용만큼만 높이 */ +
+            'table{border-collapse:collapse}' +
+            '@media print{body{background:#fff}.page-block{box-shadow:none;margin:0;page-break-after:always}}' +
+            '<\/style>' +
             '<script>async function downloadPDF(){' +
             'var btn=document.getElementById(\'dlBtn\');btn.disabled=true;btn.textContent=\'생성 중...\';' +
             'var blocks=document.querySelectorAll(\'.page-block\');' +
@@ -2296,22 +2967,31 @@ ${(() => {
             'var margin=8;' +
             'for(var i=0;i<blocks.length;i++){' +
             'var el=blocks[i];' +
+            // html2canvas 전에 블록 너비를 A4 가로 픽셀 기준으로 고정
+            'var origW=el.style.width;el.style.width=\'277mm\';' +
             'var bw=el.scrollWidth;var bh=el.scrollHeight;' +
-            'var canvas=await html2canvas(el,{scale:2,useCORS:true,logging:false,backgroundColor:\'#ffffff\',width:bw,height:bh,windowWidth:bw,windowHeight:bh,scrollX:0,scrollY:0});' +
+            'var canvas=await html2canvas(el,{scale:2.5,useCORS:true,logging:false,backgroundColor:\'#ffffff\',' +
+            'width:bw,height:bh,windowWidth:bw,windowHeight:bh,scrollX:0,scrollY:0});' +
+            'el.style.width=origW;' +
             'var iw=canvas.width;var ih=canvas.height;' +
-            'var aw=pw-margin*2;' +
-            'var ratio=aw/iw;' +
-            'var cx=margin;var cy=margin;' +
+            'var aw=pw-margin*2;var ah=ph-margin*2;' +
+            'var ratio=Math.min(aw/iw, ah/ih);' +  // 가로·세로 모두 맞춤
+            'var cx=margin+(aw-iw*ratio)/2;var cy=margin;' +
             'if(i>0)pdf.addPage(\'a4\',\'landscape\');' +
             'pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.95),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
             '}' +
             'pdf.save(\'출석부_' + monthLabel + '.pdf\');' +
             'btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';}<\/script>' +
             '</head><body>' +
-            '<div style="position:sticky;top:0;z-index:99;background:#fff;text-align:right;padding:6px 10mm;border-bottom:1px solid #eee">' +
-            '<button id="dlBtn" onclick="downloadPDF()" style="padding:7px 18px;background:#1abc9c;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">📥 PDF 다운로드</button>' +
-            '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
-            printContent + '</body></html>');
+            '<div style="position:sticky;top:0;z-index:99;background:#fff;text-align:right;' +
+            'padding:6px 10mm;border-bottom:1px solid #eee">' +
+            '<span style="font-size:9pt;color:#888;margin-right:12px">' + attTitle + ' ' + monthLabel + '</span>' +
+            '<button id="dlBtn" onclick="downloadPDF()" style="padding:7px 18px;background:#1abc9c;' +
+            'color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">📥 PDF 다운로드</button>' +
+            '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;' +
+            'color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
+            printContent + '</body></html>'
+        );
         win.document.close();
         win.focus();
     },

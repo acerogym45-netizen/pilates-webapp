@@ -319,11 +319,16 @@ function closeGlobalModal() {
 }
 
 // ── 확인 모달 ─────────────────────────────────────────────────────────────────
-function showConfirm(title, msg, onConfirm) {
+function showConfirm(title, msg, onConfirm, onCancel) {
     document.getElementById('confirmTitle').textContent = title;
     document.getElementById('confirmMessage').textContent = msg;
     const btn = document.getElementById('confirmOkBtn');
     btn.onclick = () => { closeConfirmModal(); onConfirm(); };
+    // 취소 버튼에도 콜백 지원 (취소 시 onCancel 호출)
+    const cancelBtn = document.querySelector('#confirmModal .btn-secondary');
+    if (cancelBtn) {
+        cancelBtn.onclick = () => { closeConfirmModal(); if (onCancel) onCancel(); };
+    }
     document.getElementById('confirmModal').style.display = 'flex';
 }
 function closeConfirmModal() {

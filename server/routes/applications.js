@@ -485,6 +485,28 @@ router.post('/', async (req, res) => {
             }
         }
 
+        // ── 비활성 프로그램 신규 접수 차단 ────────────────────────────────────
+        // is_active=false 프로그램은 신규 신청(접수)만 불가.
+        // 해지 신청·관리자 현황 조회는 정상 동작.
+        if (!admin_bypass && (program_id || program_name) && complex_id) {
+            let prog = null;
+            if (program_id) {
+                const { data: p } = await sb.from('programs').select('is_active, name').eq('id', program_id).single();
+                prog = p;
+            } else {
+                const { data: ps } = await sb.from('programs').select('is_active, name')
+                    .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
+                prog = ps?.[0] || null;
+            }
+            if (prog && prog.is_active === false) {
+                return res.status(400).json({
+                    success: false,
+                    inactive: true,
+                    error: `${prog.name || program_name} 프로그램은 현재 신규 접수를 받지 않습니다. 관리자에게 문의하세요.`
+                });
+            }
+        }
+
         // 정원 확인 (대기 시스템 폐기: 마감 시 차단)
         let status = 'approved';
         let waitingOrder = null;
@@ -590,6 +612,26 @@ router.put('/:id', async (req, res) => {
         if (monthly_fee !== undefined)        updates.monthly_fee = monthly_fee;
         if (transfer_memo !== undefined)      updates.transfer_memo = transfer_memo;
         if (transfer_date !== undefined)      updates.transfer_date = transfer_date;
+
+        // ── cancelled 직접 변경 방어 로직 ─────────────────────────────────────
+        // applications 상태를 직접 cancelled로 바꾸려면 반드시 cancellations 테이블에
+        // 해당 신청(application_id 또는 phone+complex_id 매칭)이 있어야 함.
+        // 정산 작업 중 실수로 일괄 cancelled 처리하는 사고(2026-04-30 사례) 재발 방지.
+        if (status === 'cancelled' && current.status !== 'cancelled') {
+            const { data: cancelRecord, error: cancelCheckErr } = await sb
+                .from('cancellations')
+                .select('id, status')
+                .or(`application_id.eq.${req.params.id},and(phone.eq.${current.phone || ''},complex_id.eq.${current.complex_id || ''})`)
+                .limit(1);
+
+            if (!cancelCheckErr && (!cancelRecord || cancelRecord.length === 0)) {
+                return res.status(400).json({
+                    success: false,
+                    error: `[차단] cancellations 테이블에 해지 신청 기록이 없습니다. 해지 처리는 반드시 해지 관리 탭에서 먼저 등록하세요. (신청자: ${current.name}, ${current.dong} ${current.ho})`,
+                    blocked: true
+                });
+            }
+        }
 
         // ── 관리자 편집 변경 이력 자동 기록 ──────────────────────────
         const editedAt = new Date().toISOString();
@@ -1110,8 +1152,17 @@ router.post('/:id/change-time', async (req, res) => {
 
         // ── 변경 이력 notes 컬럼에 누적 저장 ───────────────────────────────
         const changed = [];
-        if (targetProgram.name !== oldProgramName)   changed.push(`프로그램: ${oldProgramName} → ${targetProgram.name}`);
-        if (new_preferred_time !== oldTime)           changed.push(`시간대: ${oldTime} → ${new_preferred_time}`);
+        const isProgramChange = targetProgram.name !== oldProgramName;
+        const isTimeChange    = new_preferred_time !== oldTime;
+
+        if (isProgramChange) changed.push(`요일: ${oldProgramName} → ${targetProgram.name}`);
+        if (isTimeChange)    changed.push(`시간대: ${oldTime} → ${new_preferred_time}`);
+
+        // 태그 구분: 요일만 변경 → [요일변경], 시간대만 변경 → [시간변경], 둘 다 → [요일+시간변경]
+        let changeTag = '[변경]';
+        if (isProgramChange && isTimeChange)  changeTag = '[요일+시간변경]';
+        else if (isProgramChange)             changeTag = '[요일변경]';
+        else if (isTimeChange)                changeTag = '[시간변경]';
 
         const changeMeta = JSON.stringify({
             changed_at:       changedAt,
@@ -1124,8 +1175,8 @@ router.post('/:id/change-time', async (req, res) => {
         });
         const prevNotes = app.notes || '';
         const newNotes  = prevNotes
-            ? prevNotes + '\n[변경] ' + changeMeta
-            : '[변경] ' + changeMeta;
+            ? prevNotes + `\n${changeTag} ` + changeMeta
+            : `${changeTag} ` + changeMeta;
 
         // 변경 실행 (notes에 이력 포함)
         const { error: updateErr } = await sb
@@ -1153,6 +1204,89 @@ router.post('/:id/change-time', async (req, res) => {
             new_program_name: targetProgram.name,
             new_preferred_time
         });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 출석 기록 저장/조회 (관리비 부과용) ──────────────────────
+// GET  /api/applications/attendance?complexId=&year=&month=
+// POST /api/applications/attendance  body: { records: [{id, dates:{YYYY-MM-DD: 'O'|'X'|'E'}}], year, month }
+//   date 값: 'O'=출석, 'X'=결석(노쇼), 'E'=사전고지결석(면제)
+router.get('/attendance', async (req, res) => {
+    try {
+        const { complexId, year, month } = req.query;
+        if (!complexId || !year || !month) return res.status(400).json({ success: false, error: 'complexId, year, month 필수' });
+        const sb = getSupabase();
+        const monthKey = year + '-' + String(month).padStart(2, '0');
+        const { data, error } = await sb
+            .from('attendance_records')
+            .select('*')
+            .eq('complex_id', complexId)
+            .eq('month', monthKey);
+        if (error) {
+            // 테이블 없으면 빈 배열 반환
+            if (error.code === '42P01') return res.json({ success: true, data: [] });
+            throw error;
+        }
+        res.json({ success: true, data: data || [] });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+router.post('/attendance', async (req, res) => {
+    try {
+        const { complex_id, year, month, records } = req.body;
+        if (!complex_id || !year || !month || !Array.isArray(records)) {
+            return res.status(400).json({ success: false, error: 'complex_id, year, month, records 필수' });
+        }
+        const sb = getSupabase();
+        const monthKey = year + '-' + String(month).padStart(2, '0');
+
+        const upserts = records.map(r => ({
+            complex_id,
+            application_id: r.id,
+            month: monthKey,
+            dates: r.dates || {},          // { 'YYYY-MM-DD': 'O'|'X'|'E' }
+            attended: r.attended || 0,     // O 합계
+            absent_noshow: r.absent_noshow || 0,  // X 합계 (노쇼)
+            absent_excused: r.absent_excused || 0, // E 합계 (사전고지)
+            charge_amount: r.charge_amount || 0,   // 최종 부과액
+            auto_cancel: r.auto_cancel || false,   // 3회 이상 결석 해지 대상
+            updated_at: new Date().toISOString()
+        }));
+
+        // attendance_records 테이블 upsert (application_id + month unique)
+        const { error } = await sb
+            .from('attendance_records')
+            .upsert(upserts, { onConflict: 'application_id,month' });
+
+        if (error) {
+            // 테이블이 없으면 생성 안내
+            if (error.code === '42P01') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'attendance_records 테이블이 없습니다. Supabase에서 생성해주세요.',
+                    sql: `CREATE TABLE attendance_records (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  complex_id uuid NOT NULL,
+  application_id uuid NOT NULL,
+  month text NOT NULL,
+  dates jsonb DEFAULT '{}',
+  attended integer DEFAULT 0,
+  absent_noshow integer DEFAULT 0,
+  absent_excused integer DEFAULT 0,
+  charge_amount integer DEFAULT 0,
+  auto_cancel boolean DEFAULT false,
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(application_id, month)
+);`
+                });
+            }
+            throw error;
+        }
+        res.json({ success: true, saved: upserts.length });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
