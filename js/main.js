@@ -1899,30 +1899,51 @@ async function populateCancellationPrograms() {
         
         console.log('📋 Loading programs for cancellation modal...');
         
-        // Fetch active programs via /api/programs
-        const response = await fetch(`/api/programs?complexCode=${complexCode}&activeOnly=true`);
+        // 해지 신청 드롭다운은 비활성 프로그램도 포함해야 함.
+        // 비활성 프로그램 수강자도 해지 신청 가능해야 하므로 includeInactive=true 사용.
+        // (신규 접수는 서버에서 별도로 차단됨)
+        const response = await fetch(`/api/programs?complexCode=${complexCode}&includeInactive=true`);
         const result = await response.json();
         const programs = result.data || [];
         
-        const complexPrograms = programs.filter(p => p.is_active !== false);
-        
-        console.log(`✅ Found ${complexPrograms.length} active programs for cancellation`);
+        console.log(`✅ Found ${programs.length} programs for cancellation (active + inactive)`);
         
         const selectElement = document.getElementById('cancelLessonType');
         
         // Clear existing options except the first one (placeholder)
         selectElement.innerHTML = '<option value="">선택하세요</option>';
         
+        // 활성 프로그램 먼저, 비활성 프로그램은 구분선 뒤에 표시
+        const activePrograms   = programs.filter(p => p.is_active !== false);
+        const inactivePrograms = programs.filter(p => p.is_active === false);
+
         // Add program options
-        complexPrograms.forEach(program => {
+        activePrograms.forEach(program => {
             const pName = program.name || program.program_name;
             const option = document.createElement('option');
             option.value = pName;
             option.textContent = pName;
             selectElement.appendChild(option);
         });
+
+        // 비활성 프로그램이 있으면 구분선 + 항목 추가
+        if (inactivePrograms.length > 0) {
+            const sep = document.createElement('option');
+            sep.disabled = true;
+            sep.textContent = '── 신규접수 종료 ──';
+            selectElement.appendChild(sep);
+
+            inactivePrograms.forEach(program => {
+                const pName = program.name || program.program_name;
+                const option = document.createElement('option');
+                option.value = pName;
+                option.textContent = `${pName} (신규접수 종료)`;
+                option.style.color = '#888';
+                selectElement.appendChild(option);
+            });
+        }
         
-        if (complexPrograms.length === 0) {
+        if (programs.length === 0) {
             const option = document.createElement('option');
             option.value = '';
             option.textContent = '등록된 프로그램이 없습니다';

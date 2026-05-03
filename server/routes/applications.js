@@ -485,6 +485,28 @@ router.post('/', async (req, res) => {
             }
         }
 
+        // ── 비활성 프로그램 신규 접수 차단 ────────────────────────────────────
+        // is_active=false 프로그램은 신규 신청(접수)만 불가.
+        // 해지 신청·관리자 현황 조회는 정상 동작.
+        if (!admin_bypass && (program_id || program_name) && complex_id) {
+            let prog = null;
+            if (program_id) {
+                const { data: p } = await sb.from('programs').select('is_active, name').eq('id', program_id).single();
+                prog = p;
+            } else {
+                const { data: ps } = await sb.from('programs').select('is_active, name')
+                    .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
+                prog = ps?.[0] || null;
+            }
+            if (prog && prog.is_active === false) {
+                return res.status(400).json({
+                    success: false,
+                    inactive: true,
+                    error: `${prog.name || program_name} 프로그램은 현재 신규 접수를 받지 않습니다. 관리자에게 문의하세요.`
+                });
+            }
+        }
+
         // 정원 확인 (대기 시스템 폐기: 마감 시 차단)
         let status = 'approved';
         let waitingOrder = null;

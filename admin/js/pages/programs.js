@@ -28,7 +28,7 @@ const programs = {
             <div class="list-item">
                 <div class="item-status">
                     <span class="status-badge type-badge-${p.type}">${typeLabel(p.type)}</span>
-                    ${!p.is_active ? '<span class="status-badge status-muted">비활성</span>' : ''}
+                    ${!p.is_active ? '<span class="status-badge status-muted" title="신규 접수 차단 중 · 해지 신청 및 기존 수강자 현황은 정상 표시">신규접수 차단</span>' : ''}
                 </div>
                 <div class="item-main">
                     <strong>${p.name}</strong>
@@ -118,7 +118,7 @@ const programs = {
             </div>
             <div class="form-group"><label>설명</label><textarea id="pDesc" rows="3">${p ? escHtml(p.description||'') : ''}</textarea></div>
             <div class="form-group"><label>표시 순서</label><input type="number" id="pOrder" value="${p?.display_order||0}"></div>
-            ${p ? `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="pActive" ${p.is_active?'checked':''}><span>활성화</span></label></div>` : ''}`;
+            ${p ? `<div class="form-group"><label class="checkbox-label"><input type="checkbox" id="pActive" ${p.is_active?'checked':''}><span>활성화 <small style="color:#888;font-weight:normal">(비활성 시 신규 접수만 차단 · 기존 수강자 해지 신청 가능)</small></span></label></div>` : ''}` ;
         const footer = `
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
             <button class="btn-primary" onclick="programs.save('${p?.id||''}')"><i class="fas fa-save"></i> 저장</button>`;
