@@ -68,19 +68,31 @@ function applyBranding(complex) {
 async function loadPrograms() {
     const container = document.getElementById('programCards');
     try {
-        const res = await API.programs.list({ complexCode: State.complex.code, activeOnly: 'true' });
-        State.programs = res.data || [];
+        // includeInactive=true: 비활성 프로그램도 포함해서 가져옴
+        // (신규접수는 서버/클라이언트 양쪽에서 차단, 해지 신청용 표시는 유지)
+        const res = await API.programs.list({ complexCode: State.complex.code, includeInactive: 'true' });
+        const all = res.data || [];
+
+        // show_on_inactive=false 인 비활성 프로그램은 입주민 페이지에서 숨김
+        State.programs = all.filter(p => p.is_active || p.show_on_inactive !== false);
 
         if (!State.programs.length) {
             container.innerHTML = '<p class="empty-hint">등록된 프로그램이 없습니다.</p>';
             return;
         }
 
-        container.innerHTML = State.programs.map(p => `
-            <div class="program-card" data-id="${p.id}" onclick="selectProgram('${p.id}')">
+        container.innerHTML = State.programs.map(p => {
+            const inactive = !p.is_active;
+            return `
+            <div class="program-card ${inactive ? 'program-card-inactive' : ''}"
+                 data-id="${p.id}"
+                 onclick="${inactive ? '' : `selectProgram('${p.id}')`}"
+                 style="${inactive ? 'cursor:default;opacity:.75' : ''}">
                 <div class="program-card-header">
                     <span class="program-type-badge type-${p.type}">${typeLabel(p.type)}</span>
-                    <span class="program-price">₩${p.price.toLocaleString()}/월</span>
+                    ${inactive
+                        ? '<span class="program-badge-inactive">신규접수 종료</span>'
+                        : `<span class="program-price">₩${p.price.toLocaleString()}/월</span>`}
                 </div>
                 <div class="program-name">${p.name}</div>
                 <div class="program-meta">
@@ -88,8 +100,9 @@ async function loadPrograms() {
                     <span><i class="fas fa-users"></i> 정원 ${p.capacity}명</span>
                 </div>
                 ${p.description ? `<div class="program-desc">${p.description}</div>` : ''}
-            </div>
-        `).join('');
+                ${inactive ? '<div class="program-inactive-notice"><i class="fas fa-info-circle"></i> 현재 신규 접수가 종료된 프로그램입니다. 해지 신청은 하단 버튼을 이용해주세요.</div>' : ''}
+            </div>`;
+        }).join('');
     } catch (e) {
         container.innerHTML = '<p class="error-hint">프로그램 로드 실패</p>';
     }
@@ -158,6 +171,52 @@ function selectTimeSlot(slot, isFull) {
     document.querySelector(`.timeslot-btn[data-slot="${slot}"]`)?.classList.add('selected');
 }
 
+// ── 입력 확인 필드 일치 검사 ────────────────────────────────────────────────
+function checkConfirmMatch(id1, id2, wrapId) {
+    const v1   = (document.getElementById(id1)?.value  || '').trim();
+    const v2   = (document.getElementById(id2)?.value  || '').trim();
+    const inp2 = document.getElementById(id2);
+    const wrap = document.getElementById(wrapId);
+    if (!inp2 || !wrap) return;
+    if (!v2) {
+        inp2.classList.remove('field-mismatch', 'field-match');
+        wrap.classList.remove('mismatch');
+        return;
+    }
+    if (v1 === v2) {
+        inp2.classList.remove('field-mismatch');
+        inp2.classList.add('field-match');
+        wrap.classList.remove('mismatch');
+    } else {
+        inp2.classList.remove('field-match');
+        inp2.classList.add('field-mismatch');
+        wrap.classList.add('mismatch');
+    }
+}
+
+function allConfirmFieldsMatch() {
+    const pairs = [
+        { id1: 'dong',  id2: 'dongConfirm',  label: '동' },
+        { id1: 'ho',    id2: 'hoConfirm',    label: '호수' },
+        { id1: 'phone', id2: 'phoneConfirm', label: '전화번호' },
+    ];
+    for (const { id1, id2, label } of pairs) {
+        const v1 = (document.getElementById(id1)?.value  || '').trim();
+        const v2 = (document.getElementById(id2)?.value  || '').trim();
+        if (!v2) {
+            alert(`${label} 확인란을 입력해 주세요.\n\n관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.`);
+            document.getElementById(id2)?.focus();
+            return false;
+        }
+        if (v1 !== v2) {
+            alert(`${label}이(가) 일치하지 않습니다.\n\n관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.`);
+            document.getElementById(id2)?.focus();
+            return false;
+        }
+    }
+    return true;
+}
+
 // ── 이벤트 설정 ──────────────────────────────────────────────────────────────
 function setupEvents() {
     // 신청서 제출
@@ -216,6 +275,10 @@ function handleFormSubmit(e) {
     const agreement = document.getElementById('agreement').checked;
 
     if (!dong || !ho || !name || !phone) { showToast('모든 필수 항목을 입력해주세요', 'error'); return; }
+
+    // 동/호수/전화번호 확인 필드 일치 검사
+    if (!allConfirmFieldsMatch()) return;
+
     if (!State.selectedProgram) { showToast('프로그램을 선택해주세요', 'error'); return; }
 
     const isGroupLesson = State.selectedProgram.type === 'group';
@@ -548,6 +611,24 @@ async function verifyAdminPassword() {
 
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 function showMyApplicationModal() { openModal('myAppModal'); }
+
+// 해지 신청 모달 열기 + 프로그램 드롭다운 자동 채우기
+function showCancellationForm() {
+    openModal('cancellationModal');
+    // 모든 프로그램(비활성 포함) 드롭다운에 채우기
+    const sel = document.getElementById('cancelProgram');
+    if (!sel) return;
+    const programs = State.programs || [];
+    if (!programs.length) return;
+    // 기존 옵션 초기화 후 재생성
+    sel.innerHTML = '<option value="">-- 해지할 프로그램 선택 --</option>';
+    programs.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = p.is_active ? p.name : `${p.name} (신규접수 종료)`;
+        sel.appendChild(opt);
+    });
+}
 
 function openModal(id) {
     document.getElementById(id).style.display = 'flex';
