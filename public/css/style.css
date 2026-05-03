@@ -483,3 +483,32 @@ textarea { resize:vertical; min-height:80px; }
     .header { padding:16px; }
     .timeslot-btn { min-width:75px; font-size:.8rem; }
 }
+
+/* ── 입력 확인 필드 불일치 경고 ── */
+input.field-mismatch {
+    border-color: #e53e3e !important;
+    box-shadow: 0 0 0 3px rgba(229,62,62,.13) !important;
+    animation: mismatch-shake .35s ease;
+}
+.confirm-mismatch-msg {
+    display: none;
+    margin-top: 5px;
+    padding: 7px 10px;
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    border-radius: 7px;
+    font-size: .78rem;
+    color: #c53030;
+    font-weight: 600;
+    line-height: 1.5;
+}
+.form-group.mismatch .confirm-mismatch-msg { display: block; }
+input.field-match {
+    border-color: #38a169 !important;
+    box-shadow: 0 0 0 3px rgba(56,161,105,.12) !important;
+}
+@keyframes mismatch-shake {
+    0%,100% { transform: translateX(0); }
+    20%      { transform: translateX(-4px); }
+    60%      { transform: translateX(4px); }
+}
