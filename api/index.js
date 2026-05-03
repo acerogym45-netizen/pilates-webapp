@@ -41,20 +41,26 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // ── 정적 파일 서빙 (API보다 먼저 - js/css 파일 우선) ──────────────────────────
 // js/, css/ 파일을 직접 명시해서 서빙
 app.get('/js/:file', (req, res) => {
-    const filePath = path.join(ROOT_DIR, 'js', req.params.file);
-    if (fs.existsSync(filePath)) {
+    // 루트 js/ 먼저, 없으면 public/js/ 에서 서빙 (public/index.html이 /js/app.js 등 참조)
+    const filePath        = path.join(ROOT_DIR, 'js', req.params.file);
+    const fallbackPath    = path.join(ROOT_DIR, 'public', 'js', req.params.file);
+    const target = fs.existsSync(filePath) ? filePath : (fs.existsSync(fallbackPath) ? fallbackPath : null);
+    if (target) {
         res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
-        res.sendFile(filePath);
+        res.sendFile(target);
     } else {
         res.status(404).send('Not found');
     }
 });
 
 app.get('/css/:file', (req, res) => {
-    const filePath = path.join(ROOT_DIR, 'css', req.params.file);
-    if (fs.existsSync(filePath)) {
+    // 루트 css/ 먼저, 없으면 public/css/ 에서 서빙
+    const filePath     = path.join(ROOT_DIR, 'css', req.params.file);
+    const fallbackPath = path.join(ROOT_DIR, 'public', 'css', req.params.file);
+    const target = fs.existsSync(filePath) ? filePath : (fs.existsSync(fallbackPath) ? fallbackPath : null);
+    if (target) {
         res.setHeader('Content-Type', 'text/css; charset=UTF-8');
-        res.sendFile(filePath);
+        res.sendFile(target);
     } else {
         res.status(404).send('Not found');
     }
