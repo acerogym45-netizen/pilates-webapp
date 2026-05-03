@@ -1158,6 +1158,89 @@ router.post('/:id/change-time', async (req, res) => {
     }
 });
 
+// ── 출석 기록 저장/조회 (관리비 부과용) ──────────────────────
+// GET  /api/applications/attendance?complexId=&year=&month=
+// POST /api/applications/attendance  body: { records: [{id, dates:{YYYY-MM-DD: 'O'|'X'|'E'}}], year, month }
+//   date 값: 'O'=출석, 'X'=결석(노쇼), 'E'=사전고지결석(면제)
+router.get('/attendance', async (req, res) => {
+    try {
+        const { complexId, year, month } = req.query;
+        if (!complexId || !year || !month) return res.status(400).json({ success: false, error: 'complexId, year, month 필수' });
+        const sb = getSupabase();
+        const monthKey = year + '-' + String(month).padStart(2, '0');
+        const { data, error } = await sb
+            .from('attendance_records')
+            .select('*')
+            .eq('complex_id', complexId)
+            .eq('month', monthKey);
+        if (error) {
+            // 테이블 없으면 빈 배열 반환
+            if (error.code === '42P01') return res.json({ success: true, data: [] });
+            throw error;
+        }
+        res.json({ success: true, data: data || [] });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+router.post('/attendance', async (req, res) => {
+    try {
+        const { complex_id, year, month, records } = req.body;
+        if (!complex_id || !year || !month || !Array.isArray(records)) {
+            return res.status(400).json({ success: false, error: 'complex_id, year, month, records 필수' });
+        }
+        const sb = getSupabase();
+        const monthKey = year + '-' + String(month).padStart(2, '0');
+
+        const upserts = records.map(r => ({
+            complex_id,
+            application_id: r.id,
+            month: monthKey,
+            dates: r.dates || {},          // { 'YYYY-MM-DD': 'O'|'X'|'E' }
+            attended: r.attended || 0,     // O 합계
+            absent_noshow: r.absent_noshow || 0,  // X 합계 (노쇼)
+            absent_excused: r.absent_excused || 0, // E 합계 (사전고지)
+            charge_amount: r.charge_amount || 0,   // 최종 부과액
+            auto_cancel: r.auto_cancel || false,   // 3회 이상 결석 해지 대상
+            updated_at: new Date().toISOString()
+        }));
+
+        // attendance_records 테이블 upsert (application_id + month unique)
+        const { error } = await sb
+            .from('attendance_records')
+            .upsert(upserts, { onConflict: 'application_id,month' });
+
+        if (error) {
+            // 테이블이 없으면 생성 안내
+            if (error.code === '42P01') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'attendance_records 테이블이 없습니다. Supabase에서 생성해주세요.',
+                    sql: `CREATE TABLE attendance_records (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  complex_id uuid NOT NULL,
+  application_id uuid NOT NULL,
+  month text NOT NULL,
+  dates jsonb DEFAULT '{}',
+  attended integer DEFAULT 0,
+  absent_noshow integer DEFAULT 0,
+  absent_excused integer DEFAULT 0,
+  charge_amount integer DEFAULT 0,
+  auto_cancel boolean DEFAULT false,
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(application_id, month)
+);`
+                });
+            }
+            throw error;
+        }
+        res.json({ success: true, saved: upserts.length });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // ── 신청 삭제 (관리자용) ─────────────────────────────────────
 // ?force=true 파라미터가 있을 때만 물리 삭제, 없으면 status='deleted' 소프트 삭제
 router.delete('/:id', async (req, res) => {
