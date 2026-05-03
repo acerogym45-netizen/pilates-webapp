@@ -74,7 +74,8 @@ async function loadPrograms() {
         const all = res.data || [];
 
         // show_on_inactive=false 인 비활성 프로그램은 입주민 페이지에서 숨김
-        State.programs = all.filter(p => p.is_active || p.show_on_inactive !== false);
+        // null/undefined/true 모두 표시, 명시적 false일 때만 숨김
+        State.programs = all.filter(p => p.is_active || p.show_on_inactive === true || p.show_on_inactive === null || p.show_on_inactive === undefined);
 
         if (!State.programs.length) {
             container.innerHTML = '<p class="empty-hint">등록된 프로그램이 없습니다.</p>';
@@ -222,9 +223,13 @@ function setupEvents() {
     // 신청서 제출
     document.getElementById('applicationForm').addEventListener('submit', handleFormSubmit);
 
-    // 전화번호 포맷
+    // 전화번호 포맷 (원본 + 확인 필드 모두)
     document.getElementById('phone').addEventListener('input', formatPhone);
     document.getElementById('cancelPhone').addEventListener('input', formatPhone);
+    document.getElementById('phoneConfirm').addEventListener('input', e => {
+        formatPhone(e);
+        checkConfirmMatch('phone', 'phoneConfirm', 'phoneConfirmWrap');
+    });
 
     // 관리자 트리거 (헤더 5번 클릭)
     const trigger = document.getElementById('adminTrigger');
@@ -248,6 +253,12 @@ function formatPhone(e) {
     if (v.length <= 3) e.target.value = v;
     else if (v.length <= 7) e.target.value = `${v.slice(0,3)}-${v.slice(3)}`;
     else e.target.value = `${v.slice(0,3)}-${v.slice(3,7)}-${v.slice(7,11)}`;
+}
+
+// ── 숫자 전용 필터 (동/호수 입력 시 숫자만 허용) ─────────────────────────────
+function filterNumericOnly(input) {
+    const prev = input.value;
+    input.value = prev.replace(/[^0-9]/g, '');
 }
 
 function setTodayDate() {
