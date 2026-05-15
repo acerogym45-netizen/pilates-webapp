@@ -1592,12 +1592,23 @@ const settlement = {
             const SUBTOTAL_BG = { fgColor: { rgb: 'F5EEF8' } };
             const GRAND_BG    = { fgColor: { rgb: 'EDE7F6' } };
 
-            // 헤더: 강사명 / 프로그램 / 담당타임 / 수업유형 / 타임별횟수 / 타임당단가 / 인건비
+            // ── 컬럼 구성 (10개) ──────────────────────────────────────────
+            // [0] 강사명  [1] 연락처  [2] 주민등록번호  [3] 급여계좌번호
+            // [4] 프로그램  [5] 담당 타임/수강생  [6] 수업유형
+            // [7] 월 수업횟수  [8] 타임당 단가(원)  [9] 인건비(원)
+            // ─────────────────────────────────────────────────────────────
+            const TOTAL_COLS  = 10;
+            const INFO_BG     = { fgColor: { rgb: 'FFF9C4' } }; // 연노랑 — 개인정보 3컬럼
+            const INFO_WARN   = { fgColor: { rgb: 'FDECEA' } }; // 연빨강 — 주민번호 컬럼
+
             const data = [
                 [`${monthLabel} 강사 인건비 정산서`], [],
-                ['강사명', '프로그램', '담당 타임/수강생', '수업 유형', '월 수업횟수', '타임당 단가(원)', '인건비(원)'],
+                ['강사명', '연락처', '주민등록번호', '급여계좌번호',
+                 '프로그램', '담당 타임/수강생', '수업 유형',
+                 '월 수업횟수', '타임당 단가(원)', '인건비(원)'],
             ];
-            const styleRows = []; // { rowIdx, style:'subtotal'|'grand' }
+            const styleRows  = []; // { rowIdx, style:'subtotal'|'grand' }
+            const mergeRanges = [{ s:{r:0,c:0}, e:{r:0,c:TOTAL_COLS-1} }]; // 제목 병합
             let rowIdx = 3;
 
             let grandPayroll = 0;
@@ -1609,23 +1620,30 @@ const settlement = {
                 // 구형 문자열 배열 하위호환
                 const isLegacy = assigned.length > 0 && typeof assigned[0] === 'string';
                 if (isLegacy || !assigned.length) {
-                    data.push([instr.name, '(담당 타임 미설정 — 강사 관리에서 타임별 설정 필요)', '', '', '', '', '']);
+                    data.push([
+                        instr.name,
+                        instr.phone        || '',
+                        instr.rrn          || '',
+                        instr.bank_account || '',
+                        '(담당 타임 미설정 — 강사 관리에서 타임별 설정 필요)',
+                        '', '', '', '', '',
+                    ]);
                     rowIdx++;
                     return;
                 }
 
-                let instrTotal = 0;
+                let instrTotal    = 0;
+                const instrStartR = rowIdx; // 이 강사의 첫 데이터 행 (병합 시작)
 
-                assigned.forEach(a => {
+                assigned.forEach((a, ai) => {
                     const { program_name, time_slot, type } = a;
                     const rate = Number(rates[type]) || 0;
                     const typeLabel = { group:'그룹', private:'개인', duet:'듀엣' }[type] || type;
 
                     let sessions = 0;
                     if (time_slot === 'free') {
-                        // 개인/듀엣: 전체 슬롯 합계 (_total 포함)
                         const pm = slotSessionMap[program_name] || {};
-                        sessions = Object.values(pm).reduce((a,b) => a + (Number(b)||0), 0);
+                        sessions = Object.values(pm).reduce((s,v) => s + (Number(v)||0), 0);
                     } else {
                         sessions = Number((slotSessionMap[program_name] || {})[time_slot]) || 0;
                     }
@@ -1633,13 +1651,16 @@ const settlement = {
                     const payroll = sessions * rate;
                     instrTotal   += payroll;
 
-                    // 개인/듀엣: 수강생 이름 표시 (application_id 기반)
                     const studentLabel = (time_slot === 'free' && a.student_name)
                         ? a.student_name + (a.student_dong ? ` (${a.student_dong}동 ${a.student_ho}호)` : '')
                         : (time_slot === 'free' ? '자유시간' : time_slot);
 
+                    // 개인정보: 첫 행에만 표시, 이후 행은 빈칸 (세로 병합으로 시각적 통합)
                     data.push([
-                        instr.name,
+                        ai === 0 ? instr.name          : '',
+                        ai === 0 ? (instr.phone        || '') : '',
+                        ai === 0 ? (instr.rrn          || '') : '',
+                        ai === 0 ? (instr.bank_account || '') : '',
                         program_name,
                         studentLabel,
                         typeLabel,
@@ -1650,37 +1671,82 @@ const settlement = {
                     rowIdx++;
                 });
 
-                // 소계
-                data.push(['', `${instr.name} 소계`, '', '', '', '', instrTotal]);
+                // 개인정보 컬럼(0~3) 세로 병합: 첫행 ~ 마지막 데이터행
+                const instrEndR = rowIdx - 1;
+                if (instrEndR > instrStartR) {
+                    for (let c = 0; c <= 3; c++) {
+                        mergeRanges.push({ s:{r:instrStartR, c}, e:{r:instrEndR, c} });
+                    }
+                }
+
+                // 소계행
+                data.push(['', `${instr.name} 소계`, '', '', '', '', '', '', '', instrTotal]);
                 styleRows.push({ rowIdx, style: 'subtotal' });
                 rowIdx++;
-                data.push([]); // 빈 행
+                data.push([]); // 빈 행 구분선
                 rowIdx++;
 
                 grandPayroll += instrTotal;
             });
 
             // 전체 합계
-            data.push(['전체 합계', '', '', '', '', '', grandPayroll]);
+            data.push(['전체 합계', '', '', '', '', '', '', '', '', grandPayroll]);
             styleRows.push({ rowIdx, style: 'grand' });
 
             const ws = XLSX.utils.aoa_to_sheet(data);
             ws['!cols'] = [
-                { wch:12 }, { wch:24 }, { wch:10 }, { wch:8 }, { wch:12 }, { wch:14 }, { wch:14 },
+                { wch:11 }, // 강사명
+                { wch:14 }, // 연락처
+                { wch:16 }, // 주민등록번호
+                { wch:26 }, // 급여계좌번호
+                { wch:22 }, // 프로그램
+                { wch:14 }, // 담당 타임/수강생
+                { wch:8  }, // 수업유형
+                { wch:11 }, // 월 수업횟수
+                { wch:14 }, // 타임당 단가
+                { wch:14 }, // 인건비
             ];
-            ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:6} }];
+            ws['!merges'] = mergeRanges;
 
-            // 헤더 스타일
-            for (let c = 0; c < 7; c++) {
+            // 헤더 행(row 2) 스타일
+            for (let c = 0; c < TOTAL_COLS; c++) {
                 const ref = XLSX.utils.encode_cell({ r:2, c });
                 if (!ws[ref]) ws[ref] = { v:'', t:'s' };
-                ws[ref].s = { fill: PURPLE_HDR, font:{ bold:true }, alignment:{ horizontal:'center' } };
+                // 개인정보 컬럼(1~3)은 노란 배경, 나머지는 보라 배경
+                const fillHdr = (c === 2) ? INFO_WARN : (c >= 1 && c <= 3) ? INFO_BG : PURPLE_HDR;
+                ws[ref].s = { fill: fillHdr, font:{ bold:true }, alignment:{ horizontal:'center', wrapText:true } };
             }
 
-            // 소계/합계 스타일
+            // 데이터 행: 개인정보 컬럼 배경색 적용
+            for (let r = 3; r < data.length; r++) {
+                const row = data[r];
+                if (!row || !row.length) continue;
+                // 연락처(c=1), 급여계좌(c=3) → 연노랑
+                for (const c of [1, 3]) {
+                    const ref = XLSX.utils.encode_cell({ r, c });
+                    if (!ws[ref]) ws[ref] = { v:'', t:'s' };
+                    if (!ws[ref].s) ws[ref].s = {};
+                    ws[ref].s.fill = INFO_BG;
+                    ws[ref].s.alignment = { vertical:'center', wrapText:true };
+                }
+                // 주민번호(c=2) → 연빨강
+                const rrnRef = XLSX.utils.encode_cell({ r, c:2 });
+                if (!ws[rrnRef]) ws[rrnRef] = { v:'', t:'s' };
+                if (!ws[rrnRef].s) ws[rrnRef].s = {};
+                ws[rrnRef].s.fill = INFO_WARN;
+                ws[rrnRef].s.alignment = { vertical:'center' };
+                // 병합된 강사명(c=0) 세로 중앙 정렬
+                const nameRef = XLSX.utils.encode_cell({ r, c:0 });
+                if (ws[nameRef]) {
+                    if (!ws[nameRef].s) ws[nameRef].s = {};
+                    ws[nameRef].s.alignment = { vertical:'center', horizontal:'center' };
+                }
+            }
+
+            // 소계/합계 행 스타일
             styleRows.forEach(({ rowIdx: ri, style }) => {
                 const fill = style === 'grand' ? GRAND_BG : SUBTOTAL_BG;
-                for (let c = 0; c < 7; c++) {
+                for (let c = 0; c < TOTAL_COLS; c++) {
                     const ref = XLSX.utils.encode_cell({ r: ri, c });
                     if (!ws[ref]) ws[ref] = { v:'', t:'s' };
                     if (!ws[ref].s) ws[ref].s = {};
