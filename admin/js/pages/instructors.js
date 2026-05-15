@@ -75,7 +75,7 @@ const instructors = {
         const i = id ? this.data.find(x => x.id === id) : null;
 
         // 담당 타임 목록: assigned_programs는 이제 객체 배열
-        // 구조: [{ program_id, program_name, time_slot, type }, ...]
+        // 구조: [{ program_id, program_name, time_slot, type, applicant_ids? }, ...]
         // time_slot이 'free'이면 개인/듀엣(자유시간)
         const assignedArr = Array.isArray(i?.assigned_programs)
             ? i.assigned_programs
@@ -88,11 +88,25 @@ const instructors = {
             isLegacy ? [] : assignedArr.map(a => `${a.program_id}|${a.time_slot}`)
         );
 
+        // { "program_id|free" → Set<applicant_id> } — 기존 저장된 담당 수강생 복원용
+        const savedApplicantIds = {};
+        if (!isLegacy) {
+            assignedArr.forEach(a => {
+                if (a.time_slot === 'free' && Array.isArray(a.applicant_ids)) {
+                    savedApplicantIds[`${a.program_id}|free`] = new Set(a.applicant_ids);
+                }
+            });
+        }
+
         // 프로그램+타임 목록 로드
         let progTimeHtml = '';
         let loadedProgs = [];
+        const cid = getEffectiveComplexId() || i?.complex_id;
+
+        // 자유시간 프로그램별 승인 수강생 캐시 { program_name → [applicant, ...] }
+        const approvedApplicants = {};
+
         try {
-            const cid = getEffectiveComplexId() || i?.complex_id;
             const url = cid ? `/api/programs?complexId=${cid}` : '/api/programs';
             const res  = await fetch(url);
             const json = await res.json();
@@ -112,6 +126,19 @@ const instructors = {
                 return 'group';
             };
 
+            // 자유시간(time_slots=[]) 프로그램의 승인 수강생 미리 로드
+            const freeProgs = loadedProgs.filter(p =>
+                !(Array.isArray(p.time_slots) && p.time_slots.length)
+            );
+            if (freeProgs.length && cid) {
+                const aRes  = await fetch(`/api/applications?complexId=${encodeURIComponent(cid)}&status=approved&limit=500`);
+                const aJson = await aRes.json();
+                const allApproved = aJson.data || [];
+                freeProgs.forEach(p => {
+                    approvedApplicants[p.name] = allApproved.filter(a => a.program_name === p.name);
+                });
+            }
+
             if (!loadedProgs.length) {
                 progTimeHtml = '<p style="color:#aaa;font-size:.82rem">등록된 프로그램 없음</p>';
             } else {
@@ -119,18 +146,14 @@ const instructors = {
                     const slots = Array.isArray(p.time_slots) ? p.time_slots : [];
                     const pType = getType(p.name);
                     const typeLabel = { group:'그룹', private:'개인', duet:'듀엣' }[pType];
-                    const typeBadge = `<span style="font-size:.68rem;padding:1px 6px;border-radius:8px;font-weight:700;margin-left:4px;
-                        ${pType==='group'?'background:#e8f4fd;color:#2980b9':pType==='private'?'background:#fef9e7;color:#e67e22':'background:#f5eef8;color:#8e44ad'}">
-                        ${typeLabel}</span>`;
+                    const typeBadge = `<span style="font-size:.68rem;padding:1px 6px;border-radius:8px;font-weight:700;margin-left:4px;${pType==='group'?'background:#e8f4fd;color:#2980b9':pType==='private'?'background:#fef9e7;color:#e67e22':'background:#f5eef8;color:#8e44ad'}">${typeLabel}</span>`;
 
-                    // 타임이 없는 프로그램 (개인/듀엣 등) → '자유시간' 단일 체크박스
-                    const slotRows = slots.length
-                        ? slots.map(slot => {
+                    if (slots.length) {
+                        // ── 타임 슬롯이 있는 수업 → 슬롯별 체크박스
+                        const slotRows = slots.map(slot => {
                             const key     = `${p.id}|${slot}`;
                             const checked = assignedSet.has(key) ? 'checked' : '';
-                            return `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;
-                                        margin:2px 6px 2px 0;font-size:.82rem;background:#f8f8f8;
-                                        border:1px solid #e0e0e0;border-radius:6px;padding:3px 8px">
+                            return `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;margin:2px 6px 2px 0;font-size:.82rem;background:#f8f8f8;border:1px solid #e0e0e0;border-radius:6px;padding:3px 8px">
                                 <input type="checkbox" name="iTimeSlot"
                                     data-prog-id="${p.id}"
                                     data-prog-name="${escHtml(p.name)}"
@@ -140,30 +163,72 @@ const instructors = {
                                     style="cursor:pointer">
                                 <span style="font-weight:600">${slot}</span>
                             </label>`;
-                        }).join('')
-                        : (() => {
-                            const key     = `${p.id}|free`;
-                            const checked = assignedSet.has(key) ? 'checked' : '';
-                            return `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;
-                                        margin:2px 6px 2px 0;font-size:.82rem;background:#fef9e7;
-                                        border:1px solid #f9e6b0;border-radius:6px;padding:3px 10px">
+                        }).join('');
+
+                        return `<div style="padding:8px 0;border-bottom:1px solid #e8f5e9">
+                            <div style="font-size:.85rem;font-weight:700;color:#1a252f;margin-bottom:5px">
+                                ${escHtml(p.name)}${typeBadge}
+                            </div>
+                            <div style="display:flex;flex-wrap:wrap;gap:2px">${slotRows}</div>
+                        </div>`;
+
+                    } else {
+                        // ── 자유시간 프로그램(개인/듀엣) → 담당 체크박스 + 수강생 지정 목록
+                        const freeKey     = `${p.id}|free`;
+                        const freeChecked = assignedSet.has(freeKey) ? 'checked' : '';
+                        const savedIds    = savedApplicantIds[freeKey] || new Set();
+
+                        const applicants = approvedApplicants[p.name] || [];
+                        const applicantRows = applicants.length
+                            ? applicants.map(ap => {
+                                const apChecked = savedIds.has(ap.id) ? 'checked' : '';
+                                const loc = (ap.dong && ap.ho) ? `${ap.dong}동 ${ap.ho}호`
+                                          : (ap.dong || ap.ho || '');
+                                const timeHint = ap.preferred_time
+                                    ? `<span style="color:#888;font-size:.72rem;margin-left:6px;font-weight:400">${escHtml(ap.preferred_time)}</span>`
+                                    : '';
+                                return `<label style="display:flex;align-items:flex-start;gap:7px;cursor:pointer;padding:6px 9px;border-radius:6px;border:1px solid #e8d5b0;background:#fffdf5;margin-bottom:4px;transition:background .15s" onmouseover="this.style.background='#fff8e1'" onmouseout="this.style.background='#fffdf5'">
+                                    <input type="checkbox" name="iApplicant_${p.id}"
+                                        data-prog-id="${p.id}"
+                                        data-applicant-id="${ap.id}"
+                                        ${apChecked}
+                                        style="cursor:pointer;margin-top:3px;flex-shrink:0;accent-color:#e67e22">
+                                    <div style="line-height:1.4">
+                                        <span style="font-weight:700;font-size:.84rem">${escHtml(ap.name)}</span>
+                                        ${loc ? `<span style="color:#777;font-size:.78rem;margin-left:5px">${escHtml(loc)}</span>` : ''}
+                                        ${timeHint}
+                                    </div>
+                                </label>`;
+                            }).join('')
+                            : `<p style="color:#bbb;font-size:.79rem;margin:2px 0 0 2px;font-style:italic">승인된 수강생 없음</p>`;
+
+                        const applicantSection = `<div id="freeApplicants_${p.id}"
+                            style="margin-top:8px;padding:10px 12px;background:#fffbf0;border:1px solid #f0d88a;border-radius:8px;${freeChecked ? '' : 'display:none'}">
+                            <div style="font-size:.78rem;color:#b7770d;font-weight:700;margin-bottom:7px">
+                                <i class="fas fa-users" style="margin-right:4px"></i>담당 수강생 지정
+                                <span style="font-weight:400;color:#aaa;margin-left:5px">이 강사가 담당할 수강생을 선택하세요</span>
+                            </div>
+                            ${applicantRows}
+                        </div>`;
+
+                        return `<div style="padding:8px 0;border-bottom:1px solid #e8f5e9">
+                            <div style="font-size:.85rem;font-weight:700;color:#1a252f;margin-bottom:5px">
+                                ${escHtml(p.name)}${typeBadge}
+                            </div>
+                            <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;margin:2px 6px 2px 0;font-size:.82rem;background:#fef9e7;border:1px solid #f9e6b0;border-radius:6px;padding:4px 11px">
                                 <input type="checkbox" name="iTimeSlot"
                                     data-prog-id="${p.id}"
                                     data-prog-name="${escHtml(p.name)}"
                                     data-slot="free"
                                     data-type="${pType}"
-                                    ${checked}
-                                    style="cursor:pointer">
-                                <span style="font-weight:600;color:#b7770d">자유시간 담당</span>
-                            </label>`;
-                        })();
-
-                    return `<div style="padding:8px 0;border-bottom:1px solid #e8f5e9">
-                        <div style="font-size:.85rem;font-weight:700;color:#1a252f;margin-bottom:5px">
-                            ${escHtml(p.name)}${typeBadge}
-                        </div>
-                        <div style="display:flex;flex-wrap:wrap;gap:2px">${slotRows}</div>
-                    </div>`;
+                                    ${freeChecked}
+                                    onchange="(function(cb){var sec=document.getElementById('freeApplicants_${p.id}');if(sec)sec.style.display=cb.checked?'block':'none';})(this)"
+                                    style="cursor:pointer;accent-color:#e67e22">
+                                <span style="font-weight:700;color:#b7770d">자유시간 담당</span>
+                            </label>
+                            ${applicantSection}
+                        </div>`;
+                    }
                 }).join('');
             }
         } catch(e) {
@@ -321,15 +386,24 @@ const instructors = {
 
         try {
             // 담당 타임 체크박스 수집 → 객체 배열로 변환
-            // 구조: [{ program_id, program_name, time_slot, type }, ...]
+            // 구조: [{ program_id, program_name, time_slot, type, applicant_ids? }, ...]
             const assignedPrograms = Array.from(
                 document.querySelectorAll('input[name="iTimeSlot"]:checked')
-            ).map(cb => ({
-                program_id:   cb.dataset.progId,
-                program_name: cb.dataset.progName,
-                time_slot:    cb.dataset.slot,
-                type:         cb.dataset.type,
-            }));
+            ).map(cb => {
+                const entry = {
+                    program_id:   cb.dataset.progId,
+                    program_name: cb.dataset.progName,
+                    time_slot:    cb.dataset.slot,
+                    type:         cb.dataset.type,
+                };
+                // 자유시간 담당인 경우: 체크된 수강생 applicant_ids 수집
+                if (cb.dataset.slot === 'free') {
+                    entry.applicant_ids = Array.from(
+                        document.querySelectorAll(`input[name="iApplicant_${cb.dataset.progId}"]:checked`)
+                    ).map(apCb => apCb.dataset.applicantId);
+                }
+                return entry;
+            });
 
             // 타임당 단가 수집
             const hourlyRates = {
