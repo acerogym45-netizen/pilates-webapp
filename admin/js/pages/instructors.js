@@ -65,15 +65,42 @@ const instructors = {
                     </span>`;
                 }).join('');
             }
+            // 연락처 표시
+            const phoneStr = i.phone
+                ? `<span style="margin-left:6px;color:#555"><i class="fas fa-phone-alt" style="font-size:.68rem;color:#3498db;margin-right:2px"></i>${escHtml(i.phone)}</span>`
+                : '';
+
+            // 계약기간 D-day 뱃지
+            let dDayBadge = '';
+            if (i.contract_end) {
+                const today = new Date(); today.setHours(0,0,0,0);
+                const end   = new Date(i.contract_end);
+                const diff  = Math.round((end - today) / 86400000);
+                if (diff < 0) {
+                    dDayBadge = `<span style="background:#fdecea;color:#e74c3c;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:5px">계약만료</span>`;
+                } else if (diff <= 30) {
+                    dDayBadge = `<span style="background:#fff3e0;color:#e67e22;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:5px">D-${diff}</span>`;
+                } else {
+                    dDayBadge = `<span style="background:#e8f8f0;color:#27ae60;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:5px">D-${diff}</span>`;
+                }
+            }
+            const contractStr = (i.contract_start || i.contract_end)
+                ? `<p style="margin:2px 0;font-size:.75rem;color:#888">
+                       <i class="fas fa-file-contract" style="font-size:.68rem;color:#e67e22;margin-right:2px"></i>
+                       계약 ${i.contract_start ? escHtml(i.contract_start) : '?'} ~ ${i.contract_end ? escHtml(i.contract_end) : '?'}
+                   </p>`
+                : '';
+
             return `
             <div class="list-item" style="flex-wrap:wrap;gap:4px">
                 ${i.photo_url ? `<img src="${i.photo_url}" class="item-thumb" alt="${i.name}">` : '<div class="item-thumb-placeholder"><i class="fas fa-user"></i></div>'}
                 <div class="item-main" style="flex:1;min-width:0">
-                    <strong>${i.name}</strong>
-                    <p style="margin:2px 0">${i.title || '-'}</p>
+                    <strong>${i.name}</strong>${dDayBadge}
+                    <p style="margin:2px 0">${i.title || '-'}${phoneStr}</p>
                     <p style="margin:2px 0;font-size:.78rem;color:#e67e22">
                         <i class="fas fa-won-sign" style="font-size:.7rem"></i> ${rateStr}
                     </p>
+                    ${contractStr}
                     <div style="margin-top:4px">${progBadges}</div>
                 </div>
                 <div class="item-actions">
@@ -255,6 +282,19 @@ const instructors = {
         const ratePrivate = rates.private  || 0;
         const rateDuet    = rates.duet     || 0;
 
+        // 계약기간 D-day 계산
+        const contractEnd = i?.contract_end || '';
+        let contractDday = '';
+        if (contractEnd) {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const end   = new Date(contractEnd);
+            const diff  = Math.round((end - today) / 86400000);
+            if      (diff < 0)  contractDday = `<span style="color:#e74c3c;font-weight:700">만료 (${Math.abs(diff)}일 경과)</span>`;
+            else if (diff === 0) contractDday = `<span style="color:#e74c3c;font-weight:700">오늘 만료</span>`;
+            else if (diff <= 30) contractDday = `<span style="color:#e67e22;font-weight:700">D-${diff}</span>`;
+            else                 contractDday = `<span style="color:#27ae60;font-weight:700">D-${diff}</span>`;
+        }
+
         const body = `
             <div class="form-group"><label>이름 *</label>
                 <input type="text" id="iName" value="${i ? escHtml(i.name) : ''}">
@@ -276,6 +316,82 @@ const instructors = {
             </div>
             <div class="form-group"><label>표시 순서</label>
                 <input type="number" id="iOrder" value="${i?.display_order||0}">
+            </div>
+
+            <!-- ── 연락처 / 노무 정보 ── -->
+            <div class="form-group" style="background:#f0f4ff;border:1.5px solid #aec6f8;border-radius:8px;padding:14px 16px;margin-top:4px">
+                <label style="font-weight:700;color:#333;margin-bottom:12px;display:block">
+                    <i class="fas fa-id-card" style="color:#3498db;margin-right:4px"></i>연락처 &amp; 노무 정보
+                    <span style="font-size:.73rem;font-weight:400;color:#999;margin-left:6px">급여명세서 발송 · 계약서 관리용</span>
+                </label>
+
+                <!-- 연락처 -->
+                <div style="margin-bottom:12px">
+                    <label style="font-size:.78rem;color:#3498db;font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:4px">
+                        <i class="fas fa-phone-alt" style="font-size:.72rem"></i>연락처
+                        <span style="font-size:.68rem;font-weight:400;color:#999">(급여명세서 자동발송 SMS 수신 번호)</span>
+                    </label>
+                    <input type="tel" id="iPhone"
+                        value="${escHtml(i?.phone||'')}"
+                        placeholder="010-0000-0000"
+                        style="width:100%;padding:8px 11px;border:1.5px solid #aec6f8;border-radius:6px;font-size:.9rem"
+                        oninput="instructors._fmtPhone(this)">
+                </div>
+
+                <!-- 계좌번호 -->
+                <div style="margin-bottom:12px">
+                    <label style="font-size:.78rem;color:#3498db;font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:4px">
+                        <i class="fas fa-university" style="font-size:.72rem"></i>입금 계좌번호
+                    </label>
+                    <input type="text" id="iBankAccount"
+                        value="${escHtml(i?.bank_account||'')}"
+                        placeholder="은행명 + 계좌번호 (예: 국민 123-456-789012)"
+                        style="width:100%;padding:8px 11px;border:1.5px solid #aec6f8;border-radius:6px;font-size:.9rem">
+                </div>
+
+                <!-- 주민등록번호 -->
+                <div>
+                    <label style="font-size:.78rem;color:#e74c3c;font-weight:700;margin-bottom:5px;display:flex;align-items:center;gap:4px">
+                        <i class="fas fa-lock" style="font-size:.72rem"></i>주민등록번호
+                        <span style="font-size:.68rem;font-weight:400;color:#999">(원천징수 · 4대보험 신고용 — 암호화 저장)</span>
+                    </label>
+                    <input type="text" id="iRrn"
+                        value="${escHtml(i?.rrn||'')}"
+                        placeholder="000000-0000000"
+                        maxlength="14"
+                        style="width:100%;padding:8px 11px;border:1.5px solid #f1948a;border-radius:6px;font-size:.9rem;letter-spacing:1px"
+                        oninput="instructors._fmtRrn(this)">
+                    <div style="font-size:.7rem;color:#e74c3c;margin-top:3px;display:flex;align-items:center;gap:3px">
+                        <i class="fas fa-shield-alt"></i> 관리자 전용 항목입니다. 외부 노출에 주의하세요.
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 계약기간 ── -->
+            <div class="form-group" style="background:#fffbf0;border:1.5px solid #f9e4a0;border-radius:8px;padding:14px 16px;margin-top:4px">
+                <label style="font-weight:700;color:#333;margin-bottom:12px;display:block">
+                    <i class="fas fa-file-contract" style="color:#e67e22;margin-right:4px"></i>계약기간
+                    <span style="font-size:.73rem;font-weight:400;color:#999;margin-left:6px">계약서 관리 · 갱신 알림용</span>
+                    ${contractDday ? `<span style="margin-left:8px;font-size:.78rem">${contractDday}</span>` : ''}
+                </label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div>
+                        <label style="font-size:.78rem;color:#e67e22;font-weight:700;margin-bottom:5px;display:block">계약 시작일</label>
+                        <input type="date" id="iContractStart"
+                            value="${escHtml(i?.contract_start||'')}"
+                            style="width:100%;padding:8px 11px;border:1.5px solid #f9e4a0;border-radius:6px;font-size:.9rem">
+                    </div>
+                    <div>
+                        <label style="font-size:.78rem;color:#e67e22;font-weight:700;margin-bottom:5px;display:block">계약 종료일</label>
+                        <input type="date" id="iContractEnd"
+                            value="${escHtml(i?.contract_end||'')}"
+                            style="width:100%;padding:8px 11px;border:1.5px solid #f9e4a0;border-radius:6px;font-size:.9rem"
+                            onchange="instructors._updateDday(this.value)">
+                    </div>
+                </div>
+                <div id="iDdayDisplay" style="margin-top:8px;font-size:.8rem;text-align:center;min-height:18px">
+                    ${contractDday ? `계약 종료일까지 ${contractDday}` : ''}
+                </div>
             </div>
 
             <!-- ── 타임당 단가 ── -->
@@ -435,6 +551,11 @@ const instructors = {
                 display_order: parseInt(document.getElementById('iOrder').value)||0,
                 hourly_rates: hourlyRates,
                 assigned_programs: assignedPrograms,
+                phone:          (document.getElementById('iPhone')?.value        || '').trim(),
+                bank_account:   (document.getElementById('iBankAccount')?.value  || '').trim(),
+                rrn:            (document.getElementById('iRrn')?.value           || '').trim(),
+                contract_start: document.getElementById('iContractStart')?.value || null,
+                contract_end:   document.getElementById('iContractEnd')?.value   || null,
             };
             if (id) {
                 await API.instructors.update(id, data);
@@ -473,7 +594,39 @@ const instructors = {
             try { await API.instructors.delete(id); showToast('삭제되었습니다'); await this.load(); }
             catch(e) { showToast('삭제 실패: ' + e.message, 'error'); }
         });
-    }
+    },
+
+    // ── 전화번호 자동 하이픈 ──
+    _fmtPhone(input) {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length <= 3)       input.value = v;
+        else if (v.length <= 7)  input.value = v.slice(0,3) + '-' + v.slice(3);
+        else if (v.length <= 11) input.value = v.slice(0,3) + '-' + v.slice(3,7) + '-' + v.slice(7);
+        else                     input.value = v.slice(0,3) + '-' + v.slice(3,7) + '-' + v.slice(7,11);
+    },
+
+    // ── 주민등록번호 자동 하이픈 ──
+    _fmtRrn(input) {
+        let v = input.value.replace(/\D/g, '');
+        if (v.length <= 6) input.value = v;
+        else               input.value = v.slice(0,6) + '-' + v.slice(6,13);
+    },
+
+    // ── 계약 종료일 변경 시 D-day 실시간 표시 ──
+    _updateDday(dateStr) {
+        const el = document.getElementById('iDdayDisplay');
+        if (!el) return;
+        if (!dateStr) { el.innerHTML = ''; return; }
+        const today = new Date(); today.setHours(0,0,0,0);
+        const end   = new Date(dateStr);
+        const diff  = Math.round((end - today) / 86400000);
+        let badge = '';
+        if      (diff < 0)  badge = `<span style="color:#e74c3c;font-weight:700">계약 만료 (${Math.abs(diff)}일 경과)</span>`;
+        else if (diff === 0) badge = `<span style="color:#e74c3c;font-weight:700">오늘 만료</span>`;
+        else if (diff <= 30) badge = `<span style="color:#e67e22;font-weight:700">D-${diff} (30일 이내 갱신 권장)</span>`;
+        else                 badge = `<span style="color:#27ae60;font-weight:700">D-${diff}</span>`;
+        el.innerHTML = `계약 종료일까지 ${badge}`;
+    },
 };
 
 /** 커리큘럼 관리 */

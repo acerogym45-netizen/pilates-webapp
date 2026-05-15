@@ -308,7 +308,8 @@ router.get('/instructors', async (req, res) => {
 
 router.post('/instructors', async (req, res) => {
     try {
-        const { complex_id, name, title, bio, photo_url, display_order, hourly_rates, assigned_programs } = req.body;
+        const { complex_id, name, title, bio, photo_url, display_order, hourly_rates, assigned_programs,
+                phone, bank_account, rrn, contract_start, contract_end } = req.body;
         if (!complex_id || !name) return res.status(400).json({ success: false, error: '필수 항목 누락' });
         const sb = getSupabase();
         const { data, error } = await sb
@@ -319,6 +320,11 @@ router.post('/instructors', async (req, res) => {
                 display_order: display_order || 0,
                 hourly_rates:      hourly_rates      || { group: 0, private: 0, duet: 0 },
                 assigned_programs: assigned_programs || [],
+                phone:          phone          || '',
+                bank_account:   bank_account   || '',
+                rrn:            rrn            || '',
+                contract_start: contract_start || null,
+                contract_end:   contract_end   || null,
             })
             .select()
             .single();
@@ -329,7 +335,8 @@ router.post('/instructors', async (req, res) => {
 
 router.put('/instructors/:id', async (req, res) => {
     try {
-        const { name, title, bio, photo_url, display_order, is_active, hourly_rates, assigned_programs } = req.body;
+        const { name, title, bio, photo_url, display_order, is_active, hourly_rates, assigned_programs,
+                phone, bank_account, rrn, contract_start, contract_end } = req.body;
         const sb = getSupabase();
         const updatePayload = {
             name, title, bio, photo_url,
@@ -339,6 +346,11 @@ router.put('/instructors/:id', async (req, res) => {
         // 컬럼이 존재할 때만 반영 (DB 마이그레이션 미완시 무시)
         if (hourly_rates      !== undefined) updatePayload.hourly_rates      = hourly_rates;
         if (assigned_programs !== undefined) updatePayload.assigned_programs = assigned_programs;
+        if (phone          !== undefined) updatePayload.phone          = phone;
+        if (bank_account   !== undefined) updatePayload.bank_account   = bank_account;
+        if (rrn            !== undefined) updatePayload.rrn            = rrn;
+        if (contract_start !== undefined) updatePayload.contract_start = contract_start || null;
+        if (contract_end   !== undefined) updatePayload.contract_end   = contract_end   || null;
 
         const { data, error } = await sb
             .from('instructors')
