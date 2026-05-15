@@ -1088,61 +1088,80 @@ router.get('/settlement-report', async (req, res) => {
         // ────────────────────────────────────────────────
         const progPriceMap   = {}; // { program_name: price }
         const progIdMap      = {}; // { program_name: program_id }
-        const progSessionMap     = {}; // { program_name: session_count } ← 이번 달 실제 수업횟수
-        const nextProgSessionMap = {}; // { program_name: session_count } ← 다음 달 수업횟수 (수강신청 내역 시트용)
+        // progSessionMap:     { program_name: { time_slot: count, ... } }  ← 이번 달 타임별 수업횟수
+        // nextProgSessionMap: { program_name: { time_slot: count, ... } }  ← 다음 달 타임별 수업횟수
+        // progSessionTotalMap: { program_name: totalCount }  ← 타임별 합계 (요금 계산용)
+        const progSessionMap         = {};
+        const nextProgSessionMap     = {};
+        const progSessionTotalMap    = {};
+        const nextProgSessionTotalMap= {};
         {
             const { data: progs } = await sb
                 .from('programs')
-                .select('id, name, price, description')
+                .select('id, name, price, description, time_slots')
                 .eq('complex_id', cid);
             (progs || []).forEach(p => {
                 if (p.name) {
                     progPriceMap[p.name] = p.price || 0;
                     progIdMap[p.name]    = p.id;
-                    // programs.description JSON에서 당월 + 차월 수업횟수 동시 추출
                     try {
-                        const raw = p.description;
+                        const raw  = p.description;
                         const desc = raw && typeof raw === 'string' && raw.trim().startsWith('{')
                             ? JSON.parse(raw) : (raw || {});
-                        const cnt     = desc?.sessions?.[monthKey];
-                        const cntNext = desc?.sessions?.[nextKey];
-                        if (cnt     != null) progSessionMap[p.name]     = Number(cnt);
-                        if (cntNext != null) nextProgSessionMap[p.name] = Number(cntNext);
-                    } catch { /* description 파싱 실패 무시 */ }
+                        const rawCur  = desc?.sessions?.[monthKey];
+                        const rawNext = desc?.sessions?.[nextKey];
+
+                        // 타임별 객체 { "09:00": 7, "10:00": 7 } 또는 구형 숫자 둘 다 지원
+                        const parseSlotMap = (v) => {
+                            if (v == null) return null;
+                            if (typeof v === 'object' && !Array.isArray(v)) return v;
+                            // 구형 단일 숫자 → time_slots 전체에 동일 값 배분
+                            const slots = Array.isArray(p.time_slots) ? p.time_slots : [];
+                            if (slots.length === 0) return { _total: Number(v) };
+                            const map = {};
+                            slots.forEach(s => { map[s] = Number(v); });
+                            return map;
+                        };
+
+                        const curMap  = parseSlotMap(rawCur);
+                        const nextMap = parseSlotMap(rawNext);
+                        if (curMap)  {
+                            progSessionMap[p.name] = curMap;
+                            progSessionTotalMap[p.name] = Object.values(curMap).reduce((a,b)=>a+b,0);
+                        }
+                        if (nextMap) {
+                            nextProgSessionMap[p.name] = nextMap;
+                            nextProgSessionTotalMap[p.name] = Object.values(nextMap).reduce((a,b)=>a+b,0);
+                        }
+                    } catch { /* ignore */ }
                 }
             });
         }
 
-        // 수업횟수 기반 요금 계산 (session_count × 15,000)
-        // session_count 미설정 시 → 정액(monthly_fee or program.price) 그대로 사용
+        // 수업횟수 기반 요금 계산 (타임별 합계 횟수 × 15,000)
+        // 미설정 시 → 정액(monthly_fee or program.price) 그대로 사용
         const SESSION_UNIT = 15000;
 
-        // 당월 수업횟수 기반 요금 (정산 내역 시트 / 동호수계 시트용)
+        // 당월 수업횟수 기반 요금 (정산 내역 / 동호수계용) — 타임별 합계 사용
         const getSessionFee = (programName) => {
-            const cnt = progSessionMap[programName];
-            if (cnt != null && cnt > 0) return cnt * SESSION_UNIT;
-            return null; // 미설정
+            const total = progSessionTotalMap[programName];
+            if (total != null && total > 0) return total * SESSION_UNIT;
+            return null;
         };
         const getFee = (app) => {
-            // 1순위: 당월 수업횟수 기반 계산
             const sessionFee = getSessionFee(app.program_name);
             if (sessionFee !== null) return sessionFee;
-            // 2순위: applications 테이블 monthly_fee
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
-            // 3순위: programs.price
             return progPriceMap[app.program_name] || 0;
         };
 
-        // 차월 수업횟수 기반 요금 (수강신청 내역 시트용)
-        // 차월 수업횟수 미설정 시 → 당월 수업횟수 → 정액 순으로 fallback
+        // 차월 수업횟수 기반 요금 (수강신청 내역용)
         const getNextFee = (app) => {
-            const cntNext = nextProgSessionMap[app.program_name];
-            if (cntNext != null && cntNext > 0) return cntNext * SESSION_UNIT;
-            // 차월 미설정 → 당월 수업횟수로 fallback
-            const cntCur = progSessionMap[app.program_name];
-            if (cntCur != null && cntCur > 0) return cntCur * SESSION_UNIT;
-            // 정액 fallback
+            const totalNext = nextProgSessionTotalMap[app.program_name];
+            if (totalNext != null && totalNext > 0) return totalNext * SESSION_UNIT;
+            const totalCur = progSessionTotalMap[app.program_name];
+            if (totalCur != null && totalCur > 0) return totalCur * SESSION_UNIT;
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
             return progPriceMap[app.program_name] || 0;
@@ -1644,9 +1663,11 @@ router.get('/settlement-report', async (req, res) => {
             dongho_settlement_rows: donghoSettlementRows, // 동호수계 시트
             enrollment_rows:        enrollmentRows,       // 수강신청 내역 시트
             // ── 월별 수업횟수 정보 (UI 표시용) ──
-            prog_session_map:      progSessionMap,         // { program_name: session_count } 당월
-            next_prog_session_map: nextProgSessionMap,     // { program_name: session_count } 차월 (수강신청 내역용)
-            prog_id_map:           progIdMap,              // { program_name: program_id }
+            prog_session_map:           progSessionMap,          // { program_name: { time_slot: count } } 당월 타임별
+            next_prog_session_map:      nextProgSessionMap,      // { program_name: { time_slot: count } } 차월 타임별
+            prog_session_total_map:     progSessionTotalMap,     // { program_name: totalCount } 당월 합계
+            next_prog_session_total_map:nextProgSessionTotalMap, // { program_name: totalCount } 차월 합계
+            prog_id_map:                progIdMap,               // { program_name: program_id }
         });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -1788,7 +1809,9 @@ router.get('/program-monthly-sessions', async (req, res) => {
 
 /**
  * POST /api/program-monthly-sessions
- * body: { complex_id, yearMonth, sessions: [{ program_id, session_count }] }
+ * 타임별 수업횟수 저장
+ * body: { complex_id, yearMonth, sessions: [{ program_id, slot_counts: { "09:00": 7, "10:00": 7 } }] }
+ * 하위호환: session_count(숫자) 방식도 지원 → 모든 time_slots에 동일 값 저장
  */
 router.post('/program-monthly-sessions', async (req, res) => {
     try {
@@ -1808,7 +1831,7 @@ router.post('/program-monthly-sessions', async (req, res) => {
         const progIds = sessions.map(s => s.program_id);
         const { data: programs, error: fetchErr } = await sb
             .from('programs')
-            .select('id, description')
+            .select('id, description, time_slots')
             .eq('complex_id', cid)
             .in('id', progIds);
         if (fetchErr) throw fetchErr;
@@ -1827,7 +1850,24 @@ router.post('/program-monthly-sessions', async (req, res) => {
             } catch { /* start fresh */ }
 
             if (!descObj.sessions) descObj.sessions = {};
-            descObj.sessions[yearMonth] = parseInt(sessEntry.session_count) || 0;
+
+            // slot_counts 방식(신형): { "09:00": 7, ... }
+            if (sessEntry.slot_counts && typeof sessEntry.slot_counts === 'object') {
+                descObj.sessions[yearMonth] = sessEntry.slot_counts;
+            }
+            // session_count 방식(구형 하위호환): 단일 숫자
+            else if (sessEntry.session_count != null) {
+                const slots = Array.isArray(prog.time_slots) ? prog.time_slots : [];
+                if (slots.length > 0) {
+                    const map = {};
+                    slots.forEach(s => { map[s] = parseInt(sessEntry.session_count) || 0; });
+                    descObj.sessions[yearMonth] = map;
+                } else {
+                    descObj.sessions[yearMonth] = { _total: parseInt(sessEntry.session_count) || 0 };
+                }
+            } else {
+                continue;
+            }
 
             const { error: upErr } = await sb
                 .from('programs')

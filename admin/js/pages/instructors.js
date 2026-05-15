@@ -29,9 +29,30 @@ const instructors = {
                 rates.private ? `개인 ${Number(rates.private).toLocaleString('ko-KR')}원` : '',
                 rates.duet    ? `듀엣 ${Number(rates.duet).toLocaleString('ko-KR')}원`    : '',
             ].filter(Boolean).join(' · ') || '-';
-            const progs = Array.isArray(i.assigned_programs) && i.assigned_programs.length
-                ? i.assigned_programs.map(p => `<span style="background:#e8f8f0;color:#27ae60;font-size:.72rem;padding:2px 7px;border-radius:10px;margin-right:3px">${escHtml(p)}</span>`).join('')
-                : '<span style="color:#bbb;font-size:.78rem">담당 미지정</span>';
+
+            // assigned_programs: 객체 배열 또는 구 문자열 배열 하위호환
+            const ap = Array.isArray(i.assigned_programs) ? i.assigned_programs : [];
+            let progBadges = '';
+            if (!ap.length) {
+                progBadges = '<span style="color:#bbb;font-size:.78rem">담당 미지정</span>';
+            } else if (typeof ap[0] === 'string') {
+                // 구 형식
+                progBadges = ap.map(p =>
+                    `<span style="background:#e8f8f0;color:#27ae60;font-size:.72rem;padding:2px 7px;border-radius:10px;margin-right:3px">${escHtml(p)}</span>`
+                ).join('');
+            } else {
+                // 신 형식: 프로그램별로 묶어서 "프로그램명 (09:00, 10:00)" 형태로 표시
+                const progMap = {};
+                ap.forEach(a => {
+                    if (!progMap[a.program_name]) progMap[a.program_name] = [];
+                    progMap[a.program_name].push(a.time_slot === 'free' ? '자유' : a.time_slot);
+                });
+                progBadges = Object.entries(progMap).map(([name, slots]) =>
+                    `<span style="background:#e8f8f0;color:#1a6b3c;font-size:.72rem;padding:2px 8px;border-radius:10px;margin-right:3px;margin-bottom:2px;display:inline-block">
+                        ${escHtml(name)}<span style="color:#27ae60;margin-left:3px">(${slots.join(', ')})</span>
+                    </span>`
+                ).join('')
+            }
             return `
             <div class="list-item" style="flex-wrap:wrap;gap:4px">
                 ${i.photo_url ? `<img src="${i.photo_url}" class="item-thumb" alt="${i.name}">` : '<div class="item-thumb-placeholder"><i class="fas fa-user"></i></div>'}
@@ -41,7 +62,7 @@ const instructors = {
                     <p style="margin:2px 0;font-size:.78rem;color:#e67e22">
                         <i class="fas fa-won-sign" style="font-size:.7rem"></i> ${rateStr}
                     </p>
-                    <div style="margin-top:4px">${progs}</div>
+                    <div style="margin-top:4px">${progBadges}</div>
                 </div>
                 <div class="item-actions">
                     <button class="btn-ghost dark btn-sm" onclick="instructors.showForm('${i.id}')"><i class="fas fa-edit"></i></button>
@@ -53,37 +74,118 @@ const instructors = {
     async showForm(id) {
         const i = id ? this.data.find(x => x.id === id) : null;
 
-        // 담당 프로그램 목록 로드 (프로그램 API)
-        let progOptions = '';
+        // 담당 타임 목록: assigned_programs는 이제 객체 배열
+        // 구조: [{ program_id, program_name, time_slot, type }, ...]
+        // time_slot이 'free'이면 개인/듀엣(자유시간)
+        const assignedArr = Array.isArray(i?.assigned_programs)
+            ? i.assigned_programs
+            : [];
+        // 기존 문자열 배열 구조 하위호환 (마이그레이션 전 데이터)
+        const isLegacy = assignedArr.length > 0 && typeof assignedArr[0] === 'string';
+
+        // { "program_id|time_slot" → true } 형태로 빠른 조회
+        const assignedSet = new Set(
+            isLegacy ? [] : assignedArr.map(a => `${a.program_id}|${a.time_slot}`)
+        );
+
+        // 프로그램+타임 목록 로드
+        let progTimeHtml = '';
+        let loadedProgs = [];
         try {
-            const cid = getEffectiveComplexId() || (i?.complex_id);
+            const cid = getEffectiveComplexId() || i?.complex_id;
             const url = cid ? `/api/programs?complexId=${cid}` : '/api/programs';
-            const res = await fetch(url);
+            const res  = await fetch(url);
             const json = await res.json();
-            const progs = (json.data || []).filter(p => p.name);
-            const assigned = (i?.assigned_programs) || [];
-            progOptions = progs.map(p => {
-                const checked = assigned.includes(p.name) ? 'checked' : '';
-                return `<label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;font-size:.88rem">
-                    <input type="checkbox" name="iProgram" value="${escHtml(p.name)}" ${checked}
-                        style="width:15px;height:15px;cursor:pointer">
-                    <span>${escHtml(p.name)}</span>
-                </label>`;
-            }).join('');
+            // 같은 단지의 프로그램만, 중복 id 제거
+            const seen = new Set();
+            loadedProgs = (json.data || []).filter(p => {
+                if (!p.name || seen.has(p.id)) return false;
+                seen.add(p.id);
+                return true;
+            });
+
+            // 수업 유형 추정: 프로그램명 기준
+            const getType = (name) => {
+                const n = (name||'').toLowerCase();
+                if (n.includes('개인') || n.includes('1:1')) return 'private';
+                if (n.includes('듀엣') || n.includes('2:1')) return 'duet';
+                return 'group';
+            };
+
+            if (!loadedProgs.length) {
+                progTimeHtml = '<p style="color:#aaa;font-size:.82rem">등록된 프로그램 없음</p>';
+            } else {
+                progTimeHtml = loadedProgs.map(p => {
+                    const slots = Array.isArray(p.time_slots) ? p.time_slots : [];
+                    const pType = getType(p.name);
+                    const typeLabel = { group:'그룹', private:'개인', duet:'듀엣' }[pType];
+                    const typeBadge = `<span style="font-size:.68rem;padding:1px 6px;border-radius:8px;font-weight:700;margin-left:4px;
+                        ${pType==='group'?'background:#e8f4fd;color:#2980b9':pType==='private'?'background:#fef9e7;color:#e67e22':'background:#f5eef8;color:#8e44ad'}">
+                        ${typeLabel}</span>`;
+
+                    // 타임이 없는 프로그램 (개인/듀엣 등) → '자유시간' 단일 체크박스
+                    const slotRows = slots.length
+                        ? slots.map(slot => {
+                            const key     = `${p.id}|${slot}`;
+                            const checked = assignedSet.has(key) ? 'checked' : '';
+                            return `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;
+                                        margin:2px 6px 2px 0;font-size:.82rem;background:#f8f8f8;
+                                        border:1px solid #e0e0e0;border-radius:6px;padding:3px 8px">
+                                <input type="checkbox" name="iTimeSlot"
+                                    data-prog-id="${p.id}"
+                                    data-prog-name="${escHtml(p.name)}"
+                                    data-slot="${escHtml(slot)}"
+                                    data-type="${pType}"
+                                    ${checked}
+                                    style="cursor:pointer">
+                                <span style="font-weight:600">${slot}</span>
+                            </label>`;
+                        }).join('')
+                        : (() => {
+                            const key     = `${p.id}|free`;
+                            const checked = assignedSet.has(key) ? 'checked' : '';
+                            return `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;
+                                        margin:2px 6px 2px 0;font-size:.82rem;background:#fef9e7;
+                                        border:1px solid #f9e6b0;border-radius:6px;padding:3px 10px">
+                                <input type="checkbox" name="iTimeSlot"
+                                    data-prog-id="${p.id}"
+                                    data-prog-name="${escHtml(p.name)}"
+                                    data-slot="free"
+                                    data-type="${pType}"
+                                    ${checked}
+                                    style="cursor:pointer">
+                                <span style="font-weight:600;color:#b7770d">자유시간 담당</span>
+                            </label>`;
+                        })();
+
+                    return `<div style="padding:8px 0;border-bottom:1px solid #e8f5e9">
+                        <div style="font-size:.85rem;font-weight:700;color:#1a252f;margin-bottom:5px">
+                            ${escHtml(p.name)}${typeBadge}
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:2px">${slotRows}</div>
+                    </div>`;
+                }).join('');
+            }
         } catch(e) {
-            progOptions = `<p style="color:#aaa;font-size:.82rem">프로그램 목록 로드 실패</p>`;
+            progTimeHtml = `<p style="color:#e74c3c;font-size:.82rem">프로그램 로드 실패: ${e.message}</p>`;
         }
 
-        // 타임당 단가 (hourly_rates)
-        const rates = i?.hourly_rates || {};
+        // 타임당 단가
+        const rates       = i?.hourly_rates || {};
         const rateGroup   = rates.group   || 0;
         const ratePrivate = rates.private  || 0;
         const rateDuet    = rates.duet     || 0;
 
         const body = `
-            <div class="form-group"><label>이름 *</label><input type="text" id="iName" value="${i ? escHtml(i.name) : ''}"></div>
-            <div class="form-group"><label>직함</label><input type="text" id="iTitle" value="${i ? escHtml(i.title||'') : ''}" placeholder="예: 필라테스 전문 강사"></div>
-            <div class="form-group"><label>소개</label><textarea id="iBio" rows="3">${i ? escHtml(i.bio||'') : ''}</textarea></div>
+            <div class="form-group"><label>이름 *</label>
+                <input type="text" id="iName" value="${i ? escHtml(i.name) : ''}">
+            </div>
+            <div class="form-group"><label>직함</label>
+                <input type="text" id="iTitle" value="${i ? escHtml(i.title||'') : ''}" placeholder="예: 필라테스 전문 강사">
+            </div>
+            <div class="form-group"><label>소개</label>
+                <textarea id="iBio" rows="3">${i ? escHtml(i.bio||'') : ''}</textarea>
+            </div>
             <div class="form-group">
                 <label>사진 URL</label>
                 <input type="text" id="iPhoto" value="${i ? escHtml(i.photo_url||'') : ''}" placeholder="https://... 또는 /uploads/파일명">
@@ -93,44 +195,46 @@ const instructors = {
                     ${i?.photo_url ? `<img src="${i.photo_url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">` : ''}
                 </div>
             </div>
-            <div class="form-group"><label>표시 순서</label><input type="number" id="iOrder" value="${i?.display_order||0}"></div>
+            <div class="form-group"><label>표시 순서</label>
+                <input type="number" id="iOrder" value="${i?.display_order||0}">
+            </div>
 
             <!-- ── 타임당 단가 ── -->
             <div class="form-group" style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-top:4px">
                 <label style="font-weight:700;color:#333;margin-bottom:10px;display:block">
                     <i class="fas fa-won-sign" style="color:#e67e22;margin-right:4px"></i>타임당 단가 (원)
+                    <span style="font-size:.75rem;font-weight:400;color:#999;margin-left:6px">수업 유형별 1타임당 강사료</span>
                 </label>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
                     <div>
-                        <label style="font-size:.78rem;color:#666;font-weight:600;margin-bottom:4px;display:block">그룹 수업</label>
+                        <label style="font-size:.78rem;color:#2980b9;font-weight:700;margin-bottom:4px;display:block">그룹 수업</label>
                         <input type="number" id="iRateGroup" value="${rateGroup}" min="0" step="1000"
-                            placeholder="0"
-                            style="width:100%;padding:7px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
+                            style="width:100%;padding:7px 10px;border:1.5px solid #aed6f1;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
                     </div>
                     <div>
-                        <label style="font-size:.78rem;color:#666;font-weight:600;margin-bottom:4px;display:block">개인 레슨</label>
+                        <label style="font-size:.78rem;color:#e67e22;font-weight:700;margin-bottom:4px;display:block">개인 레슨</label>
                         <input type="number" id="iRatePrivate" value="${ratePrivate}" min="0" step="1000"
-                            placeholder="0"
-                            style="width:100%;padding:7px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
+                            style="width:100%;padding:7px 10px;border:1.5px solid #f9ca8b;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
                     </div>
                     <div>
-                        <label style="font-size:.78rem;color:#666;font-weight:600;margin-bottom:4px;display:block">듀엣 레슨</label>
+                        <label style="font-size:.78rem;color:#8e44ad;font-weight:700;margin-bottom:4px;display:block">듀엣 레슨</label>
                         <input type="number" id="iRateDuet" value="${rateDuet}" min="0" step="1000"
-                            placeholder="0"
-                            style="width:100%;padding:7px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
+                            style="width:100%;padding:7px 10px;border:1.5px solid #d7bde2;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
                     </div>
                 </div>
             </div>
 
-            <!-- ── 담당 프로그램 ── -->
+            <!-- ── 담당 타임 설정 ── -->
             <div class="form-group" style="background:#f0fff4;border:1.5px solid #a9dfbf;border-radius:8px;padding:14px 16px;margin-top:4px">
-                <label style="font-weight:700;color:#333;margin-bottom:10px;display:block">
-                    <i class="fas fa-dumbbell" style="color:#27ae60;margin-right:4px"></i>담당 프로그램
+                <label style="font-weight:700;color:#333;margin-bottom:4px;display:block">
+                    <i class="fas fa-clock" style="color:#27ae60;margin-right:4px"></i>담당 타임 설정
+                    <span style="font-size:.75rem;font-weight:400;color:#999;margin-left:6px">강사가 직접 담당하는 프로그램·시간대 체크</span>
                 </label>
-                <div id="iPrograms" style="max-height:180px;overflow-y:auto;padding-right:4px">
-                    ${progOptions || '<p style="color:#aaa;font-size:.82rem">프로그램 없음</p>'}
+                <div id="iTimeSlots" style="max-height:260px;overflow-y:auto;padding-right:4px">
+                    ${progTimeHtml}
                 </div>
             </div>`;
+
         const footer = `
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
             <button class="btn-primary" onclick="instructors.save('${id||''}')"><i class="fas fa-save"></i> 저장</button>`;
@@ -216,10 +320,16 @@ const instructors = {
         }
 
         try {
-            // 담당 프로그램 체크박스 수집
+            // 담당 타임 체크박스 수집 → 객체 배열로 변환
+            // 구조: [{ program_id, program_name, time_slot, type }, ...]
             const assignedPrograms = Array.from(
-                document.querySelectorAll('input[name="iProgram"]:checked')
-            ).map(cb => cb.value);
+                document.querySelectorAll('input[name="iTimeSlot"]:checked')
+            ).map(cb => ({
+                program_id:   cb.dataset.progId,
+                program_name: cb.dataset.progName,
+                time_slot:    cb.dataset.slot,
+                type:         cb.dataset.type,
+            }));
 
             // 타임당 단가 수집
             const hourlyRates = {

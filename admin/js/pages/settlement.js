@@ -15,8 +15,9 @@ const settlement = {
     _data:        null,
     _attEdits:    {},   // { application_id: attended } — 로컬 편집 상태
     _midEdits:    {},   // { cancellation_id: { attended, billing } }
-    _sessionEdits:{},     // { program_name: session_count } — 당월 수업횟수 편집 상태
-    _nextSessionEdits:{}, // { program_name: session_count } — 차월 수업횟수 편집 상태 (수강신청 내역 시트용)
+    // 타임별 구조: { program_name: { time_slot: count } }
+    _sessionEdits:{},     // 당월 타임별 수업횟수
+    _nextSessionEdits:{}, // 차월 타임별 수업횟수
     _bulkItems:   [],
     SESSION_FEE:  15000,
     PENALTY_RATE: 0.10,
@@ -212,6 +213,21 @@ const settlement = {
 
             this._data = json;
 
+            // 프로그램별 time_slots 보강 (settlement-report에 없으므로 programs API에서 조회)
+            try {
+                const progRes  = await fetch(`/api/programs?complexId=${cid}`);
+                const progJson = await progRes.json();
+                const slotsMap = {};
+                (progJson.data || []).forEach(p => {
+                    if (p.name && !slotsMap[p.name]) {
+                        slotsMap[p.name] = Array.isArray(p.time_slots) ? p.time_slots : [];
+                    }
+                });
+                this._data.prog_slots_map = slotsMap;
+            } catch(e) {
+                this._data.prog_slots_map = {};
+            }
+
             // 수강생별 출석횟수 로컬 상태 초기화
             (json.settlement_rows || []).forEach(r => {
                 if (r.id && r.attended_sessions !== null) {
@@ -227,9 +243,9 @@ const settlement = {
                     };
                 }
             });
-            // 월별 수업횟수 로컬 상태 초기화 (당월 + 차월)
-            this._sessionEdits     = { ...(json.prog_session_map      || {}) };
-            this._nextSessionEdits = { ...(json.next_prog_session_map || {}) };
+            // 월별 수업횟수 로컬 상태 초기화 (당월 + 차월) — 타임별 { prog_name: { time_slot: count } }
+            this._sessionEdits     = JSON.parse(JSON.stringify(json.prog_session_map      || {}));
+            this._nextSessionEdits = JSON.parse(JSON.stringify(json.next_prog_session_map || {}));
 
             this._render(json);
             this._renderSessionPanel(json);
@@ -599,7 +615,6 @@ const settlement = {
         const label = document.getElementById('sessionMonthLabel');
         if (!body) return;
 
-        // 조회 중인 월(당월) 및 차월 계산
         const monthVal = document.getElementById('settlementMonth')?.value || '';
         if (label) label.textContent = monthVal ? `(${monthVal})` : '';
 
@@ -611,55 +626,88 @@ const settlement = {
             nextMonthVal = `${ny}-${String(nm).padStart(2,'0')}`;
         }
 
-        // prog_id_map: { program_name → program_id }
-        const progIdMap      = d.prog_id_map || {};
-        const curSessionMap  = this._sessionEdits     || {};  // 당월
-        const nextSessionMap = this._nextSessionEdits  || {};  // 차월
-
-        // 프로그램 목록: progIdMap 키를 기준으로
-        const progNames = Object.keys(progIdMap);
+        // 프로그램 목록: prog_id_map 기반, time_slots는 API로 별도 로드
+        const progIdMap   = d.prog_id_map || {};
+        const progNames   = Object.keys(progIdMap);
         if (!progNames.length) {
             body.innerHTML = `<div style="color:#aaa;font-size:.9rem;padding:10px 0">등록된 프로그램이 없습니다.</div>`;
             return;
         }
 
+        // 프로그램별 time_slots 정보 (settlement-report API에서 받아온 raw_progs 활용)
+        // 없으면 빈 배열 → 슬롯 없는 경우(_total 방식)로 처리
+        const progSlotsMap = d.prog_slots_map || {};  // { program_name: ["09:00","10:00",...] }
+
         const rows = progNames.map(name => {
-            const cntCur  = curSessionMap[name]  ?? '';
-            const cntNext = nextSessionMap[name] ?? '';
-            const feeCur  = (cntCur  !== '' && Number(cntCur)  > 0) ? (Number(cntCur)  * 15000).toLocaleString('ko-KR') + '원' : '-';
-            const feeNext = (cntNext !== '' && Number(cntNext) > 0) ? (Number(cntNext) * 15000).toLocaleString('ko-KR') + '원' : '-';
-            const progId  = progIdMap[name];
+            const progId   = progIdMap[name];
+            const slots    = progSlotsMap[name] || [];
+            const curMap   = this._sessionEdits[name]     || {};
+            const nextMap  = this._nextSessionEdits[name] || {};
+
+            // 타임별 입력 행 생성
+            const makeSlotInputs = (which, map) => {
+                const color   = which === 'cur' ? '#e67e22' : '#27ae60';
+                const border  = which === 'cur' ? '#f39c12' : '#27ae60';
+                const bg      = which === 'cur' ? '#fff8ed' : '#f0f9f4';
+                const txtColor= which === 'cur' ? '#7d5a00' : '#1a5c35';
+
+                if (!slots.length) {
+                    // 타임 없는 프로그램 → _total 단일 입력
+                    const val = map['_total'] ?? '';
+                    return `<div style="display:flex;align-items:center;gap:6px;background:${bg};
+                                border:1px solid ${border};border-radius:7px;padding:5px 10px;flex-wrap:wrap">
+                      <span style="font-size:.72rem;font-weight:600;color:${color};min-width:40px">전체</span>
+                      <input type="number" min="0" max="99" value="${val}"
+                        id="sess-${which}-${progId}-_total"
+                        oninput="settlement._onSlotChange('${progId}','${name}','_total','${which}')"
+                        style="width:55px;padding:3px 6px;border:1.5px solid ${border};border-radius:5px;
+                               font-size:.9rem;text-align:center;font-weight:700;color:${txtColor}">
+                      <span style="font-size:.72rem;color:#aaa">회</span>
+                    </div>`;
+                }
+
+                return `<div style="display:flex;flex-wrap:wrap;gap:4px;background:${bg};
+                            border:1px solid ${border};border-radius:7px;padding:6px 10px">
+                    ${slots.map(slot => {
+                        const safeId = slot.replace(':','');
+                        const val = map[slot] ?? '';
+                        return `<div style="display:flex;align-items:center;gap:3px">
+                          <span style="font-size:.72rem;font-weight:700;color:${color};min-width:36px">${slot}</span>
+                          <input type="number" min="0" max="99" value="${val}"
+                            id="sess-${which}-${progId}-${safeId}"
+                            oninput="settlement._onSlotChange('${progId}','${name}','${slot}','${which}')"
+                            style="width:48px;padding:3px 5px;border:1.5px solid ${border};border-radius:5px;
+                                   font-size:.88rem;text-align:center;font-weight:700;color:${txtColor}">
+                          <span style="font-size:.68rem;color:#bbb;margin-right:6px">회</span>
+                        </div>`;
+                    }).join('')}
+                </div>`;
+            };
+
+            // 당월·차월 합계 표시용 함수
+            const sumMap = (map) => Object.values(map).reduce((a,b) => a + (Number(b)||0), 0);
+            const curTotal  = sumMap(curMap);
+            const nextTotal = sumMap(nextMap);
+
             return `
             <div style="padding:10px 0;border-bottom:1px solid #f3e8cc">
-              <div style="font-size:.88rem;font-weight:700;color:#333;margin-bottom:8px">${name}</div>
-              <div style="display:flex;gap:18px;flex-wrap:wrap">
-                <!-- 당월 -->
-                <div style="display:flex;align-items:center;gap:6px;background:#fff8ed;
-                            border:1px solid #f5cba7;border-radius:8px;padding:6px 10px">
-                  <span style="font-size:.75rem;color:#e67e22;font-weight:600;min-width:68px">📅 ${monthVal || '당월'}</span>
-                  <input type="number" min="0" max="99"
-                    id="sess-cur-${progId}"
-                    value="${cntCur}"
-                    oninput="settlement._onSessionChange('${progId}','${name}','cur')"
-                    style="width:60px;padding:4px 6px;border:1.5px solid #f39c12;border-radius:5px;
-                           font-size:.92rem;text-align:center;font-weight:700;color:#7d5a00">
-                  <span style="font-size:.78rem;color:#aaa">회</span>
-                  <span id="sess-fee-cur-${progId}"
-                    style="font-size:.82rem;font-weight:600;color:#e67e22;min-width:80px">${feeCur}</span>
+              <div style="font-size:.88rem;font-weight:700;color:#1a252f;margin-bottom:8px">
+                ${name}
+                <span id="sess-cur-total-${progId}" style="font-size:.75rem;font-weight:400;color:#e67e22;margin-left:8px">
+                  당월 합계: ${curTotal}회 (${(curTotal*15000).toLocaleString('ko-KR')}원)
+                </span>
+                <span id="sess-next-total-${progId}" style="font-size:.75rem;font-weight:400;color:#27ae60;margin-left:8px">
+                  차월 합계: ${nextTotal}회 (${(nextTotal*15000).toLocaleString('ko-KR')}원)
+                </span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap">
+                  <span style="font-size:.72rem;font-weight:700;color:#e67e22;padding-top:8px;min-width:32px">당월</span>
+                  ${makeSlotInputs('cur', curMap)}
                 </div>
-                <!-- 차월 -->
-                <div style="display:flex;align-items:center;gap:6px;background:#f0f9f4;
-                            border:1px solid #a9dfbf;border-radius:8px;padding:6px 10px">
-                  <span style="font-size:.75rem;color:#27ae60;font-weight:600;min-width:68px">📅 ${nextMonthVal || '차월'} <span style="font-size:.68rem;color:#888">(수강신청)</span></span>
-                  <input type="number" min="0" max="99"
-                    id="sess-next-${progId}"
-                    value="${cntNext}"
-                    oninput="settlement._onSessionChange('${progId}','${name}','next')"
-                    style="width:60px;padding:4px 6px;border:1.5px solid #27ae60;border-radius:5px;
-                           font-size:.92rem;text-align:center;font-weight:700;color:#1a5c35">
-                  <span style="font-size:.78rem;color:#aaa">회</span>
-                  <span id="sess-fee-next-${progId}"
-                    style="font-size:.82rem;font-weight:600;color:#27ae60;min-width:80px">${feeNext}</span>
+                <div style="display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap">
+                  <span style="font-size:.72rem;font-weight:700;color:#27ae60;padding-top:8px;min-width:32px">차월</span>
+                  ${makeSlotInputs('next', nextMap)}
                 </div>
               </div>
             </div>`;
@@ -668,9 +716,7 @@ const settlement = {
         body.innerHTML = `
           <div style="font-size:.82rem;color:#888;margin-bottom:14px;line-height:1.6">
             <i class="fas fa-info-circle" style="color:#f39c12;margin-right:4px"></i>
-            <b>당월</b> 수업횟수 → 정산 내역 시트 요금(G열) 반영<br>
-            <i class="fas fa-info-circle" style="color:#27ae60;margin-right:4px"></i>
-            <b>차월</b> 수업횟수 → 수강신청 내역 시트 요금(G열) 반영
+            타임별로 수업횟수를 입력하세요. <b>당월</b> 합계 → 정산 요금 반영 / <b>차월</b> 합계 → 수강신청 내역 요금 반영
           </div>
           ${rows}
           <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
@@ -687,22 +733,27 @@ const settlement = {
           </div>`;
     },
 
-    _onSessionChange(progId, progName, which) {
-        // which: 'cur' (당월) | 'next' (차월)
-        const inputId = which === 'next' ? `sess-next-${progId}` : `sess-cur-${progId}`;
-        const feeId   = which === 'next' ? `sess-fee-next-${progId}` : `sess-fee-cur-${progId}`;
+    // 타임별 입력 변경 핸들러
+    _onSlotChange(progId, progName, slot, which) {
+        const safeId  = slot.replace(':','');
+        const inputId = `sess-${which}-${progId}-${safeId}`;
         const input   = document.getElementById(inputId);
         if (!input) return;
-        const cnt = Number(input.value);
-        // 로컬 상태 업데이트 (program_name 기준)
-        if (!isNaN(cnt) && cnt >= 0) {
-            if (which === 'next') this._nextSessionEdits[progName] = cnt;
-            else                  this._sessionEdits[progName]     = cnt;
-        }
-        // 예상 요금 표시 업데이트
-        const feeEl = document.getElementById(feeId);
-        if (feeEl) {
-            feeEl.textContent = (cnt > 0) ? (cnt * 15000).toLocaleString('ko-KR') + '원' : '-';
+        const cnt = Number(input.value) || 0;
+
+        // 로컬 상태 업데이트 { program_name: { time_slot: count } }
+        const map = which === 'cur' ? this._sessionEdits : this._nextSessionEdits;
+        if (!map[progName]) map[progName] = {};
+        map[progName][slot] = cnt;
+
+        // 합계 표시 업데이트
+        const totalId = `sess-${which}-total-${progId}`;
+        const totalEl = document.getElementById(totalId);
+        if (totalEl) {
+            const total = Object.values(map[progName]).reduce((a,b) => a + (Number(b)||0), 0);
+            const label = which === 'cur' ? '당월' : '차월';
+            const color = which === 'cur' ? '#e67e22' : '#27ae60';
+            totalEl.innerHTML = `<span style="color:${color}">${label} 합계: ${total}회 (${(total*15000).toLocaleString('ko-KR')}원)</span>`;
         }
     },
 
@@ -712,7 +763,6 @@ const settlement = {
         const monthVal = document.getElementById('settlementMonth')?.value;
         if (!monthVal) { showToast('조회 월을 선택해주세요', 'error'); return; }
 
-        // 차월 계산
         const [y, m] = monthVal.split('-').map(Number);
         const nm = m === 12 ? 1 : m + 1;
         const ny = m === 12 ? y + 1 : y;
@@ -720,63 +770,52 @@ const settlement = {
 
         const progIdMap = this._data?.prog_id_map || {};
 
-        // 당월 세션 목록
-        const curSessions = [];
-        Object.entries(progIdMap).forEach(([name, pid]) => {
-            const cnt = this._sessionEdits[name];
-            if (cnt !== undefined && cnt !== '' && Number(cnt) >= 0) {
-                curSessions.push({ program_id: pid, session_count: Number(cnt) });
-            }
-        });
+        // 타임별 slot_counts 방식으로 세션 배열 생성
+        const buildSessions = (editMap) => {
+            const sessions = [];
+            Object.entries(progIdMap).forEach(([name, pid]) => {
+                const slotMap = editMap[name];
+                if (!slotMap || typeof slotMap !== 'object') return;
+                // 값이 있는 슬롯만
+                const slot_counts = {};
+                Object.entries(slotMap).forEach(([slot, cnt]) => {
+                    if (cnt !== '' && cnt !== undefined && Number(cnt) >= 0) {
+                        slot_counts[slot] = Number(cnt);
+                    }
+                });
+                if (Object.keys(slot_counts).length > 0) {
+                    sessions.push({ program_id: pid, slot_counts });
+                }
+            });
+            return sessions;
+        };
 
-        // 차월 세션 목록
-        const nextSessions = [];
-        Object.entries(progIdMap).forEach(([name, pid]) => {
-            const cnt = this._nextSessionEdits[name];
-            if (cnt !== undefined && cnt !== '' && Number(cnt) >= 0) {
-                nextSessions.push({ program_id: pid, session_count: Number(cnt) });
-            }
-        });
+        const curSessions  = buildSessions(this._sessionEdits);
+        const nextSessions = buildSessions(this._nextSessionEdits);
 
         if (!curSessions.length && !nextSessions.length) {
             showToast('저장할 수업횟수가 없습니다', 'error'); return;
         }
 
         try {
-            // 당월 저장
             if (curSessions.length) {
-                const res = await fetch('/api/program-monthly-sessions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                const res  = await fetch('/api/program-monthly-sessions', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ complex_id: cid, yearMonth: monthVal, sessions: curSessions }),
                 });
                 const json = await res.json();
-                if (!json.success && json.sql) {
-                    this._showMigrationModal(json.sql, json.message || json.error);
-                    return;
-                }
                 if (!json.success) throw new Error(json.error || '당월 저장 실패');
             }
-
-            // 차월 저장
             if (nextSessions.length) {
-                const res2 = await fetch('/api/program-monthly-sessions', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                const res2  = await fetch('/api/program-monthly-sessions', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ complex_id: cid, yearMonth: nextMonthVal, sessions: nextSessions }),
                 });
                 const json2 = await res2.json();
-                if (!json2.success && json2.sql) {
-                    this._showMigrationModal(json2.sql, json2.message || json2.error);
-                    return;
-                }
                 if (!json2.success) throw new Error(json2.error || '차월 저장 실패');
             }
 
-            const savedCur  = curSessions.length;
-            const savedNext = nextSessions.length;
-            showToast(`✅ 저장 완료 (당월 ${savedCur}개 / 차월 ${savedNext}개)`, 'success');
-            // 패널 닫고 자동 재조회
+            showToast(`✅ 저장 완료 (당월 ${curSessions.length}개 / 차월 ${nextSessions.length}개 프로그램)`, 'success');
             const panel = document.getElementById('sessionSettingPanel');
             if (panel) panel.style.display = 'none';
             await this.load();
@@ -1681,7 +1720,7 @@ const settlement = {
     },
 
     // ══════════════════════════════════════════════════════
-    // 버튼3: 강사 인건비 (강사별 담당수업 × 단가 × 월수업횟수)
+    // 버튼3: 강사 인건비 (강사별 담당 타임 × 타임별 횟수 × 단가)
     // ══════════════════════════════════════════════════════
     async downloadInstructorPayrollExcel() {
         if (!this._data) { showToast('먼저 조회해주세요', 'error'); return; }
@@ -1694,89 +1733,110 @@ const settlement = {
             const monthLabel = `${yr}년 ${mo}월`;
             const wb   = XLSX.utils.book_new();
 
-            // 강사 목록 로드 (hourly_rates + assigned_programs 포함)
             const cid = getEffectiveComplexId();
+            // 강사 목록 (assigned_programs: 객체 배열 신형)
             const instrRes  = await fetch(`/api/instructors?complexId=${cid}`);
             const instrJson = await instrRes.json();
-            const instructors = instrJson.data || [];
+            const instructorList = instrJson.data || [];
 
-            // 당월 프로그램별 수업횟수 (sessionEdits 기준)
-            const sessionMap = this._sessionEdits || {};  // { program_name: count }
+            // 당월 타임별 수업횟수 맵 { program_name: { time_slot: count } }
+            const slotSessionMap = this._sessionEdits || {};
 
-            // 프로그램 유형 판별: 프로그램명에 "개인" 포함 → private, "듀엣" 포함 → duet, 나머지 → group
-            const getProgType = (progName) => {
-                const n = progName.toLowerCase();
-                if (n.includes('개인') || n.includes('1:1') || n.includes('1 :1')) return 'private';
-                if (n.includes('듀엣') || n.includes('2:1') || n.includes('2 :1')) return 'duet';
-                return 'group';
-            };
+            const PURPLE_HDR  = { fgColor: { rgb: 'E8DAEF' } };
+            const SUBTOTAL_BG = { fgColor: { rgb: 'F5EEF8' } };
+            const GRAND_BG    = { fgColor: { rgb: 'EDE7F6' } };
 
-            const PURPLE_HDR = { fgColor: { rgb: 'E8DAEF' } };
+            // 헤더: 강사명 / 프로그램 / 담당타임 / 수업유형 / 타임별횟수 / 타임당단가 / 인건비
             const data = [
                 [`${monthLabel} 강사 인건비 정산서`], [],
-                ['강사명', '담당 프로그램', '수업 유형', '월 수업횟수', '타임당 단가(원)', '인건비(원)'],
+                ['강사명', '프로그램', '담당 타임', '수업 유형', '월 수업횟수', '타임당 단가(원)', '인건비(원)'],
             ];
+            const styleRows = []; // { rowIdx, style:'subtotal'|'grand' }
+            let rowIdx = 3;
 
             let grandPayroll = 0;
-            const instructorTotals = [];
 
-            instructors.forEach(instr => {
+            instructorList.forEach(instr => {
                 const rates    = instr.hourly_rates    || {};
-                const assigned = instr.assigned_programs || [];
-                if (!assigned.length) {
-                    data.push([instr.name, '(담당 프로그램 미지정)', '-', '-', '-', '-']);
+                const assigned = Array.isArray(instr.assigned_programs) ? instr.assigned_programs : [];
+
+                // 구형 문자열 배열 하위호환
+                const isLegacy = assigned.length > 0 && typeof assigned[0] === 'string';
+                if (isLegacy || !assigned.length) {
+                    data.push([instr.name, '(담당 타임 미설정 — 강사 관리에서 타임별 설정 필요)', '', '', '', '', '']);
+                    rowIdx++;
                     return;
                 }
 
                 let instrTotal = 0;
-                const instrRows = [];
 
-                assigned.forEach(progName => {
-                    const sessions = Number(sessionMap[progName]) || 0;
-                    const type     = getProgType(progName);
-                    const rate     = Number(rates[type]) || 0;
-                    const payroll  = sessions * rate;
-                    instrTotal    += payroll;
-                    instrRows.push([
-                        instr.name, progName,
-                        type === 'group' ? '그룹' : type === 'private' ? '개인' : '듀엣',
-                        sessions, rate, payroll,
+                assigned.forEach(a => {
+                    const { program_name, time_slot, type } = a;
+                    const rate = Number(rates[type]) || 0;
+                    const typeLabel = { group:'그룹', private:'개인', duet:'듀엣' }[type] || type;
+
+                    let sessions = 0;
+                    if (time_slot === 'free') {
+                        // 개인/듀엣 자유시간 → _total 또는 전체 슬롯 합계
+                        const pm = slotSessionMap[program_name] || {};
+                        sessions = Object.values(pm).reduce((a,b) => a + (Number(b)||0), 0);
+                    } else {
+                        sessions = Number((slotSessionMap[program_name] || {})[time_slot]) || 0;
+                    }
+
+                    const payroll = sessions * rate;
+                    instrTotal   += payroll;
+
+                    data.push([
+                        instr.name,
+                        program_name,
+                        time_slot === 'free' ? '자유시간' : time_slot,
+                        typeLabel,
+                        sessions,
+                        rate,
+                        payroll,
                     ]);
+                    rowIdx++;
                 });
 
-                instrRows.forEach(row => data.push(row));
-                // 강사 소계 행
-                data.push(['', `${instr.name} 소계`, '', '', '', instrTotal]);
-                data.push([]); // 구분선용 빈 행
-                instructorTotals.push({ name: instr.name, total: instrTotal });
+                // 소계
+                data.push(['', `${instr.name} 소계`, '', '', '', '', instrTotal]);
+                styleRows.push({ rowIdx, style: 'subtotal' });
+                rowIdx++;
+                data.push([]); // 빈 행
+                rowIdx++;
+
                 grandPayroll += instrTotal;
             });
 
             // 전체 합계
-            data.push(['전체 합계', '', '', '', '', grandPayroll]);
+            data.push(['전체 합계', '', '', '', '', '', grandPayroll]);
+            styleRows.push({ rowIdx, style: 'grand' });
 
             const ws = XLSX.utils.aoa_to_sheet(data);
-            ws['!cols']   = [
-                { wch:12 }, { wch:26 }, { wch:10 }, { wch:12 }, { wch:14 }, { wch:14 },
+            ws['!cols'] = [
+                { wch:12 }, { wch:24 }, { wch:10 }, { wch:8 }, { wch:12 }, { wch:14 }, { wch:14 },
             ];
-            ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }];
+            ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:6} }];
 
             // 헤더 스타일
-            for (let c = 0; c < 6; c++) {
+            for (let c = 0; c < 7; c++) {
                 const ref = XLSX.utils.encode_cell({ r:2, c });
                 if (!ws[ref]) ws[ref] = { v:'', t:'s' };
                 ws[ref].s = { fill: PURPLE_HDR, font:{ bold:true }, alignment:{ horizontal:'center' } };
             }
 
-            // 합계 행 굵게
-            const lastRow = data.length - 1;
-            for (let c = 0; c < 6; c++) {
-                const ref = XLSX.utils.encode_cell({ r: lastRow, c });
-                if (!ws[ref]) ws[ref] = { v:'', t:'s' };
-                if (!ws[ref].s) ws[ref].s = {};
-                ws[ref].s.font = { bold: true };
-                ws[ref].s.fill = { fgColor: { rgb: 'EDE7F6' } };
-            }
+            // 소계/합계 스타일
+            styleRows.forEach(({ rowIdx: ri, style }) => {
+                const fill = style === 'grand' ? GRAND_BG : SUBTOTAL_BG;
+                for (let c = 0; c < 7; c++) {
+                    const ref = XLSX.utils.encode_cell({ r: ri, c });
+                    if (!ws[ref]) ws[ref] = { v:'', t:'s' };
+                    if (!ws[ref].s) ws[ref].s = {};
+                    ws[ref].s.fill = fill;
+                    ws[ref].s.font = { bold: true };
+                }
+            });
 
             XLSX.utils.book_append_sheet(wb, ws, '강사 인건비');
             const fileName = `${yr}년${mo}월_강사인건비.xlsx`;
