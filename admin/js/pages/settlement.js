@@ -1,19 +1,13 @@
-/** 월별 정산 리포트 - v5.1
+/** 월별 정산 리포트 - v5.2
  *  엑셀 3시트 출력:
  *    시트1) 정산 내역      (당월 수강생 + 하단 신규 섹션)
- *    시트2) 동호수계        (세대별 최종부과액 합산)
+ *    시트2) 동호수계        (세대별 월수강료 합산)
  *    시트3) 수강신청 내역   (다음달 수강 예정자 전체)
  *
- *  출석횟수 입력 UI:
- *    - 수강자 현황 테이블에서 각 행별 출석횟수 직접 입력
- *    - 입력 즉시 최종부과액(횟수×15,000) 자동 계산
- *    - [저장] 버튼으로 attendance_records 테이블 DB 반영
- *
- *  단가: 15,000원/회
+ *  단가: 15,000원/회 (강사 인건비 계산 전용)
  */
 const settlement = {
     _data:        null,
-    _attEdits:    {},   // { application_id: attended } — 로컬 편집 상태
     _midEdits:    {},   // { cancellation_id: { attended, billing } }
     // 타임별 구조: { program_name: { time_slot: count } }
     _sessionEdits:{},     // 당월 타임별 수업횟수
@@ -198,7 +192,6 @@ const settlement = {
         if (sumEl)    sumEl.style.display     = 'none';
         const extraBtnsEl = document.getElementById('settlementExtraButtons');
         if (extraBtnsEl) extraBtnsEl.style.display = 'none';
-        this._attEdits = {};
         this._midEdits = {};
         resEl.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa">
           <i class="fas fa-spinner fa-spin fa-2x"></i><br><br>데이터 조회 중...</div>`;
@@ -228,12 +221,6 @@ const settlement = {
                 this._data.prog_slots_map = {};
             }
 
-            // 수강생별 출석횟수 로컬 상태 초기화
-            (json.settlement_rows || []).forEach(r => {
-                if (r.id && r.attended_sessions !== null) {
-                    this._attEdits[r.id] = r.attended_sessions;
-                }
-            });
             // 중도해지 로컬 상태 초기화
             (json.mid_cancel || []).forEach(r => {
                 if (r.id) {
@@ -316,7 +303,7 @@ const settlement = {
     },
 
     // ══════════════════════════════════════════════════════
-    // 정산 내역 카드 (출석횟수 입력 + 최종부과액 자동계산)
+    // 정산 내역 카드
     // ══════════════════════════════════════════════════════
     _settlementCard(d) {
         const rows = d.settlement_rows || [];
@@ -340,9 +327,6 @@ const settlement = {
           <th style="${thStyle}">희망시간</th>
           <th style="${thStyle}">요금</th>
           <th style="${thStyle}">구분</th>
-          <th style="${thStyle}">출석횟수<br><span style="font-weight:400;font-size:.7rem;color:#e74c3c">직접 입력</span></th>
-          <th style="${thStyle}">최종부과액<br><span style="font-weight:400;font-size:.7rem;color:#888">×15,000</span></th>
-          <th style="${thStyle}">저장</th>
         </tr>`;
 
         // 프로그램별 그룹핑 (소계용)
@@ -359,13 +343,6 @@ const settlement = {
             const items = progMap[prog];
             items.forEach((r, i) => {
                 const id = r.id;
-                const savedAtt = this._attEdits[id] !== undefined ? this._attEdits[id]
-                               : (r.attended_sessions !== null ? r.attended_sessions : '');
-                if (!this._attEdits[id] && savedAtt !== '') this._attEdits[id] = savedAtt;
-
-                const finalCharge = (savedAtt !== '' && savedAtt !== null)
-                    ? (Number(savedAtt) * this.SESSION_FEE) : null;
-
                 const bgRow = r.is_mid_cancel ? 'background:#fff5f5'
                             : r.is_end_cancel  ? 'background:#fffaf0'
                             : i % 2 ? 'background:#fafafa' : '';
@@ -381,31 +358,6 @@ const settlement = {
                     catBadge = `<span style="background:#8e44ad;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">중도합류</span>`;
                 }
 
-                // 중도해지는 출석횟수/최종부과액 입력 불가 (별도 처리)
-                const isMid = r.is_mid_cancel;
-                const attCell = isMid
-                    ? `<span style="color:#bbb;font-size:.8rem">별도처리</span>`
-                    : `<input type="number" min="0" max="99"
-                         id="att-app-${id}"
-                         value="${savedAtt}"
-                         oninput="settlement._onAppAttendChange('${id}')"
-                         style="width:60px;padding:4px 6px;border:1.5px solid #e74c3c;border-radius:5px;
-                                font-size:.88rem;text-align:center;font-weight:700;color:#c0392b">
-                       <span style="font-size:.72rem;color:#999">회</span>`;
-
-                const finalCell = isMid
-                    ? `<span style="color:#bbb;font-size:.8rem">-</span>`
-                    : `<span id="final-app-${id}" style="color:#2980b9;font-weight:700;font-size:.88rem">
-                         ${finalCharge !== null ? finalCharge.toLocaleString('ko-KR') + '원' : '-'}
-                       </span>`;
-
-                const saveBtn = isMid ? '' : `<button onclick="settlement._saveAppAttendance('${id}')"
-                    id="save-app-btn-${id}"
-                    style="padding:4px 10px;background:#2980b9;color:#fff;border:none;
-                           border-radius:5px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap">
-                    <i class="fas fa-save"></i> 저장
-                  </button>`;
-
                 tbodyRows += `<tr id="app-row-${id}">
                   <td style="${tdS}">${r.dong||''}</td>
                   <td style="${tdS}">${r.ho||''}</td>
@@ -415,9 +367,6 @@ const settlement = {
                   <td style="${tdS}">${r.preferred_time||''}</td>
                   <td style="${tdS}">${r.monthly_fee ? Number(r.monthly_fee).toLocaleString('ko-KR') + '원' : '-'}</td>
                   <td style="${tdS}">${catBadge}</td>
-                  <td style="${tdS}">${attCell}</td>
-                  <td style="${tdS}">${finalCell}</td>
-                  <td style="${tdS}">${saveBtn}</td>
                 </tr>`;
             });
 
@@ -428,7 +377,7 @@ const settlement = {
                 ${prog} 소계</td>
               <td style="padding:5px 8px;border:1px solid #ddd;font-size:.8rem;font-weight:700;color:#1a5276;text-align:center">
                 ${subFeeSum.toLocaleString('ko-KR')}원</td>
-              <td colspan="4" style="border:1px solid #ddd"></td>
+              <td style="border:1px solid #ddd"></td>
             </tr>`;
         });
 
@@ -439,8 +388,7 @@ const settlement = {
             등록세대 ${totalRows}명 / 해지 ${cancelRows}명</td>
           <td style="padding:7px 8px;border:1px solid #0d3349;font-size:.85rem;font-weight:800;color:#fff;text-align:center">
             ${totalFeeSum.toLocaleString('ko-KR')}원</td>
-          <td colspan="4" style="border:1px solid #0d3349;padding:7px 8px;font-size:.8rem;color:#aed6f1;text-align:center">
-            최종부과액은 출석횟수 저장 후 확인</td>
+          <td style="border:1px solid #0d3349"></td>
         </tr>`;
 
         // 신규 섹션 (하단)
@@ -450,7 +398,7 @@ const settlement = {
             const newThStyle = `padding:7px 8px;border:1px solid #ddd;font-size:.78rem;font-weight:700;
               background:#f0fff4;white-space:nowrap;text-align:center`;
             const newThead = `<tr>
-              <th style="${newThStyle}" colspan="10"
+              <th style="${newThStyle}" colspan="8"
                 style="background:#27ae60;color:#fff;padding:8px;font-size:.9rem;font-weight:700">
                 ▼ ${nextLbl} 신규 수강 예정자 (${newRows.length}명)
               </th>
@@ -464,9 +412,6 @@ const settlement = {
               <th style="${newThStyle}">희망시간</th>
               <th style="${newThStyle}">요금</th>
               <th style="${newThStyle}">구분</th>
-              <th style="${newThStyle}">출석횟수</th>
-              <th style="${newThStyle}">최종부과액</th>
-              <th style="${newThStyle}"></th>
             </tr>`;
 
             const newTbody = newRows.map((r, i) => {
@@ -485,9 +430,6 @@ const settlement = {
                   <td style="${tdS}">${r.preferred_time||''}</td>
                   <td style="${tdS}">${r.monthly_fee ? Number(r.monthly_fee).toLocaleString('ko-KR') + '원' : '-'}</td>
                   <td style="${tdS}">${catBadge}</td>
-                  <td style="${tdS}"><span style="color:#ccc">-</span></td>
-                  <td style="${tdS}"><span style="color:#ccc">-</span></td>
-                  <td style="${tdS}"></td>
                 </tr>`;
             }).join('');
 
@@ -516,84 +458,10 @@ const settlement = {
             <span style="font-size:.95rem;font-weight:700;color:#222">
               <i class="fas fa-list-alt" style="color:#2980b9"></i> ${yr}년 ${mo}월 정산 내역${badge}
             </span>
-            <span style="font-size:.75rem;color:#888;margin-left:8px">출석횟수 입력 후 저장 → 최종부과액 자동 계산</span>
+            <span style="font-size:.75rem;color:#888;margin-left:8px">월수강료 기준 정산</span>
           </div>
           ${body}
         </div>`;
-    },
-
-    // ══════════════════════════════════════════════════════
-    // 출석횟수 입력 이벤트 (수강생)
-    // ══════════════════════════════════════════════════════
-    _onAppAttendChange(id) {
-        const input = document.getElementById(`att-app-${id}`);
-        if (!input) return;
-        const val = input.value;
-        this._attEdits[id] = val;
-        const finalEl = document.getElementById(`final-app-${id}`);
-        if (finalEl) {
-            const n = parseInt(val);
-            finalEl.innerHTML = (!isNaN(n) && n >= 0)
-                ? (n * this.SESSION_FEE).toLocaleString('ko-KR') + '원'
-                : '-';
-        }
-    },
-
-    // 저장 버튼 → attendance_records DB 반영
-    async _saveAppAttendance(id) {
-        const input = document.getElementById(`att-app-${id}`);
-        const attended = parseInt(input?.value ?? this._attEdits[id]);
-        if (isNaN(attended) || attended < 0) {
-            showToast('출석횟수를 올바르게 입력해주세요', 'error'); return;
-        }
-        const btn = document.getElementById(`save-app-btn-${id}`);
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
-
-        try {
-            const cid = getEffectiveComplexId();
-            const monthVal = document.getElementById('settlementMonth')?.value || '';
-            const [yr, mo] = monthVal.split('-');
-            const charge = attended * this.SESSION_FEE;
-
-            const res = await fetch('/api/applications/attendance', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    complex_id: cid,
-                    year: parseInt(yr),
-                    month: parseInt(mo),
-                    records: [{ id, attended, charge_amount: charge }]
-                }),
-            });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error || '저장 실패');
-
-            // 로컬 상태 업데이트
-            this._attEdits[id] = attended;
-            if (this._data?.settlement_rows) {
-                const row = this._data.settlement_rows.find(r => r.id === id);
-                if (row) { row.attended_sessions = attended; row.final_charge = charge; }
-            }
-            if (this._data?.approved) {
-                const row = this._data.approved.find(r => r.id === id);
-                if (row) { row.attended_sessions = attended; row.final_charge = charge; }
-            }
-
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-check"></i> 저장됨';
-                btn.style.background = '#27ae60';
-                setTimeout(() => {
-                    if (btn) { btn.innerHTML = '<i class="fas fa-save"></i> 저장'; btn.style.background = '#2980b9'; }
-                }, 2000);
-            }
-            const row = this._data?.settlement_rows?.find(r => r.id === id);
-            showToast(`${row?.name || ''} 출석 저장 완료 (${attended}회 → ${charge.toLocaleString('ko-KR')}원)`, 'success');
-
-        } catch(e) {
-            showToast('저장 오류: ' + e.message, 'error');
-            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
-        }
     },
 
     // ══════════════════════════════════════════════════════
@@ -1131,7 +999,7 @@ const settlement = {
             // 헤더
             s1.push([`${monthLabel} 정산 내역`]);
             s1.push([]);
-            s1.push(['동','호수','이름','전화번호','프로그램종류','희망시간대','요금','구분','출석횟수','최종부과액']);
+            s1.push(['동','호수','이름','전화번호','프로그램종류','희망시간대','요금','구분']);
 
             const settlementRows = d.settlement_rows || [];
             const newSectionRows = d.new_section_rows || [];
@@ -1151,48 +1019,28 @@ const settlement = {
             progOrder.forEach(prog => {
                 const items = progMap[prog];
                 items.forEach(r => {
-                    // 최종부과액: 로컬 편집 or DB값
-                    const attLocal = this._attEdits[r.id];
-                    const att = (attLocal !== undefined && attLocal !== '') ? Number(attLocal)
-                              : (r.attended_sessions !== null ? r.attended_sessions : '');
-                    const finalCharge = r.is_mid_cancel
-                        ? (this._midEdits[r.id]?.billing ?? (d.mid_cancel?.find(c => c.id === r.id)?.billing_amount ?? ''))
-                        : (att !== '' ? Number(att) * this.SESSION_FEE : '');
-
                     s1.push([
                         r.dong, r.ho, r.name, r.phone || '',
                         r.program_name || '', r.preferred_time || '',
-                        r.monthly_fee || '', r.category || '',
-                        r.is_mid_cancel ? '' : att,
-                        finalCharge
+                        r.monthly_fee || '', r.category || ''
                     ]);
                     rowIdx++;
                 });
                 // 소계 행
                 const subFee = items.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
-                s1.push(['', '', '', '', prog, '소계', subFee, '', '', '']);
+                s1.push(['', '', '', '', prog, '소계', subFee, '']);
                 rowIdx++;
             });
 
             // 합계 행
-            const totalFeeSum   = settlementRows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
-            const totalFinalSum = settlementRows.reduce((s, r) => {
-                if (r.is_mid_cancel) {
-                    const mc = d.mid_cancel?.find(c => c.dong === r.dong && c.ho === r.ho && c.name === r.name);
-                    return s + (Number(mc?.billing_amount) || 0);
-                }
-                const attLocal = this._attEdits[r.id];
-                const att = (attLocal !== undefined && attLocal !== '') ? Number(attLocal) : r.attended_sessions;
-                return s + (att !== null && att !== undefined ? att * this.SESSION_FEE : 0);
-            }, 0);
+            const totalFeeSum = settlementRows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
             const cancelCount = settlementRows.filter(r => r.is_end_cancel || r.is_mid_cancel).length;
 
             s1.push([]);
             s1.push([
                 `등록세대 ${settlementRows.length}명`, '', '',
                 `해지세대 ${cancelCount}명`, '', '',
-                totalFeeSum, '합계액',
-                '', totalFinalSum
+                totalFeeSum, '합계액'
             ]);
             rowIdx += 2;
 
@@ -1200,18 +1048,16 @@ const settlement = {
             if (newSectionRows.length) {
                 s1.push([]);
                 s1.push([`▼ ${nextLabel} 신규 수강 예정자`]);
-                s1.push(['동','호수','이름','전화번호','프로그램종류','희망시간대','요금','구분','출석횟수','최종부과액']);
+                s1.push(['동','호수','이름','전화번호','프로그램종류','희망시간대','요금','구분']);
                 rowIdx += 3;
 
                 newSectionRows.forEach(r => {
                     s1.push([
                         r.dong, r.ho, r.name, r.phone || '',
                         r.program_name || '', r.preferred_time || '',
-                        r.monthly_fee || '', r.category || '',
-                        '', ''
+                        r.monthly_fee || '', r.category || ''
                     ]);
                     if (r.is_duplicate) {
-                        // 연한 연두색 표시 (엑셀 스타일은 sheet_add_aoa 후 별도 처리)
                         cellStyles[`dup_${rowIdx}`] = true;
                     }
                     rowIdx++;
@@ -1219,12 +1065,12 @@ const settlement = {
             }
 
             const ws1 = XLSX.utils.aoa_to_sheet(s1);
-            ws1['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:10},{wch:18},{wch:8},{wch:12}];
-            ws1['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:9} }];
+            ws1['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:10},{wch:18}];
+            ws1['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }];
 
             // 헤더 행 배경
             const hdrRow = 2; // 0-based
-            for (let c = 0; c < 10; c++) {
+            for (let c = 0; c < 8; c++) {
                 const cellRef = XLSX.utils.encode_cell({ r: hdrRow, c });
                 if (!ws1[cellRef]) ws1[cellRef] = { v: '', t: 's' };
                 ws1[cellRef].s = { fill: BLUE_HDR, font: { bold: true }, alignment: { horizontal: 'center' } };
@@ -1236,7 +1082,7 @@ const settlement = {
                 const cnt = progMap[prog].length;
                 r1 += cnt;
                 // 소계 행
-                for (let c = 0; c < 10; c++) {
+                for (let c = 0; c < 8; c++) {
                     const cellRef = XLSX.utils.encode_cell({ r: r1, c });
                     if (!ws1[cellRef]) ws1[cellRef] = { v: '', t: 's' };
                     if (!ws1[cellRef].s) ws1[cellRef].s = {};
