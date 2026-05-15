@@ -225,7 +225,10 @@ function setupEvents() {
 
     // 전화번호 포맷 (원본 + 확인 필드 모두)
     document.getElementById('phone').addEventListener('input', formatPhone);
-    document.getElementById('cancelPhone').addEventListener('input', formatPhone);
+    document.getElementById('cancelPhone').addEventListener('input', e => {
+        formatPhone(e);
+        resetCancelLookup();
+    });
     document.getElementById('phoneConfirm').addEventListener('input', e => {
         formatPhone(e);
         checkConfirmMatch('phone', 'phoneConfirm', 'phoneConfirmWrap');
@@ -524,27 +527,199 @@ async function searchMyApplication() {
 }
 
 // ── 해지 신청 ─────────────────────────────────────────────────────────────────
-async function submitCancellation() {
-    const dong    = document.getElementById('cancelDong').value.trim();
-    const ho      = document.getElementById('cancelHo').value.trim();
-    const name    = document.getElementById('cancelName').value.trim();
-    const phone   = document.getElementById('cancelPhone').value.trim();
-    const program = document.getElementById('cancelProgram').value.trim();
-    const reason  = document.getElementById('cancelReason').value.trim();
 
-    if (!dong || !ho || !name || !phone) { showToast('필수 항목을 모두 입력하세요', 'error'); return; }
+// 내부 상태: 조회된 수강 프로그램 목록
+let _cancelLookupResult = [];
+
+// 조회 결과 리셋 (입력 변경 시)
+function resetCancelLookup() {
+    _cancelLookupResult = [];
+    document.getElementById('cancelStep2').style.display = 'none';
+    const msg = document.getElementById('cancelLookupMsg');
+    msg.style.display = 'none';
+    msg.textContent = '';
+    const sel = document.getElementById('cancelProgram');
+    if (sel) sel.innerHTML = '<option value="">-- 해지할 프로그램 선택 --</option>';
+    document.getElementById('cancelReason').value = '';
+}
+
+// 폼 전체 초기화
+function resetCancelForm() {
+    document.getElementById('cancelDong').value  = '';
+    document.getElementById('cancelHo').value    = '';
+    document.getElementById('cancelPhone').value = '';
+    resetCancelLookup();
+}
+
+// STEP 1: 수강 중인 프로그램 조회
+async function lookupCancelPrograms() {
+    const dong  = document.getElementById('cancelDong').value.trim();
+    const ho    = document.getElementById('cancelHo').value.trim();
+    const phone = document.getElementById('cancelPhone').value.trim();
+
+    if (!dong || !ho) {
+        showToast('동과 호수를 입력하세요', 'error');
+        return;
+    }
+    if (!phone) {
+        showToast('전화번호를 입력하세요', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('cancelLookupBtn');
+    const msg = document.getElementById('cancelLookupMsg');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 조회 중...';
+    msg.style.display = 'none';
+
+    try {
+        const complexCode = State.complex?.code || '';
+        const params = new URLSearchParams({ complexCode, dong, ho, phone });
+        const res  = await fetch(`/api/cancellations/lookup-programs?${params}`);
+        const json = await res.json();
+
+        if (!json.success) throw new Error(json.error || '조회 실패');
+
+        const list = json.data || [];
+        _cancelLookupResult = list;
+
+        if (!list.length) {
+            msg.style.display  = 'block';
+            msg.style.color    = '#dc2626';
+            msg.innerHTML = `<i class="fas fa-exclamation-circle"></i> 해당 동/호수에 수강 중인 프로그램을 찾을 수 없습니다.<br><small style="color:#888">입력 정보를 확인하거나 관리사무소에 문의하세요.</small>`;
+            document.getElementById('cancelStep2').style.display = 'none';
+            return;
+        }
+
+        // 이미 해지 접수된 건만 있는 경우
+        const available = list.filter(p => !p.already_cancelled);
+        if (!available.length) {
+            msg.style.display = 'block';
+            msg.style.color   = '#d97706';
+            msg.innerHTML = `<i class="fas fa-info-circle"></i> 모든 수강 프로그램이 이미 해지 신청 접수된 상태입니다.`;
+            document.getElementById('cancelStep2').style.display = 'none';
+            return;
+        }
+
+        msg.style.display = 'none';
+
+        // 본인 정보 표시
+        const person = list[0];
+        const infoEl = document.getElementById('cancelPersonInfo');
+        infoEl.innerHTML = `
+            <span style="font-weight:700;color:#111">${person.name || '?'}</span>
+            <span style="color:#6b7280;margin:0 6px">|</span>
+            <span>${dong}동 ${ho}호</span>
+            <span style="color:#6b7280;margin:0 6px">|</span>
+            <span>${person.phone || phone}</span>
+            <span style="display:block;margin-top:4px;font-size:.78rem;color:#059669">
+                <i class="fas fa-check-circle"></i> 수강 정보 확인 완료 — 수강 중인 프로그램 ${list.length}개
+            </span>`;
+
+        // 드롭다운 채우기
+        const sel = document.getElementById('cancelProgram');
+        sel.innerHTML = '<option value="">-- 해지할 프로그램 선택 --</option>';
+        list.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.application_id;   // application_id를 value로
+            opt.dataset.programName   = p.program_name;
+            opt.dataset.preferredTime = p.preferred_time || '';
+            opt.dataset.applicationId = p.application_id;
+            opt.dataset.monthlyFee    = p.monthly_fee != null ? String(p.monthly_fee) : '';
+            const timeLabel = p.preferred_time ? ` (${p.preferred_time})` : '';
+            if (p.already_cancelled) {
+                opt.textContent = `${p.program_name}${timeLabel} — 이미 해지 접수됨`;
+                opt.disabled    = true;
+                opt.style.color = '#9ca3af';
+            } else {
+                opt.textContent = `${p.program_name}${timeLabel}`;
+            }
+            sel.appendChild(opt);
+        });
+
+        // 프로그램 선택 시 월 수강료 표시
+        sel.onchange = () => _onCancelProgramChange();
+
+        // 1개뿐이고 해지 가능하면 자동 선택
+        if (available.length === 1) {
+            const onlyOpt = Array.from(sel.options).find(o => !o.disabled && o.value);
+            if (onlyOpt) { onlyOpt.selected = true; _onCancelProgramChange(); }
+        }
+
+        document.getElementById('cancelStep2').style.display = 'block';
+        document.getElementById('cancelStep2').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    } catch(e) {
+        msg.style.display = 'block';
+        msg.style.color   = '#dc2626';
+        msg.innerHTML = `<i class="fas fa-exclamation-triangle"></i> 조회 오류: ${e.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search"></i> 수강 중인 프로그램 조회';
+    }
+}
+
+// 프로그램 선택 변경 시 수강료 미리보기 업데이트
+function _onCancelProgramChange() {
+    const sel = document.getElementById('cancelProgram');
+    const feeEl = document.getElementById('cancelFeePreview');
+    if (!feeEl) return;
+    if (!sel.value) {
+        feeEl.style.display = 'none';
+        return;
+    }
+    const opt = sel.options[sel.selectedIndex];
+    const fee = opt.dataset.monthlyFee;
+    if (fee && fee !== '') {
+        feeEl.style.display = 'block';
+        feeEl.innerHTML = `<i class="fas fa-won-sign"></i> 이번 달 수강료: <strong>${Number(fee).toLocaleString()}원</strong>`;
+    } else {
+        feeEl.style.display = 'none';
+    }
+}
+
+// STEP 2: 해지 신청 제출
+async function submitCancellation() {
+    const dong   = document.getElementById('cancelDong').value.trim();
+    const ho     = document.getElementById('cancelHo').value.trim();
+    const phone  = document.getElementById('cancelPhone').value.trim();
+    const sel    = document.getElementById('cancelProgram');
+    const reason = document.getElementById('cancelReason').value.trim();
+
+    if (!sel.value) { showToast('해지할 프로그램을 선택하세요', 'error'); return; }
+    if (!reason)    { showToast('해지 사유를 입력하세요', 'error'); return; }
+
+    const selectedOpt   = sel.options[sel.selectedIndex];
+    const programName   = selectedOpt.dataset.programName || sel.value;
+    const applicationId = selectedOpt.dataset.applicationId || null;
+    const person        = _cancelLookupResult.find(p => p.application_id === sel.value) || _cancelLookupResult[0] || {};
+
+    const submitBtn = document.getElementById('cancelSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 신청 중...';
+
+    const preferredTime = selectedOpt.dataset.preferredTime || '';
 
     try {
         await API.cancellations.create({
-            complex_id: State.complex.id,
-            dong, ho, name, phone,
-            program_name: program,
+            complex_id:     State.complex.id,
+            application_id: applicationId,
+            source:         'resident',
+            dong, ho,
+            name:           person.name  || '',
+            phone:          person.phone || phone,
+            program_name:   programName,
+            preferred_time: preferredTime,
             reason
         });
-        showToast('해지 신청이 접수되었습니다', 'success');
+        showToast('✅ 해지 신청이 접수되었습니다', 'success');
         closeModal('cancellationModal');
+        resetCancelForm();
     } catch (e) {
         showToast('해지 신청 실패: ' + e.message, 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-times-circle"></i> 해지 신청하기';
     }
 }
 
@@ -623,22 +798,10 @@ async function verifyAdminPassword() {
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 function showMyApplicationModal() { openModal('myAppModal'); }
 
-// 해지 신청 모달 열기 + 프로그램 드롭다운 자동 채우기
+// 해지 신청 모달 열기 (폼 초기화 포함)
 function showCancellationForm() {
+    resetCancelForm();
     openModal('cancellationModal');
-    // 모든 프로그램(비활성 포함) 드롭다운에 채우기
-    const sel = document.getElementById('cancelProgram');
-    if (!sel) return;
-    const programs = State.programs || [];
-    if (!programs.length) return;
-    // 기존 옵션 초기화 후 재생성
-    sel.innerHTML = '<option value="">-- 해지할 프로그램 선택 --</option>';
-    programs.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.name;
-        opt.textContent = p.is_active ? p.name : `${p.name} (신규접수 종료)`;
-        sel.appendChild(opt);
-    });
 }
 
 function openModal(id) {

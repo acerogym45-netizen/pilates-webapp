@@ -545,20 +545,73 @@
                 <hr style="margin:16px 0;border-color:#eee">
 
                 <!-- 신청 폼 -->
-                <div class="form-group"><label>동 <span class="required">*</span></label><input type="text" id="cancelDong" placeholder="101동"></div>
-                <div class="form-group"><label>호수 <span class="required">*</span></label><input type="text" id="cancelHo" placeholder="1001호"></div>
-                <div class="form-group"><label>이름 <span class="required">*</span></label><input type="text" id="cancelName"></div>
-                <div class="form-group"><label>전화번호 <span class="required">*</span></label><input type="tel" id="cancelPhone" placeholder="010-0000-0000"></div>
-                <div class="form-group"><label>프로그램명 <span class="required">*</span></label>
-                    <select id="cancelProgram">
-                        <option value="">-- 해지할 프로그램 선택 --</option>
-                    </select>
-                    <small style="color:#888;margin-top:4px;display:block">목록에 없으면 아래 사유란에 직접 입력해주세요</small>
+                <!-- STEP 1: 본인 확인 -->
+                <div id="cancelStep1">
+                    <div style="background:#f0f9ff;border:1.5px solid #3b82f6;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+                        <div style="font-weight:700;font-size:.88rem;color:#1e40af;margin-bottom:8px">
+                            <i class="fas fa-search"></i> STEP 1 — 본인 확인
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px">
+                            <label>동 <span class="required">*</span></label>
+                            <input type="text" id="cancelDong" placeholder="예: 101" inputmode="numeric"
+                                style="border:1.5px solid #93c5fd" oninput="resetCancelLookup()">
+                        </div>
+                        <div class="form-group" style="margin-bottom:8px">
+                            <label>호수 <span class="required">*</span></label>
+                            <input type="text" id="cancelHo" placeholder="예: 1001" inputmode="numeric"
+                                style="border:1.5px solid #93c5fd" oninput="resetCancelLookup()">
+                        </div>
+                        <div class="form-group" style="margin-bottom:12px">
+                            <label>전화번호 <span class="required">*</span></label>
+                            <input type="tel" id="cancelPhone" placeholder="010-0000-0000"
+                                style="border:1.5px solid #93c5fd" oninput="resetCancelLookup()">
+                        </div>
+                        <button type="button" id="cancelLookupBtn" onclick="lookupCancelPrograms()"
+                            style="width:100%;padding:11px;background:#3b82f6;color:#fff;border:none;
+                                   border-radius:8px;font-size:.92rem;font-weight:700;cursor:pointer">
+                            <i class="fas fa-search"></i> 수강 중인 프로그램 조회
+                        </button>
+                        <div id="cancelLookupMsg" style="margin-top:8px;font-size:.82rem;display:none"></div>
+                    </div>
                 </div>
-                <div class="form-group"><label>해지 사유 <span class="required">*</span></label><textarea id="cancelReason" rows="3" placeholder="해지 사유를 상세히 입력하세요 (환불 해당 사유인 경우 서류 제출 안내를 드립니다)"></textarea></div>
-                <button class="btn-danger btn-full" onclick="submitCancellation()">
-                    <i class="fas fa-times-circle"></i> 해지 신청하기
-                </button>
+
+                <!-- STEP 2: 프로그램 선택 + 사유 입력 (조회 후 표시) -->
+                <div id="cancelStep2" style="display:none">
+                    <div style="background:#f0fdf4;border:1.5px solid #22c55e;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+                        <div style="font-weight:700;font-size:.88rem;color:#166534;margin-bottom:8px">
+                            <i class="fas fa-check-circle"></i> STEP 2 — 해지할 프로그램 선택
+                        </div>
+                        <div id="cancelPersonInfo" style="font-size:.83rem;color:#374151;margin-bottom:10px;
+                             background:#fff;border-radius:6px;padding:8px 10px;border:1px solid #d1fae5"></div>
+                        <div class="form-group" style="margin-bottom:6px">
+                            <label>프로그램 <span class="required">*</span></label>
+                            <select id="cancelProgram"
+                                style="border:1.5px solid #22c55e;font-weight:600;font-size:.9rem">
+                                <option value="">-- 해지할 프로그램 선택 --</option>
+                            </select>
+                        </div>
+                        <div id="cancelFeePreview"
+                             style="display:none;font-size:.82rem;color:#0369a1;background:#e0f2fe;
+                                    border:1px solid #7dd3fc;border-radius:6px;padding:6px 10px;
+                                    margin-bottom:10px">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0">
+                            <label>해지 사유 <span class="required">*</span></label>
+                            <textarea id="cancelReason" rows="3"
+                                placeholder="해지 사유를 입력하세요"></textarea>
+                        </div>
+                    </div>
+                    <button type="button" id="cancelSubmitBtn" onclick="submitCancellation()"
+                        style="width:100%;padding:13px;background:#dc2626;color:#fff;border:none;
+                               border-radius:8px;font-size:.95rem;font-weight:700;cursor:pointer">
+                        <i class="fas fa-times-circle"></i> 해지 신청하기
+                    </button>
+                    <button type="button" onclick="resetCancelForm()"
+                        style="width:100%;padding:9px;background:#f3f4f6;color:#6b7280;border:none;
+                               border-radius:8px;font-size:.83rem;font-weight:600;cursor:pointer;margin-top:8px">
+                        <i class="fas fa-redo"></i> 다시 조회
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -572,6 +625,6 @@
     </button>
 
     <script src="/js/api.js"></script>
-    <script src="/js/app.js?v=20260504b"></script>
+    <script src="/js/app.js?v=20260505a"></script>
 </body>
 </html>

@@ -9,8 +9,14 @@ const cancellations = {
         const kst    = new Date(now.getTime() + 9 * 60 * 60 * 1000);
         const day    = kst.getUTCDate();
         const mon    = kst.getUTCMonth() + 1;
-        const isCancelPeriod = day >= 3 && day <= 10;
-        const isEnrollPeriod = day >= 20 && day <= 27;
+        const hour = kst.getUTCHours();
+        // 해지 신청 기간: 매월 22일 09:00 ~ 26일 09:00 KST (시간 단위 정밀 체크)
+        const isCancelPeriod =
+            (day === 22 && hour >= 9) ||
+            (day > 22 && day < 26)   ||
+            (day === 26 && hour < 9);
+        // 등록 접수 기간 = 해지 신청 기간: 매월 22일 09:00 ~ 26일 09:00 KST
+        const isEnrollPeriod = isCancelPeriod;
         const nextMon = mon === 12 ? 1 : mon + 1;
 
         // ── 기간 안내 배너 ──
@@ -20,20 +26,29 @@ const cancellations = {
             <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
                         background:#fff7ed;border:2px solid #f97316;margin-bottom:12px;font-size:.83rem;color:#9a3412">
                 <i class="fas fa-exclamation-triangle" style="font-size:1.1rem;color:#f97316"></i>
-                <span><strong>🔔 현재 해지 신청 기간 (${mon}월 3일 ~ 10일)</strong><br>
-                <small style="opacity:.85">접수된 해지 신청은 당월 정상 수강 후 ${nextMon}월부터 해지 적용</small></span>
+                <span><strong>🔔 현재 해지 신청 기간 (${mon}월 22일 09시 ~ 26일 09시)</strong><br>
+                <small style="opacity:.85">접수 즉시 자동 승인 · 당월 정상 수강 후 ${nextMon}월부터 해지 적용</small></span>
             </div>`;
         } else if (isEnrollPeriod) {
             periodBannerHtml = `
             <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
                         background:#eff6ff;border:2px solid #3b82f6;margin-bottom:12px;font-size:.83rem;color:#1e40af">
                 <i class="fas fa-calendar-check" style="font-size:1.1rem"></i>
-                <span><strong>📝 현재 신규 등록 접수 기간 (${mon}월 20일 ~ 27일)</strong></span>
+                <span><strong>📝 현재 신규 등록 접수 기간 (${mon}월 22일 09시 ~ 26일 09시)</strong></span>
             </div>`;
         } else {
-            const next = (day > 10 && day < 20)
-                ? `다음 해지 신청: <strong>${mon}월 말 ~ ${nextMon}월 3~10일</strong> / 다음 등록 접수: <strong>${mon}월 20~27일</strong>`
-                : `다음 해지 신청: <strong>${nextMon}월 3~10일</strong> / 다음 등록 접수: <strong>${nextMon}월 20~27일</strong>`;
+            // 다음 기간 계산: 26일 09시 이후면 다음달 22일, 그 전이면 이번달 22일
+            const isAfterClose = day > 26 || (day === 26 && hour >= 9);
+            const isBeforeOpen  = day < 22 || (day === 22 && hour < 9);
+            let next;
+            // 등록 접수 = 해지 신청 기간으로 통일, 단일 표시
+            if (isAfterClose) {
+                // 26일 09시 이후 → 다음달
+                next = `다음 등록 접수 · 해지 신청: <strong>${nextMon}월 22일 09시 ~ 26일 09시</strong>`;
+            } else {
+                // 이번달 22일 09시 전
+                next = `다음 등록 접수 · 해지 신청: <strong>${mon}월 22일 09시 ~ 26일 09시</strong>`;
+            }
             periodBannerHtml = `
             <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
                         background:#f9fafb;border:1px solid #e5e7eb;margin-bottom:12px;font-size:.8rem;color:#6b7280">
@@ -45,6 +60,9 @@ const cancellations = {
             <div class="page-header">
                 <h2><i class="fas fa-times-circle"></i> 해지 관리</h2>
                 <div style="display:flex;gap:6px">
+                    <button class="btn-primary btn-sm" onclick="cancellations.openNewCancelModal()">
+                        <i class="fas fa-plus"></i> 해지신청 등록
+                    </button>
                     <button class="btn-secondary btn-sm" onclick="cancellations.exportBillingCSV()" title="관리비 부과 현황 CSV">
                         <i class="fas fa-file-csv"></i> 관리비 내보내기
                     </button>
@@ -59,14 +77,13 @@ const cancellations = {
                  padding:12px 14px;margin-bottom:14px;font-size:.8rem;color:#166534;line-height:1.75">
                 <div style="font-weight:700;margin-bottom:6px"><i class="fas fa-info-circle"></i> 해지 관리 운영 가이드</div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
-                    <div>📅 <strong>등록 접수:</strong> 매월 20~27일</div>
-                    <div>🚫 <strong>해지 신청:</strong> 매월 3~10일</div>
+                    <div>📅 <strong>등록 접수:</strong> 매월 22일 09시 ~ 26일 09시</div>
+                    <div>🚫 <strong>해지 신청:</strong> 매월 22일 09시 ~ 26일 09시</div>
                     <div>🔄 <strong>해지 적용:</strong> 당월 수강 후 익월부터</div>
                     <div>⚡ <strong>미신청 시:</strong> 자동 재등록 (차월 수강료 청구)</div>
                 </div>
                 <div style="margin-top:8px;padding-top:8px;border-top:1px solid #bbf7d0">
-                    💡 <strong>누락 방지 팁:</strong> 접수 기간(3~10일) 종료 후 <em>미처리 대기 건</em>을 일괄 확인·승인하고,
-                    승인된 해지 건은 익월 청구 명단에서 <strong>반드시 제외</strong>하세요.
+                    💡 <strong>운영 안내:</strong> 해지 신청은 접수 즉시 자동 승인됩니다. 승인된 해지 건은 익월 청구 명단에서 <strong>반드시 제외</strong>하세요.
                 </div>
             </div>
 
@@ -185,7 +202,7 @@ const cancellations = {
                     </div>
                     <div class="item-main">
                         <strong>${c.dong} ${c.ho} | ${c.name}</strong>
-                        <p>${c.program_name || (isRefund ? '환불 신청' : '해지 신청')}</p>
+                        <p>${c.program_name || (isRefund ? '환불 신청' : '해지 신청')}${!isRefund && c.preferred_time ? ` <span style="color:#6b7280;font-size:.8rem">(${c.preferred_time})</span>` : ''}</p>
                         ${!isRefund && applyDate
                             ? `<span class="cancel-apply-date"><i class="fas fa-calendar-check"></i> 익월 해지 예정: ${applyDate}</span>`
                             : ''}
@@ -368,7 +385,10 @@ const cancellations = {
                 <div class="detail-row"><label>동/호수</label><span>${c.dong} ${c.ho}</span></div>
                 <div class="detail-row"><label>이름</label><span>${c.name}</span></div>
                 <div class="detail-row"><label>전화</label><span>${c.phone}</span></div>
-                ${!isRefund ? `<div class="detail-row"><label>프로그램</label><span>${c.program_name || '-'}</span></div>` : ''}
+                ${!isRefund ? `
+                <div class="detail-row"><label>프로그램</label><span>${c.program_name || '-'}</span></div>
+                ${c.preferred_time ? `<div class="detail-row"><label>희망시간</label><span style="color:#0369a1;font-weight:600">${c.preferred_time}</span></div>` : ''}
+                ` : ''}
                 <div class="detail-row"><label>${isRefund ? '환불 사유' : '해지 사유'}</label><span>${reasonDisplay}</span></div>
                 ${isRefund && refundDetailDisplay
                     ? `<div class="detail-row full"><label>상세 내용</label><p style="white-space:pre-wrap">${refundDetailDisplay}</p></div>`
@@ -399,11 +419,26 @@ const cancellations = {
                 ${c.processed_at ? `<div class="detail-row"><label>처리일</label><span>${formatDate(c.processed_at)}</span></div>` : ''}
             </div>`;
 
+        // 해지 승인 버튼: application_id 있으면 "신청 목록도 자동 해지" 안내 문구 추가
+        const hasAppId = !!c.application_id;
+        const approveLabel = !isRefund
+            ? `승인${hasAppId ? ' + 신청목록 자동해지' : ''} (${applyDate} 해지)`
+            : '승인';
+        const approveConfirm = !isRefund && hasAppId
+            ? `confirm('해지 신청을 승인하면\\n수강 신청 목록에서도 자동으로 해지 처리됩니다.\\n\\n계속하시겠습니까?')`
+            : `confirm('해지 신청을 승인하시겠습니까?')`;
+
         const footer = `
             <div class="modal-btn-group" style="flex-wrap:wrap;gap:6px">
                 ${c.status === 'pending' ? `
-                <button class="btn-success btn-sm" onclick="cancellations.updateStatus('${c.id}','approved')">
-                    <i class="fas fa-check"></i> 승인${!isRefund ? ` (${applyDate} 해지)` : ''}
+                ${!isRefund && hasAppId ? `
+                <div style="width:100%;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:8px;
+                     padding:8px 12px;font-size:.78rem;color:#92400e;margin-bottom:4px">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>신청 목록 연동:</strong> 승인 시 해당 수강 신청도 자동으로 해지 처리됩니다.
+                </div>` : ''}
+                <button class="btn-success btn-sm" onclick="if(${approveConfirm}) cancellations.updateStatus('${c.id}','approved')">
+                    <i class="fas fa-check"></i> ${approveLabel}
                 </button>
                 <button class="btn-danger btn-sm" onclick="cancellations.updateStatus('${c.id}','rejected')">
                     <i class="fas fa-times"></i> 거부
@@ -426,9 +461,25 @@ const cancellations = {
 
     async updateStatus(id, status) {
         try {
-            await API.cancellations.update(id, { status });
+            const result = await API.cancellations.update(id, { status });
             closeGlobalModal();
-            showToast(`"${statusLabel(status)}" 처리되었습니다`);
+
+            // 해지 승인 시: applications 자동 해지 처리 결과 안내
+            if (status === 'approved') {
+                const appCancel = result?.app_cancel;
+                if (appCancel && appCancel.success) {
+                    showToast(`해지 승인 완료 — 신청 목록에서도 자동 해지 처리되었습니다 ✓`, 'success');
+                } else if (appCancel && !appCancel.success) {
+                    // 승인은 됐지만 applications 자동 처리 실패 → 경고
+                    showToast(`해지 승인 완료 (신청 목록 자동 해지 처리 실패 — 수동 확인 필요)`, 'warning');
+                } else {
+                    // application_id 없는 경우 (관리자 직접 등록 등)
+                    showToast(`해지 승인 완료 (신청 목록 연결 없음)`, 'success');
+                }
+            } else {
+                showToast(`"${statusLabel(status)}" 처리되었습니다`);
+            }
+
             await this.load(this.currentStatus);
             loadBadges();
         } catch(e) { showToast('처리 실패: ' + e.message, 'error'); }
@@ -555,6 +606,250 @@ const cancellations = {
             showToast('관리비 부과 정보가 저장되었습니다');
             await this.load(this.currentStatus);
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+    },
+
+    // ══════════════════════════════════════════════════════════
+    // 관리자용 해지신청 등록 모달
+    // ══════════════════════════════════════════════════════════
+    _newCancelLookupResult: [],  // 조회된 수강 프로그램 목록
+
+    openNewCancelModal() {
+        this._newCancelLookupResult = [];
+        const body = `
+          <div style="margin-bottom:14px;background:#fef9e7;border:1.5px solid #f39c12;border-radius:10px;
+               padding:11px 14px;font-size:.8rem;color:#7d5a00;line-height:1.6">
+            <i class="fas fa-info-circle"></i>
+            관리자는 기간 제한 없이 해지 신청을 등록할 수 있습니다.<br>
+            동·호수·전화번호로 수강자를 조회한 뒤 프로그램을 선택하세요.
+          </div>
+
+          <!-- STEP 1: 본인 확인 조회 -->
+          <div id="adminCancelStep1" style="background:#f0f9ff;border:1.5px solid #3b82f6;border-radius:10px;padding:14px;margin-bottom:12px">
+            <div style="font-weight:700;font-size:.88rem;color:#1e40af;margin-bottom:10px">
+              <i class="fas fa-search"></i> STEP 1 — 수강자 조회
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+              <div>
+                <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">동 <span style="color:#dc2626">*</span></label>
+                <input type="text" id="adminCancelDong" placeholder="예: 101" inputmode="numeric"
+                  style="width:100%;padding:8px 10px;border:1.5px solid #93c5fd;border-radius:7px;font-size:.9rem;box-sizing:border-box"
+                  oninput="cancellations._resetAdminLookup()">
+              </div>
+              <div>
+                <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">호수 <span style="color:#dc2626">*</span></label>
+                <input type="text" id="adminCancelHo" placeholder="예: 1001" inputmode="numeric"
+                  style="width:100%;padding:8px 10px;border:1.5px solid #93c5fd;border-radius:7px;font-size:.9rem;box-sizing:border-box"
+                  oninput="cancellations._resetAdminLookup()">
+              </div>
+            </div>
+            <div style="margin-bottom:10px">
+              <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">전화번호</label>
+              <input type="tel" id="adminCancelPhone" placeholder="010-0000-0000"
+                style="width:100%;padding:8px 10px;border:1.5px solid #93c5fd;border-radius:7px;font-size:.9rem;box-sizing:border-box"
+                oninput="cancellations._resetAdminLookup()">
+            </div>
+            <button id="adminCancelLookupBtn" onclick="cancellations._lookupAdminCancelPrograms()"
+              style="width:100%;padding:10px;background:#3b82f6;color:#fff;border:none;border-radius:7px;
+                     font-size:.9rem;font-weight:700;cursor:pointer">
+              <i class="fas fa-search"></i> 수강 중인 프로그램 조회
+            </button>
+            <div id="adminCancelLookupMsg" style="margin-top:8px;font-size:.82rem;display:none"></div>
+          </div>
+
+          <!-- STEP 2: 프로그램 선택 + 사유 (조회 후 표시) -->
+          <div id="adminCancelStep2" style="display:none;background:#f0fdf4;border:1.5px solid #22c55e;border-radius:10px;padding:14px">
+            <div style="font-weight:700;font-size:.88rem;color:#166534;margin-bottom:10px">
+              <i class="fas fa-check-circle"></i> STEP 2 — 프로그램 선택
+            </div>
+            <div id="adminCancelPersonInfo" style="font-size:.83rem;color:#374151;margin-bottom:10px;
+                 background:#fff;border-radius:6px;padding:8px 10px;border:1px solid #d1fae5"></div>
+            <div style="margin-bottom:10px">
+              <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">해지할 프로그램 <span style="color:#dc2626">*</span></label>
+              <select id="adminCancelProgram"
+                style="width:100%;padding:9px 10px;border:1.5px solid #22c55e;border-radius:7px;
+                       font-size:.9rem;font-weight:600;box-sizing:border-box">
+                <option value="">-- 선택 --</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">해지 사유</label>
+              <textarea id="adminCancelReason" rows="3" placeholder="해지 사유 (선택 입력)"
+                style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:7px;
+                       font-size:.88rem;resize:vertical;box-sizing:border-box"></textarea>
+            </div>
+          </div>`;
+
+        const footer = `
+          <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
+          <button class="btn-primary" id="adminCancelSubmitBtn"
+            onclick="cancellations._submitAdminCancel()"
+            style="display:none">
+            <i class="fas fa-check"></i> 해지 신청 등록
+          </button>`;
+
+        openGlobalModal('<i class="fas fa-plus-circle"></i> 해지 신청 등록 (관리자)', body, footer);
+    },
+
+    _resetAdminLookup() {
+        this._newCancelLookupResult = [];
+        document.getElementById('adminCancelStep2').style.display = 'none';
+        const submitBtn = document.getElementById('adminCancelSubmitBtn');
+        if (submitBtn) submitBtn.style.display = 'none';
+        const msg = document.getElementById('adminCancelLookupMsg');
+        if (msg) { msg.style.display = 'none'; msg.innerHTML = ''; }
+        const sel = document.getElementById('adminCancelProgram');
+        if (sel) sel.innerHTML = '<option value="">-- 선택 --</option>';
+        const reasonEl = document.getElementById('adminCancelReason');
+        if (reasonEl) reasonEl.value = '';
+    },
+
+    async _lookupAdminCancelPrograms() {
+        const dong  = (document.getElementById('adminCancelDong')?.value  || '').trim();
+        const ho    = (document.getElementById('adminCancelHo')?.value    || '').trim();
+        const phone = (document.getElementById('adminCancelPhone')?.value || '').trim();
+
+        if (!dong || !ho) { showToast('동과 호수를 입력하세요', 'error'); return; }
+
+        const btn = document.getElementById('adminCancelLookupBtn');
+        const msg = document.getElementById('adminCancelLookupMsg');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 조회 중...';
+        msg.style.display = 'none';
+
+        try {
+            const cid  = getEffectiveComplexId();
+            const params = new URLSearchParams({ complexId: cid, dong, ho });
+            if (phone) params.append('phone', phone);
+
+            const res  = await fetch(`/api/cancellations/lookup-programs?${params}`);
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || '조회 실패');
+
+            const list          = json.data || [];
+            const phoneMismatch = !!json.phone_mismatch;
+            const phoneHint     = json.registered_phone_hint || '';
+            this._newCancelLookupResult = list;
+
+            if (!list.length) {
+                msg.style.display = 'block';
+                msg.style.color   = '#dc2626';
+                msg.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${dong}동 ${ho}호에 수강 중인 프로그램을 찾을 수 없습니다.`;
+                document.getElementById('adminCancelStep2').style.display = 'none';
+                const submitBtn = document.getElementById('adminCancelSubmitBtn');
+                if (submitBtn) submitBtn.style.display = 'none';
+                return;
+            }
+
+            // 전화번호 불일치 경고 (관리자는 조회 진행 허용, 단 경고 표시)
+            if (phoneMismatch) {
+                msg.style.display = 'block';
+                msg.style.color   = '#d97706';
+                const hintText = phoneHint
+                    ? `DB 등록 번호: <strong>${phoneHint}</strong>`
+                    : '등록된 번호와 다릅니다';
+                msg.innerHTML = `<i class="fas fa-exclamation-triangle"></i>
+                    <strong>전화번호 불일치</strong> — ${hintText}<br>
+                    <small style="color:#555">관리자 권한으로 조회 진행합니다.</small>`;
+            } else {
+                msg.style.display = 'none';
+            }
+
+            // 본인 정보 표시
+            const person = list[0];
+            const infoEl = document.getElementById('adminCancelPersonInfo');
+            const phoneDisplay = phoneMismatch && phoneHint
+                ? `<span style="color:#d97706">${phoneHint} <small>(불일치)</small></span>`
+                : (person.phone || phone || '-');
+            infoEl.innerHTML = `
+              <span style="font-weight:700;color:#111">${person.name || '?'}</span>
+              <span style="color:#6b7280;margin:0 6px">|</span>
+              <span>${dong}동 ${ho}호</span>
+              <span style="color:#6b7280;margin:0 6px">|</span>
+              <span>${phoneDisplay}</span>
+              <span style="display:block;margin-top:4px;font-size:.78rem;color:#059669">
+                <i class="fas fa-check-circle"></i> 수강 중 ${list.length}개 프로그램 확인
+              </span>`;
+
+            // 드롭다운 채우기
+            const sel = document.getElementById('adminCancelProgram');
+            sel.innerHTML = '<option value="">-- 해지할 프로그램 선택 --</option>';
+            list.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.application_id;
+                opt.dataset.programName   = p.program_name;
+                opt.dataset.preferredTime = p.preferred_time || '';
+                opt.dataset.applicationId = p.application_id;
+                const timeLabel = p.preferred_time ? ` (${p.preferred_time})` : '';
+                if (p.already_cancelled) {
+                    opt.textContent = `${p.program_name}${timeLabel} — 이미 해지 접수됨`;
+                    opt.disabled    = true;
+                    opt.style.color = '#9ca3af';
+                } else {
+                    opt.textContent = `${p.program_name}${timeLabel}`;
+                }
+                sel.appendChild(opt);
+            });
+
+            // 조회 가능한 것 1개면 자동 선택
+            const available = list.filter(p => !p.already_cancelled);
+            if (available.length === 1) {
+                const onlyOpt = Array.from(sel.options).find(o => !o.disabled && o.value);
+                if (onlyOpt) onlyOpt.selected = true;
+            }
+
+            document.getElementById('adminCancelStep2').style.display = 'block';
+            const submitBtn = document.getElementById('adminCancelSubmitBtn');
+            if (submitBtn) submitBtn.style.display = '';
+
+        } catch(e) {
+            msg.style.display = 'block';
+            msg.style.color   = '#dc2626';
+            msg.innerHTML = `<i class="fas fa-exclamation-triangle"></i> 조회 오류: ${e.message}`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-search"></i> 수강 중인 프로그램 조회';
+        }
+    },
+
+    async _submitAdminCancel() {
+        const sel    = document.getElementById('adminCancelProgram');
+        const reason = (document.getElementById('adminCancelReason')?.value || '').trim();
+        const dong   = (document.getElementById('adminCancelDong')?.value  || '').trim();
+        const ho     = (document.getElementById('adminCancelHo')?.value    || '').trim();
+
+        if (!sel?.value) { showToast('해지할 프로그램을 선택하세요', 'error'); return; }
+
+        const selectedOpt   = sel.options[sel.selectedIndex];
+        const programName   = selectedOpt.dataset.programName  || sel.value;
+        const applicationId = selectedOpt.dataset.applicationId || null;
+        const person = this._newCancelLookupResult.find(p => p.application_id === sel.value)
+                       || this._newCancelLookupResult[0] || {};
+
+        const submitBtn = document.getElementById('adminCancelSubmitBtn');
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 등록 중...'; }
+
+        try {
+            const preferredTime = selectedOpt.dataset.preferredTime || '';
+            await API.cancellations.create({
+                complex_id:     getEffectiveComplexId(),
+                application_id: applicationId,
+                source:         'admin',
+                dong, ho,
+                name:           person.name  || '',
+                phone:          person.phone || (document.getElementById('adminCancelPhone')?.value || '').trim(),
+                program_name:   programName,
+                preferred_time: preferredTime,
+                reason:         reason || '관리자 등록',
+                request_type:   'cancel',
+            });
+            closeGlobalModal();
+            showToast(`✅ ${person.name || dong + ' ' + ho} — ${programName} 해지 신청 등록 완료`, 'success');
+            await this.load(this.currentStatus);
+            loadBadges();
+        } catch(e) {
+            showToast('등록 실패: ' + e.message, 'error');
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fas fa-check"></i> 해지 신청 등록'; }
+        }
     },
 
     /** 해지 관리비 현황 내보내기 (CSV) — 현재 탭이 cancel이어야 의미 있음 */

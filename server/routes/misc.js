@@ -469,26 +469,195 @@ router.get('/cancellations', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ═══════════════════════════════════════════════════════
+// GET /api/cancellations/lookup-programs
+// 동 + 호수 + 전화번호로 현재 수강 중인 프로그램 목록 조회
+// query: complexId | complexCode, dong, ho, phone
+// ═══════════════════════════════════════════════════════
+router.get('/cancellations/lookup-programs', async (req, res) => {
+    try {
+        const { complexId, complexCode, dong, ho, phone } = req.query;
+        if (!dong || !ho) {
+            return res.status(400).json({ success: false, error: 'dong, ho 필수' });
+        }
+
+        const sb = getSupabase();
+
+        // 단지 ID 확정
+        let cid = complexId;
+        if (!cid && complexCode) {
+            const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
+            if (cx) cid = cx.id;
+        }
+        if (!cid) return res.status(400).json({ success: false, error: 'complexId 또는 complexCode 필수' });
+
+        // 전화번호 정규화 (하이픈 제거)
+        const normalizePhone = (p) => (p || '').replace(/[^0-9]/g, '');
+        const phoneNorm = normalizePhone(phone);
+
+        // 동/호수 정규화 (숫자만 추출 → 한글 포함 여부 무관하게 매칭)
+        const normDong = dong.replace(/[^0-9]/g, '');
+        const normHo   = ho.replace(/[^0-9]/g, '');
+
+        // approved 상태인 수강신청 전체 조회
+        const { data: apps, error: appErr } = await sb
+            .from('applications')
+            .select('id, dong, ho, name, phone, program_name, preferred_time, monthly_fee, status, created_at, updated_at')
+            .eq('complex_id', cid)
+            .eq('status', 'approved');
+        if (appErr) throw appErr;
+
+        // ── 동/호수 매칭 (숫자 기준, 한글 포함 여부 무관) ─────────────
+        const byDongHo = (apps || []).filter(a => {
+            const aDong = (a.dong || '').replace(/[^0-9]/g, '');
+            const aHo   = (a.ho   || '').replace(/[^0-9]/g, '');
+            return aDong === normDong && aHo === normHo;
+        });
+
+        // ── 전화번호 매칭 (3단계 전략) ─────────────────────────────────
+        // 1단계: 전체 번호 완전 일치
+        // 2단계: 끝 4자리 일치 (같은 세대 다른 회선 허용)
+        // 3단계: 동/호수만으로 조회 (번호 오입력 또는 미입력 → phone_mismatch 플래그 반환)
+        let matched = [];
+        let phoneMismatch = false;   // 전화번호 불일치 여부 (UI에 힌트 안내용)
+        let registeredPhoneHint = ''; // DB에 등록된 번호 마스킹 힌트 (보안)
+
+        if (!phoneNorm) {
+            // 전화번호 미입력 → 동/호수만으로 조회
+            matched = byDongHo;
+        } else {
+            // 1단계: 완전 일치
+            const exactMatch = byDongHo.filter(a =>
+                normalizePhone(a.phone) === phoneNorm
+            );
+            if (exactMatch.length > 0) {
+                matched = exactMatch;
+            } else {
+                // 2단계: 끝 4자리 일치
+                const last4input = phoneNorm.slice(-4);
+                const last4Match = byDongHo.filter(a =>
+                    normalizePhone(a.phone).slice(-4) === last4input
+                );
+                if (last4Match.length > 0) {
+                    matched = last4Match;
+                } else {
+                    // 3단계: 전화번호 불일치
+                    // - 해당 동/호수에 수강자가 있으면 → phone_mismatch=true + 마스킹 힌트
+                    // - 해당 동/호수에 수강자 자체가 없으면 → 그냥 빈 결과 (mismatch 아님)
+                    if (byDongHo.length > 0) {
+                        // 수강자는 있는데 번호가 다른 경우
+                        matched = [];          // 보안: 번호 불일치 시 데이터 반환 안 함
+                        phoneMismatch = true;
+                        // 등록된 번호 마스킹 힌트 (예: 010-****-4490)
+                        const dbPhone = normalizePhone(byDongHo[0].phone);
+                        if (dbPhone.length >= 4) {
+                            const last4  = dbPhone.slice(-4);
+                            const prefix = dbPhone.slice(0, 3);  // 010
+                            registeredPhoneHint = `${prefix}-****-${last4}`;
+                        }
+                    } else {
+                        // 해당 동/호수 자체에 수강자가 없는 경우 → 그냥 빈 결과
+                        matched = [];
+                    }
+                }
+            }
+        }
+
+        // ── 이미 해지 접수된 프로그램 확인 (중복 해지 방지) ──────────
+        const pendingCancelKeys    = new Set();
+        const pendingCancelAppIds  = new Set();
+        if (matched.length > 0) {
+            const { data: existingCancels } = await sb
+                .from('cancellations')
+                .select('application_id, dong, ho, program_name, status')
+                .eq('complex_id', cid)
+                .in('status', ['pending', 'approved']);
+            (existingCancels || []).forEach(c => {
+                const cd = (c.dong || '').replace(/[^0-9]/g, '');
+                const ch = (c.ho   || '').replace(/[^0-9]/g, '');
+                if (cd === normDong && ch === normHo) {
+                    pendingCancelKeys.add(c.program_name);
+                }
+                if (c.application_id) pendingCancelAppIds.add(c.application_id);
+            });
+        }
+
+        const programs = matched.map(a => ({
+            application_id:    a.id,
+            name:              a.name,
+            phone:             a.phone,
+            program_name:      a.program_name,
+            preferred_time:    a.preferred_time,
+            monthly_fee:       a.monthly_fee,
+            already_cancelled: pendingCancelAppIds.has(a.id) || pendingCancelKeys.has(a.program_name),
+        }));
+
+        res.json({
+            success:               true,
+            data:                  programs,
+            count:                 programs.length,
+            // 전화번호 불일치 안내 (UI에서 사용)
+            phone_mismatch:        phoneMismatch,
+            registered_phone_hint: registeredPhoneHint || null,
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 router.post('/cancellations', async (req, res) => {
     try {
-        const { complex_id, application_id, dong, ho, name, phone, program_name, reason, request_type, refund_reason, refund_detail, reason_detail } = req.body;
+        const {
+            complex_id, application_id, dong, ho, name, phone,
+            program_name, preferred_time,
+            reason, request_type, source,
+            refund_reason, refund_detail, reason_detail
+        } = req.body;
         if (!complex_id || !dong || !ho || !name || !phone) return res.status(400).json({ success: false, error: '필수 항목 누락' });
 
-        // ── 입주민 해지신청 기간 체크 (3~10일만 허용) ──────────────────
-        // request_type='cancel' 이고 application_id 없는 경우 = 입주민 직접 신청
-        // 관리자 등록(application_id 있거나 bulk) 또는 환불은 기간 제한 없음
-        if ((request_type === 'cancel' || !request_type) && !application_id) {
+        // ── 입주민 해지신청 기간 체크 (매월 22일 09:00 ~ 26일 09:00 KST만 허용) ──
+        // source='admin' 이 아닌 입주민 직접 신청 건에만 적용
+        const isResident = source === 'resident' || ((request_type === 'cancel' || !request_type) && source !== 'admin');
+        if (isResident && request_type !== 'refund') {
             const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-            const dayKst = nowKst.getUTCDate();
-            if (dayKst < 3 || dayKst > 10) {
+            const dayKst  = nowKst.getUTCDate();
+            const hourKst = nowKst.getUTCHours();
+            // 22일 09:00 이상 AND 26일 09:00 미만 → 허용
+            const afterOpen  = dayKst > 22 || (dayKst === 22 && hourKst >= 9);
+            const beforeClose = dayKst < 26 || (dayKst === 26 && hourKst < 9);
+            if (!(afterOpen && beforeClose)) {
+                // 다음 접수 시작일 계산 (26일 이후면 다음달 22일)
+                const monKst = nowKst.getUTCMonth() + 1;
+                const yearKst = nowKst.getUTCFullYear();
+                const isAfterClose = dayKst > 26 || (dayKst === 26 && hourKst >= 9);
+                const nextMon = isAfterClose ? (monKst === 12 ? 1 : monKst + 1) : monKst;
+                const nextYear = (isAfterClose && monKst === 12) ? yearKst + 1 : yearKst;
                 return res.status(400).json({
                     success: false,
-                    error: `해지 신청은 매월 3일~10일에만 가능합니다. (현재 ${dayKst}일)\n다음 해지 신청 기간에 다시 시도해 주세요.`
+                    error: `해지 신청은 매월 22일 09시 ~ 26일 09시에만 가능합니다.\n다음 접수 기간: ${nextYear}년 ${nextMon}월 22일 09:00 ~ ${nextMon}월 26일 09:00`
                 });
             }
         }
 
         const sb = getSupabase();
+
+        // ── 중복 해지 신청 방지 ───────────────────────────────────────
+        // 동일 application_id로 이미 pending/approved 해지 신청이 있으면 차단
+        if (application_id) {
+            const { data: dupCheck } = await sb
+                .from('cancellations')
+                .select('id')
+                .eq('complex_id', complex_id)
+                .eq('application_id', application_id)
+                .in('status', ['pending', 'approved'])
+                .limit(1);
+            if (dupCheck && dupCheck.length > 0) {
+                return res.status(409).json({
+                    success: false,
+                    error: '이미 해지 신청이 접수된 수강 건입니다.'
+                });
+            }
+        }
 
         // reason 필드 구성
         let reasonText = reason || '';
@@ -500,21 +669,37 @@ router.post('/cancellations', async (req, res) => {
             reasonText = reason ? `${reason}\n${reason_detail}` : reason_detail;
         }
 
+        // ── 해지 신청 시 즉시 자동 승인 처리 (번복 불가) ───────────────
+        const nowForInsert = new Date();
         const insertData = {
             complex_id, application_id: application_id || null,
             dong, ho, name, phone,
             program_name: program_name || '',
+            preferred_time: preferred_time || null,
             reason: reasonText,
             request_type: request_type || 'cancel',
-            status: 'pending'
+            status: 'approved',                          // 즉시 자동 승인
+            processed_at: nowForInsert.toISOString(),    // 처리 일시 자동 기록
         };
 
+        // termination_month 자동 설정 (신청월 기준 다음달)
+        const kstNow = new Date(nowForInsert.getTime() + 9 * 60 * 60 * 1000);
+        const kstY = kstNow.getUTCFullYear();
+        const kstM = kstNow.getUTCMonth() + 1; // 1~12
+        const termY = kstM === 12 ? kstY + 1 : kstY;
+        const termM = kstM === 12 ? 1 : kstM + 1;
+        insertData.termination_month = `${termY}-${String(termM).padStart(2, '0')}`;
+
         let result;
-        // request_type 컬럼이 없을 수 있으므로 실패 시 해당 필드 제외 후 재시도
+        // request_type / preferred_time / processed_at / termination_month 컬럼 없을 수 있으므로 fallback
         let { data, error } = await sb.from('cancellations').insert(insertData).select().single();
-        if (error && error.message && error.message.includes('request_type')) {
-            // 컬럼 없으면 request_type 제외하고 재시도
-            const { request_type: _rt, ...fallbackData } = insertData;
+        if (error && error.message && (
+            error.message.includes('request_type') ||
+            error.message.includes('preferred_time') ||
+            error.message.includes('processed_at') ||
+            error.message.includes('termination_month')
+        )) {
+            const { request_type: _rt, preferred_time: _pt, processed_at: _pa, termination_month: _tm, ...fallbackData } = insertData;
             const retry = await sb.from('cancellations').insert(fallbackData).select().single();
             if (retry.error) throw sbErr(retry.error);
             result = retry.data;
@@ -523,7 +708,19 @@ router.post('/cancellations', async (req, res) => {
             result = data;
         }
 
-        res.status(201).json({ success: true, data: result });
+        // ── 해지 승인 시 applications 테이블도 자동 cancelled 처리 ────
+        if (result && result.application_id) {
+            try {
+                await sb.from('applications')
+                    .update({ status: 'cancelled' })
+                    .eq('id', result.application_id);
+                console.log(`[cancellations POST] 자동 승인 → applications(${result.application_id}) cancelled 처리`);
+            } catch (appEx) {
+                console.warn(`[cancellations POST] applications 자동 처리 실패: ${appEx.message}`);
+            }
+        }
+
+        res.status(201).json({ success: true, data: result, auto_approved: true });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -720,7 +917,48 @@ router.put('/cancellations/:id', async (req, res) => {
             if (localDocs) data = { ...data, doc_urls: localDocs };
         }
 
-        res.json({ success: true, data });
+        // ── 해지 승인 시 신청 목록(applications) 자동 해지 처리 ─────────────
+        // cancellations 레코드에 application_id가 있으면 해당 신청의 status를 'cancelled'로 변경
+        let appCancelResult = null;
+        if (status === 'approved' && data && data.application_id) {
+            try {
+                const { data: appData, error: appErr } = await sb
+                    .from('applications')
+                    .update({
+                        status: 'cancelled',
+                        // notes 필드에 해지 처리 정보 기록 (컬럼이 있을 경우)
+                    })
+                    .eq('id', data.application_id)
+                    .select('id, status, name, program_name')
+                    .single();
+
+                if (appErr) {
+                    // notes 컬럼 없음 등 부가 컬럼 오류는 무시, status 업데이트만 재시도
+                    const { data: retryApp, error: retryAppErr } = await sb
+                        .from('applications')
+                        .update({ status: 'cancelled' })
+                        .eq('id', data.application_id)
+                        .select('id, status')
+                        .single();
+                    if (!retryAppErr) {
+                        appCancelResult = { success: true, application_id: data.application_id, new_status: 'cancelled' };
+                        console.log(`[cancellations PUT] 해지 승인 → applications(${data.application_id}) status='cancelled' 자동 처리 완료`);
+                    } else {
+                        appCancelResult = { success: false, error: retryAppErr.message };
+                        console.warn(`[cancellations PUT] applications 자동 해지 처리 실패: ${retryAppErr.message}`);
+                    }
+                } else {
+                    appCancelResult = { success: true, application_id: data.application_id, new_status: 'cancelled', name: appData?.name };
+                    console.log(`[cancellations PUT] 해지 승인 → applications(${data.application_id}) status='cancelled' 자동 처리 완료`);
+                }
+            } catch (appEx) {
+                // applications 자동 처리 실패는 cancellation 승인 자체를 막지 않음
+                appCancelResult = { success: false, error: appEx.message };
+                console.warn(`[cancellations PUT] applications 자동 해지 처리 예외: ${appEx.message}`);
+            }
+        }
+
+        res.json({ success: true, data, app_cancel: appCancelResult });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -839,17 +1077,65 @@ router.get('/settlement-report', async (req, res) => {
         const nextKey = `${nextYr}-${String(nextMo).padStart(2,'0')}`;
 
         // ────────────────────────────────────────────────
-        // 0. 프로그램 가격 매핑 (monthly_fee null 보완용)
+        // 0. 프로그램 가격 매핑 + 월별 수업횟수 매핑
         // ────────────────────────────────────────────────
-        const progPriceMap = {}; // { program_name: price }
+        const progPriceMap   = {}; // { program_name: price }
+        const progIdMap      = {}; // { program_name: program_id }
+        const progSessionMap     = {}; // { program_name: session_count } ← 이번 달 실제 수업횟수
+        const nextProgSessionMap = {}; // { program_name: session_count } ← 다음 달 수업횟수 (수강신청 내역 시트용)
         {
             const { data: progs } = await sb
                 .from('programs')
-                .select('name, price')
+                .select('id, name, price, description')
                 .eq('complex_id', cid);
-            (progs || []).forEach(p => { if (p.name) progPriceMap[p.name] = p.price || 0; });
+            (progs || []).forEach(p => {
+                if (p.name) {
+                    progPriceMap[p.name] = p.price || 0;
+                    progIdMap[p.name]    = p.id;
+                    // programs.description JSON에서 당월 + 차월 수업횟수 동시 추출
+                    try {
+                        const raw = p.description;
+                        const desc = raw && typeof raw === 'string' && raw.trim().startsWith('{')
+                            ? JSON.parse(raw) : (raw || {});
+                        const cnt     = desc?.sessions?.[monthKey];
+                        const cntNext = desc?.sessions?.[nextKey];
+                        if (cnt     != null) progSessionMap[p.name]     = Number(cnt);
+                        if (cntNext != null) nextProgSessionMap[p.name] = Number(cntNext);
+                    } catch { /* description 파싱 실패 무시 */ }
+                }
+            });
         }
+
+        // 수업횟수 기반 요금 계산 (session_count × 15,000)
+        // session_count 미설정 시 → 정액(monthly_fee or program.price) 그대로 사용
+        const SESSION_UNIT = 15000;
+
+        // 당월 수업횟수 기반 요금 (정산 내역 시트 / 동호수계 시트용)
+        const getSessionFee = (programName) => {
+            const cnt = progSessionMap[programName];
+            if (cnt != null && cnt > 0) return cnt * SESSION_UNIT;
+            return null; // 미설정
+        };
         const getFee = (app) => {
+            // 1순위: 당월 수업횟수 기반 계산
+            const sessionFee = getSessionFee(app.program_name);
+            if (sessionFee !== null) return sessionFee;
+            // 2순위: applications 테이블 monthly_fee
+            const f = app.monthly_fee;
+            if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
+            // 3순위: programs.price
+            return progPriceMap[app.program_name] || 0;
+        };
+
+        // 차월 수업횟수 기반 요금 (수강신청 내역 시트용)
+        // 차월 수업횟수 미설정 시 → 당월 수업횟수 → 정액 순으로 fallback
+        const getNextFee = (app) => {
+            const cntNext = nextProgSessionMap[app.program_name];
+            if (cntNext != null && cntNext > 0) return cntNext * SESSION_UNIT;
+            // 차월 미설정 → 당월 수업횟수로 fallback
+            const cntCur = progSessionMap[app.program_name];
+            if (cntCur != null && cntCur > 0) return cntCur * SESSION_UNIT;
+            // 정액 fallback
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
             return progPriceMap[app.program_name] || 0;
@@ -1056,6 +1342,249 @@ router.get('/settlement-report', async (req, res) => {
             totalCharge += row.total_fee;
         });
 
+        // ────────────────────────────────────────────────
+        // F. attendance_records 조회 (월별 출석횟수 저장용)
+        // ────────────────────────────────────────────────
+        let attendanceMap = {}; // { application_id: { attended, charge_amount } }
+        {
+            const { data: attData, error: attErr } = await sb
+                .from('attendance_records')
+                .select('application_id, attended, charge_amount')
+                .eq('complex_id', cid)
+                .eq('month', monthKey);
+            // 테이블 미존재(PGRST205/42P01) 시 빈 맵으로 graceful 처리
+            if (!attErr) {
+                (attData || []).forEach(r => {
+                    attendanceMap[r.application_id] = {
+                        attended: r.attended ?? null,
+                        charge_amount: r.charge_amount ?? null,
+                    };
+                });
+            }
+        }
+
+        // ────────────────────────────────────────────────
+        // G. 정산 내역 상단 분류 (당월 수강생)
+        //    - 자동연장: 이전달부터 approved 상태 유지 + 해지 아님
+        //    - 5월수강해지(차월해지): endCancel 목록에 있는 사람
+        //    - 중도해지: midCancel 목록에 있는 사람
+        //    - 중도합류: 해당월 내 approved_at
+        //    정렬: 프로그램 → 시간대 → 동 → 호수 오름차순
+        // ────────────────────────────────────────────────
+        const SESSION_FEE = 15000;
+
+        // endCancel 키셋 (dong_ho_name 기준으로 approved 목록에서 구분)
+        const endCancelKeySet = new Set(endCancel.map(r => `${r.dong}_${r.ho}_${r.name}`));
+        const midCancelKeySet = new Set(midCancel.map(r => `${r.dong}_${r.ho}_${r.name}`));
+
+        // 당월 수강생 행 생성 (approved + 해지자 포함)
+        const settlementRows = [];
+
+        // approved 목록: 자동연장 / 중도합류 / 차월해지 구분
+        approvedList.forEach(a => {
+            const approvedDate = (a.approved_at || a.created_at || '').slice(0, 10);
+            const isMidJoin = approvedDate >= monthStart && approvedDate <= monthEnd;
+            const isEndCancel = endCancelKeySet.has(`${a.dong}_${a.ho}_${a.name}`);
+            const isMidCancel = midCancelKeySet.has(`${a.dong}_${a.ho}_${a.name}`);
+
+            let category = '';
+            if (isMidCancel) category = '중도해지';
+            else if (isEndCancel) {
+                const nextLabel = `${nextYr}년 ${nextMo}월`;
+                category = `${nextLabel} 수강 해지`;
+            }
+            else if (isMidJoin) category = '중도합류';
+            // else: 빈칸 (자동연장)
+
+            const fee = getFee(a);
+            const att = attendanceMap[a.id];
+            const attendedSessions = att?.attended ?? null;
+            // 최종부과액: 출석횟수 × 15,000 (중도해지는 별도)
+            let finalCharge = null;
+            if (!isMidCancel && attendedSessions !== null) {
+                finalCharge = attendedSessions * SESSION_FEE;
+            }
+
+            settlementRows.push({
+                id:               a.id,
+                dong:             a.dong,
+                ho:               a.ho,
+                name:             a.name,
+                phone:            a.phone,
+                program_name:     a.program_name,
+                preferred_time:   a.preferred_time,
+                monthly_fee:      fee || null,
+                category,
+                attended_sessions: attendedSessions,
+                final_charge:     finalCharge,
+                approved_at:      approvedDate,
+                is_mid_cancel:    isMidCancel,
+                is_end_cancel:    isEndCancel,
+                is_mid_join:      isMidJoin && !isEndCancel && !isMidCancel,
+            });
+        });
+
+        // 중도해지자는 cancellations 테이블 데이터로 별도 행 추가
+        // (approved 목록에 없는 경우 대비)
+        midCancel.forEach(c => {
+            const alreadyIn = settlementRows.some(r => r.dong === c.dong && r.ho === c.ho && r.name === c.name);
+            if (!alreadyIn) {
+                settlementRows.push({
+                    id:               c.id,
+                    dong:             c.dong,
+                    ho:               c.ho,
+                    name:             c.name,
+                    phone:            c.phone,
+                    program_name:     c.program_name,
+                    preferred_time:   '',
+                    monthly_fee:      c.monthly_fee || null,
+                    category:         '중도해지',
+                    attended_sessions: null,
+                    final_charge:     c.billing_amount || null,
+                    approved_at:      '',
+                    is_mid_cancel:    true,
+                    is_end_cancel:    false,
+                    is_mid_join:      false,
+                });
+            }
+        });
+
+        // 정렬: 프로그램 → 시간대 → 동(숫자) → 호수(숫자)
+        const parseTime = t => {
+            if (!t) return 9999;
+            const m = t.match(/(\d+)/);
+            return m ? parseInt(m[1]) : 9999;
+        };
+        settlementRows.sort((a, b) => {
+            if ((a.program_name || '') < (b.program_name || '')) return -1;
+            if ((a.program_name || '') > (b.program_name || '')) return 1;
+            const ta = parseTime(a.preferred_time), tb = parseTime(b.preferred_time);
+            if (ta !== tb) return ta - tb;
+            const da = parseDong(a.dong), db = parseDong(b.dong);
+            if (da !== db) return da - db;
+            return parseHo(a.ho) - parseHo(b.ho);
+        });
+
+        // ────────────────────────────────────────────────
+        // H. 차월신규 행 (신규 섹션)
+        //    중복수강 여부: 같은 dong+ho+name+phone의 approved가 2개 이상
+        // ────────────────────────────────────────────────
+        // 동호+이름+전화 키 → approved 건수 맵
+        const personKeyCount = {};
+        approvedList.forEach(a => {
+            const k = `${a.dong}_${a.ho}_${a.name}_${a.phone}`;
+            personKeyCount[k] = (personKeyCount[k] || 0) + 1;
+        });
+
+        const newSectionRows = nextNewList.map(a => {
+            const k = `${a.dong}_${a.ho}_${a.name}_${a.phone}`;
+            const isDuplicate = (personKeyCount[k] || 0) >= 2;
+            return {
+                id:             a.id,
+                dong:           a.dong,
+                ho:             a.ho,
+                name:           a.name,
+                phone:          a.phone,
+                program_name:   a.program_name,
+                preferred_time: a.preferred_time,
+                monthly_fee:    getFee(a) || null,
+                category:       isDuplicate ? '신규 / 중복 수강 희망' : '신규',
+                is_duplicate:   isDuplicate,
+                approved_at:    (a.approved_at || a.created_at || '').slice(0, 10),
+            };
+        }).sort((a, b) => {
+            if ((a.program_name || '') < (b.program_name || '')) return -1;
+            if ((a.program_name || '') > (b.program_name || '')) return 1;
+            const ta = parseTime(a.preferred_time), tb = parseTime(b.preferred_time);
+            if (ta !== tb) return ta - tb;
+            const da = parseDong(a.dong), db = parseDong(b.dong);
+            if (da !== db) return da - db;
+            return parseHo(a.ho) - parseHo(b.ho);
+        });
+
+        // ────────────────────────────────────────────────
+        // I. 동호수계 시트용 데이터
+        //    대상: 당월 수강생 (신규 섹션 제외, 최종부과액 0원 제외)
+        //    정렬: 동 → 호수 오름차순
+        // ────────────────────────────────────────────────
+        // 동호수별 그룹핑
+        const donghoSettlementMap = new Map();
+        settlementRows.forEach(r => {
+            // 최종부과액이 null인 경우 일단 포함 (출석미입력), 0원은 제외
+            if (r.final_charge === 0) return;
+            // 중도해지는 billing_amount가 있으면 final_charge로 사용
+            let fc = r.final_charge;
+            if (r.is_mid_cancel && !fc) {
+                const mc = midCancel.find(c => c.dong === r.dong && c.ho === r.ho && c.name === r.name);
+                if (mc) fc = mc.billing_amount || null;
+            }
+            if (fc === 0) return;
+
+            const key = `${parseDong(r.dong)}_${parseHo(r.ho)}`;
+            if (!donghoSettlementMap.has(key)) {
+                donghoSettlementMap.set(key, { dong: r.dong, ho: r.ho, items: [] });
+            }
+            donghoSettlementMap.get(key).items.push({
+                name:           r.name,
+                phone:          r.phone,
+                program_name:   r.program_name,
+                preferred_time: r.preferred_time,
+                monthly_fee:    r.monthly_fee,
+                final_charge:   fc,
+            });
+        });
+
+        const donghoSettlementRows = Array.from(donghoSettlementMap.values())
+            .sort((a, b) => {
+                const da = parseDong(a.dong), db = parseDong(b.dong);
+                if (da !== db) return da - db;
+                return parseHo(a.ho) - parseHo(b.ho);
+            });
+
+        // ────────────────────────────────────────────────
+        // J. 수강신청 내역 시트용 데이터
+        //    대상: 해당 월 승인된 수강생 (해지자·미승인 제외)
+        //    정렬: 프로그램 → 시간대 → 동 → 호수
+        // ────────────────────────────────────────────────
+        const endCancelAppKeys = new Set(endCancel.map(r => `${r.dong}_${r.ho}_${r.name}`));
+        const midCancelAppKeys = new Set(midCancel.map(r => `${r.dong}_${r.ho}_${r.name}`));
+
+        const enrollmentRows = approvedList
+            .filter(a => {
+                const k = `${a.dong}_${a.ho}_${a.name}`;
+                return !endCancelAppKeys.has(k) && !midCancelAppKeys.has(k);
+            })
+            .map(a => ({
+                dong:           a.dong,
+                ho:             a.ho,
+                name:           a.name,
+                phone:          a.phone,
+                program_name:   a.program_name,
+                preferred_time: a.preferred_time,
+                monthly_fee:    getNextFee(a) || null,  // ← 차월 수업횟수 기반 요금
+            }))
+            .sort((a, b) => {
+                if ((a.program_name || '') < (b.program_name || '')) return -1;
+                if ((a.program_name || '') > (b.program_name || '')) return 1;
+                const ta = parseTime(a.preferred_time), tb = parseTime(b.preferred_time);
+                if (ta !== tb) return ta - tb;
+                const da = parseDong(a.dong), db = parseDong(b.dong);
+                if (da !== db) return da - db;
+                return parseHo(a.ho) - parseHo(b.ho);
+            });
+
+        // ────────────────────────────────────────────────
+        // 요약 계산 (새 기준)
+        // ────────────────────────────────────────────────
+        const totalFeeSum    = settlementRows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
+        const totalFinalSum  = settlementRows.reduce((s, r) => {
+            const fc = r.is_mid_cancel
+                ? (midCancel.find(c => c.dong === r.dong && c.ho === r.ho && c.name === r.name)?.billing_amount || 0)
+                : (r.final_charge || 0);
+            return s + fc;
+        }, 0);
+        const cancelCount = settlementRows.filter(r => r.is_end_cancel || r.is_mid_cancel).length;
+
         res.json({
             success:  true,
             year: yr, month: mo,
@@ -1067,11 +1596,16 @@ router.get('/settlement-report', async (req, res) => {
                 mid_cancel_count: midCancel.length,
                 end_cancel_count: endCancel.length,
                 total_charge:     totalCharge,
+                // 새 정산 요약
+                settlement_total_rows:  settlementRows.length,
+                settlement_cancel_rows: cancelCount,
+                settlement_fee_sum:     totalFeeSum,
+                settlement_final_sum:   totalFinalSum,
             },
-            // 시트1용: 동호수별 부과내역 (동↑ 호↑ 정렬)
+            // ── 기존 호환 유지 ──
             dongho_rows: donghoRows,
-            // 시트2용: 각 분류 상세
             approved: approvedList.map(a => ({
+                id:             a.id,
                 dong:           a.dong,
                 ho:             a.ho,
                 name:           a.name,
@@ -1080,6 +1614,9 @@ router.get('/settlement-report', async (req, res) => {
                 preferred_time: a.preferred_time,
                 monthly_fee:    getFee(a) || null,
                 approved_at:    (a.approved_at || a.created_at || '').slice(0, 10),
+                attended_sessions: attendanceMap[a.id]?.attended ?? null,
+                final_charge:   attendanceMap[a.id]?.attended != null
+                    ? attendanceMap[a.id].attended * SESSION_FEE : null,
             })),
             mid_cancel: midCancel,
             end_cancel: endCancel,
@@ -1094,6 +1631,15 @@ router.get('/settlement-report', async (req, res) => {
                 approved_at:    (a.approved_at || a.created_at || '').slice(0, 10),
                 note:           `${nextKey}부터 수강`,
             })),
+            // ── 새 3시트용 데이터 ──
+            settlement_rows:        settlementRows,       // 정산 내역 시트 (상단)
+            new_section_rows:       newSectionRows,       // 정산 내역 시트 (하단 신규)
+            dongho_settlement_rows: donghoSettlementRows, // 동호수계 시트
+            enrollment_rows:        enrollmentRows,       // 수강신청 내역 시트
+            // ── 월별 수업횟수 정보 (UI 표시용) ──
+            prog_session_map:      progSessionMap,         // { program_name: session_count } 당월
+            next_prog_session_map: nextProgSessionMap,     // { program_name: session_count } 차월 (수강신청 내역용)
+            prog_id_map:           progIdMap,              // { program_name: program_id }
         });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -1176,5 +1722,208 @@ router.post('/sms/test', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+
+// ═══════════════════════════════════════════════════════
+// 프로그램 월별 수업횟수 관리
+// ─────────────────────────────────────────────────────
+// 전용 테이블(program_monthly_sessions) 대신
+// programs.description 컬럼에 JSON으로 저장:
+//   { "sessions": { "2026-04": 4, "2026-05": 8 } }
+// → Supabase 신규 테이블 없이 즉시 동작
+// ═══════════════════════════════════════════════════════
+
+/**
+ * GET /api/program-monthly-sessions?complexId=&yearMonth=YYYY-MM
+ */
+router.get('/program-monthly-sessions', async (req, res) => {
+    try {
+        const { complexId, complexCode, yearMonth } = req.query;
+        if (!yearMonth) return res.status(400).json({ success: false, error: 'yearMonth 필수 (YYYY-MM)' });
+
+        const sb = getSupabase();
+        let cid = complexId;
+        if (!cid && complexCode) {
+            const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
+            if (cx) cid = cx.id;
+        }
+        if (!cid) return res.status(400).json({ success: false, error: 'complexId 또는 complexCode 필수' });
+
+        const { data: programs, error: progErr } = await sb
+            .from('programs')
+            .select('id, name, price, description')
+            .eq('complex_id', cid)
+            .order('display_order', { ascending: true });
+        if (progErr) throw progErr;
+
+        const result = (programs || []).map(p => {
+            let sessionCount = null;
+            try {
+                const raw = p.description;
+                const desc = raw && typeof raw === 'string' && raw.trim().startsWith('{')
+                    ? JSON.parse(raw) : (raw || {});
+                const v = desc?.sessions?.[yearMonth];
+                if (v != null) sessionCount = Number(v);
+            } catch { /* ignore parse error */ }
+            return {
+                program_id:    p.id,
+                program_name:  p.name,
+                price:         p.price || 0,
+                session_count: sessionCount,
+                expected_fee:  sessionCount != null ? sessionCount * 15000 : null,
+            };
+        });
+
+        res.json({ success: true, data: result, yearMonth });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+/**
+ * POST /api/program-monthly-sessions
+ * body: { complex_id, yearMonth, sessions: [{ program_id, session_count }] }
+ */
+router.post('/program-monthly-sessions', async (req, res) => {
+    try {
+        const { complex_id, complexCode, yearMonth, sessions } = req.body;
+        if (!yearMonth || !Array.isArray(sessions) || !sessions.length) {
+            return res.status(400).json({ success: false, error: 'yearMonth, sessions 필수' });
+        }
+
+        const sb = getSupabase();
+        let cid = complex_id;
+        if (!cid && complexCode) {
+            const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
+            if (cx) cid = cx.id;
+        }
+        if (!cid) return res.status(400).json({ success: false, error: 'complex_id 필수' });
+
+        const progIds = sessions.map(s => s.program_id);
+        const { data: programs, error: fetchErr } = await sb
+            .from('programs')
+            .select('id, description')
+            .eq('complex_id', cid)
+            .in('id', progIds);
+        if (fetchErr) throw fetchErr;
+
+        let savedCount = 0;
+        for (const prog of (programs || [])) {
+            const sessEntry = sessions.find(s => s.program_id === prog.id);
+            if (!sessEntry) continue;
+
+            let descObj = {};
+            try {
+                const raw = prog.description;
+                if (raw && typeof raw === 'string' && raw.trim().startsWith('{')) {
+                    descObj = JSON.parse(raw);
+                }
+            } catch { /* start fresh */ }
+
+            if (!descObj.sessions) descObj.sessions = {};
+            descObj.sessions[yearMonth] = parseInt(sessEntry.session_count) || 0;
+
+            const { error: upErr } = await sb
+                .from('programs')
+                .update({ description: JSON.stringify(descObj), updated_at: new Date().toISOString() })
+                .eq('id', prog.id)
+                .eq('complex_id', cid);
+            if (upErr) throw upErr;
+            savedCount++;
+        }
+
+        res.json({ success: true, saved: savedCount, yearMonth });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ═══════════════════════════════════════════════════════
+// DB 마이그레이션 (누락 테이블 자동 생성)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * POST /api/db-migrate
+ * 누락된 테이블을 Supabase에 생성
+ * body: { tables: ['attendance_records', 'program_monthly_sessions'] }
+ *
+ * ※ Supabase anon key로는 DDL 실행 불가 → pg 직접 연결 시도
+ *    SUPABASE_DB_PASSWORD 환경변수가 있을 때만 동작
+ */
+router.post('/db-migrate', async (req, res) => {
+    const { tables = [] } = req.body || {};
+
+    const url   = process.env.SUPABASE_URL || '';
+    const ref   = (url.match(/https:\/\/([^.]+)\.supabase\.co/) || [])[1];
+    const pass  = process.env.SUPABASE_DB_PASSWORD;
+
+    if (!ref) return res.status(400).json({ success: false, error: 'SUPABASE_URL 환경변수가 없습니다' });
+    if (!pass) {
+        // 패스워드 없으면 SQL만 반환 (사용자가 직접 Supabase Dashboard에서 실행)
+        return res.json({
+            success: false,
+            need_manual: true,
+            message: 'SUPABASE_DB_PASSWORD 환경변수가 설정되지 않아 자동 생성 불가. 아래 SQL을 Supabase SQL Editor에서 실행하세요.',
+            sql: _getMigrationSQL(tables),
+        });
+    }
+
+    // pg 직접 연결로 DDL 실행
+    try {
+        const { Client } = require('pg');
+        const client = new Client({
+            host:     `db.${ref}.supabase.co`,
+            port:     5432,
+            database: 'postgres',
+            user:     'postgres',
+            password: pass,
+            ssl:      { rejectUnauthorized: false },
+        });
+        await client.connect();
+        const sql = _getMigrationSQL(tables);
+        await client.query(sql);
+        await client.end();
+        res.json({ success: true, message: '테이블 생성 완료', tables });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+function _getMigrationSQL(tables = []) {
+    const sqls = [];
+    const all  = tables.length === 0;
+
+    if (all || tables.includes('attendance_records')) {
+        sqls.push(`
+CREATE TABLE IF NOT EXISTS attendance_records (
+  id               uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  complex_id       uuid NOT NULL,
+  application_id   uuid NOT NULL,
+  month            text NOT NULL,
+  dates            jsonb DEFAULT '{}',
+  attended         integer DEFAULT 0,
+  absent_noshow    integer DEFAULT 0,
+  absent_excused   integer DEFAULT 0,
+  charge_amount    integer DEFAULT 0,
+  auto_cancel      boolean DEFAULT false,
+  updated_at       timestamptz DEFAULT now(),
+  UNIQUE(application_id, month)
+);`);
+    }
+
+    if (all || tables.includes('program_monthly_sessions')) {
+        sqls.push(`
+CREATE TABLE IF NOT EXISTS program_monthly_sessions (
+  id            uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  complex_id    uuid NOT NULL,
+  program_id    uuid NOT NULL,
+  year_month    text NOT NULL,
+  session_count integer NOT NULL DEFAULT 0,
+  updated_at    timestamptz DEFAULT now(),
+  UNIQUE(complex_id, program_id, year_month)
+);`);
+    }
+
+    return sqls.join('\n\n');
+}
 
 module.exports = router;

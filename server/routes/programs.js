@@ -39,6 +39,55 @@ router.get('/', async (req, res) => {
     }
 });
 
+// ── 현재 자동 스케줄 상태 조회 ───────────────────────────────────
+// GET /api/programs/schedule-status
+// ※ 반드시 /:id 라우트보다 앞에 위치해야 함 (라우트 충돌 방지)
+router.get('/schedule-status', async (req, res) => {
+    try {
+        const nowUtc  = new Date();
+        const nowKst  = new Date(nowUtc.getTime() + 9 * 60 * 60 * 1000);
+        const dayKst  = nowKst.getUTCDate();
+        const hourKst = nowKst.getUTCHours();
+        const minKst  = nowKst.getUTCMinutes();
+        const monKst  = nowKst.getUTCMonth() + 1;
+
+        const isInPeriod =
+            (dayKst === 22 && hourKst >= 9) ||
+            (dayKst > 22 && dayKst < 26)   ||
+            (dayKst === 26 && hourKst < 9);
+
+        // 다음 전환 시각 계산
+        let nextToggleKst, nextAction;
+        if (isInPeriod) {
+            // 현재 활성화 기간 → 다음 전환: 26일 09:00 비활성화
+            const nextDate = new Date(nowKst);
+            nextDate.setUTCDate(26); nextDate.setUTCHours(9); nextDate.setUTCMinutes(0); nextDate.setUTCSeconds(0);
+            if (nextDate <= nowKst) { nextDate.setUTCMonth(nextDate.getUTCMonth() + 1); }
+            nextToggleKst = `${nextDate.getUTCMonth()+1}월 26일 09:00`;
+            nextAction = '비활성화';
+        } else {
+            // 현재 비활성화 기간 → 다음 전환: 22일 09:00 활성화
+            const nextDate = new Date(nowKst);
+            nextDate.setUTCDate(22); nextDate.setUTCHours(9); nextDate.setUTCMinutes(0); nextDate.setUTCSeconds(0);
+            if (nextDate <= nowKst) { nextDate.setUTCMonth(nextDate.getUTCMonth() + 1); }
+            nextToggleKst = `${nextDate.getUTCMonth()+1}월 22일 09:00`;
+            nextAction = '활성화';
+        }
+
+        res.json({
+            success: true,
+            kst: `${monKst}월 ${dayKst}일 ${String(hourKst).padStart(2,'0')}:${String(minKst).padStart(2,'0')} KST`,
+            isInPeriod,
+            currentStatus: isInPeriod ? '접수 기간 (활성화)' : '비접수 기간 (비활성화)',
+            nextToggleKst,
+            nextAction,
+            periodInfo: '매월 22일 09:00 ~ 26일 09:00 KST'
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // ── 프로그램 단일 조회 ────────────────────────────────────────
 router.get('/:id', async (req, res) => {
     try {
@@ -140,6 +189,74 @@ router.put('/:id', async (req, res) => {
         };
         res.json({ success: true, data: result });
     } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 프로그램 자동 활성화/비활성화 (Cron Job 호출용) ──────────────
+// POST /api/programs/auto-toggle
+// - KST 22일 00:00 ~ 26일 08:59 → 전 단지 프로그램 is_active = true
+// - KST 26일 09:00 이후(~다음 22일 전) → 전 단지 프로그램 is_active = false
+// - 헤더 Authorization: Bearer <CRON_SECRET> 필요 (Vercel Cron 자동 전달)
+router.post('/auto-toggle', async (req, res) => {
+    try {
+        // ── 보안: Cron 시크릿 또는 마스터 비밀번호 확인 ──────────────
+        const authHeader  = req.headers['authorization'] || '';
+        const cronSecret  = process.env.CRON_SECRET || '';
+        const masterPw    = process.env.MASTER_PASSWORD || 'master2026';
+        const bodySecret  = req.body?.secret || '';
+
+        const validCron   = cronSecret && authHeader === `Bearer ${cronSecret}`;
+        const validMaster = bodySecret === masterPw;
+
+        if (!validCron && !validMaster) {
+            return res.status(401).json({ success: false, error: '인증 실패' });
+        }
+
+        // ── KST 현재 시각 계산 ────────────────────────────────────────
+        const nowUtc  = new Date();
+        const nowKst  = new Date(nowUtc.getTime() + 9 * 60 * 60 * 1000);
+        const dayKst  = nowKst.getUTCDate();
+        const hourKst = nowKst.getUTCHours();
+        const monKst  = nowKst.getUTCMonth() + 1;
+
+        // 22일 09:00 ~ 26일 09:00 → 활성화, 그 외 → 비활성화
+        const isInPeriod =
+            (dayKst === 22 && hourKst >= 9) ||
+            (dayKst > 22 && dayKst < 26)   ||
+            (dayKst === 26 && hourKst < 9);
+
+        const targetActive = isInPeriod;
+
+        // ── 강제 지정 (body.force = true/false) ─────────────────────
+        const forceValue = req.body?.force;
+        const activateTarget = forceValue !== undefined ? Boolean(forceValue) : targetActive;
+
+        const sb = getSupabase();
+
+        // ── 단지 필터 (complexId 지정 시 해당 단지만, 없으면 전체) ──
+        const { complexId } = req.body;
+        let query = sb.from('programs').update({ is_active: activateTarget }).neq('id', '');
+        if (complexId) query = query.eq('complex_id', complexId);
+
+        const { data, error } = await query.select('id, name, is_active, complex_id');
+        if (error) throw error;
+
+        const action = activateTarget ? '활성화' : '비활성화';
+        console.log(`[auto-toggle] ${monKst}월 ${dayKst}일 ${String(hourKst).padStart(2,'0')}시 KST → ${action} (${(data||[]).length}개 프로그램)`);
+
+        return res.json({
+            success: true,
+            action,
+            is_active: activateTarget,
+            kst: `${monKst}월 ${dayKst}일 ${String(hourKst).padStart(2,'0')}:${String(nowKst.getUTCMinutes()).padStart(2,'0')} KST`,
+            isInPeriod,
+            count: (data || []).length,
+            forced: forceValue !== undefined,
+            programs: (data || []).map(p => ({ id: p.id, name: p.name, is_active: p.is_active }))
+        });
+    } catch (e) {
+        console.error('[auto-toggle] 오류:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });

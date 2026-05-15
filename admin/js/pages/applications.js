@@ -1352,18 +1352,19 @@ ${(() => {
 
     deleteItem(id) {
         const a = this.data.find(x => x.id === id);
-        const isCancelled = a && a.status === 'cancelled';
-        const confirmMsg = isCancelled
-            ? '⚠️ 이미 해지된 신청입니다.\n\n수강 기록 보존을 위해 삭제 대신 해지(cancelled) 상태로 유지하는 것을 권장합니다.\n\n그래도 완전히 삭제하시겠습니까?'
-            : '⚠️ 신청을 완전 삭제하면 수강 기록도 사라져 관리비 부과 근거가 없어집니다.\n\n취소 처리(해지)는 상태 변경 버튼을 이용하세요.\n\n그래도 완전히 삭제하시겠습니까?';
-        showConfirm('삭제 확인', confirmMsg, async () => {
-            try {
-                await API.applications.delete(id);
-                closeGlobalModal();
-                showToast('삭제되었습니다');
-                await this.load();
-            } catch (e) { showToast('삭제 실패: ' + e.message, 'error'); }
-        });
+        const name = a ? `${a.dong || ''}${a.ho || ''} ${a.name || ''}` : id;
+        showConfirm('완전 삭제 확인',
+            `「${name.trim()}」 신청을 완전히 삭제합니다.\n\n삭제된 데이터는 복구할 수 없습니다.\n계속하시겠습니까?`,
+            async () => {
+                try {
+                    // force=true: DB에서 완전 삭제 (소프트 삭제 아님)
+                    await fetch(`/api/applications/${id}?force=true`, { method: 'DELETE' });
+                    closeGlobalModal();
+                    showToast('삭제되었습니다');
+                    await this.load();
+                } catch (e) { showToast('삭제 실패: ' + e.message, 'error'); }
+            }
+        );
     },
 
     exportCSV() {

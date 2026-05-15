@@ -9,8 +9,99 @@ const programs = {
                     <i class="fas fa-plus"></i> 프로그램 추가
                 </button>
             </div>
+
+            <!-- ── 자동 스케줄 상태 패널 ── -->
+            <div id="schedulePanel" class="schedule-panel">
+                <div class="schedule-panel__header">
+                    <span class="schedule-panel__title">
+                        <i class="fas fa-clock"></i> 접수 자동 스케줄
+                    </span>
+                    <button class="btn-ghost btn-xs" onclick="programs.loadScheduleStatus()" title="새로고침">
+                        <i class="fas fa-sync-alt" id="scheduleRefreshIcon"></i>
+                    </button>
+                </div>
+                <div id="scheduleStatus" class="schedule-panel__body">
+                    <span class="loading-text"><i class="fas fa-spinner fa-spin"></i> 상태 확인 중…</span>
+                </div>
+                <div class="schedule-panel__actions">
+                    <button class="btn-success btn-sm" onclick="programs.manualToggle(true)">
+                        <i class="fas fa-play"></i> 즉시 활성화
+                    </button>
+                    <button class="btn-danger btn-sm" onclick="programs.manualToggle(false)">
+                        <i class="fas fa-stop"></i> 즉시 비활성화
+                    </button>
+                    <span class="schedule-panel__hint">수동 조작 시 자동 스케줄과 무관하게 즉시 반영됩니다</span>
+                </div>
+            </div>
+
             <div id="programList" class="data-list"><div class="loading-mini"><i class="fas fa-spinner fa-spin"></i></div></div>`;
-        await this.load();
+        await Promise.all([this.load(), this.loadScheduleStatus()]);
+    },
+
+    // ── 자동 스케줄 상태 로드 ──────────────────────────────────────────
+    async loadScheduleStatus() {
+        const el = document.getElementById('scheduleStatus');
+        const icon = document.getElementById('scheduleRefreshIcon');
+        if (!el) return;
+        if (icon) { icon.classList.add('fa-spin'); }
+        try {
+            const res = await fetch('/api/programs/schedule-status');
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || '조회 실패');
+
+            const { isInPeriod, currentStatus, nextToggleKst, nextAction, periodInfo } = json;
+            const statusColor = isInPeriod ? '#e8f5e9' : '#fce4ec';
+            const statusBorder = isInPeriod ? '#66bb6a' : '#ef5350';
+            const statusIcon = isInPeriod
+                ? '<i class="fas fa-circle" style="color:#43a047"></i>'
+                : '<i class="fas fa-circle" style="color:#ef5350"></i>';
+
+            el.innerHTML = `
+                <div class="schedule-status-box" style="background:${statusColor};border-left:4px solid ${statusBorder}">
+                    <div class="schedule-status-row">
+                        ${statusIcon}
+                        <strong>${isInPeriod ? '접수 기간 중' : '접수 기간 외'}</strong>
+                        <span class="schedule-status-badge" style="background:${statusBorder};color:#fff">
+                            ${currentStatus}
+                        </span>
+                    </div>
+                    <div class="schedule-status-meta">
+                        <span><i class="fas fa-calendar-alt"></i> 접수 기간: 매월 22일 09:00 ~ 26일 09:00 KST</span>
+                        <span><i class="fas fa-arrow-right"></i> 다음 전환: <strong>${nextToggleKst}</strong> → ${nextAction}</span>
+                    </div>
+                </div>`;
+        } catch(e) {
+            el.innerHTML = `<span class="error-hint"><i class="fas fa-exclamation-circle"></i> 상태 조회 실패: ${e.message}</span>`;
+        } finally {
+            if (icon) { icon.classList.remove('fa-spin'); }
+        }
+    },
+
+    // ── 수동 활성화/비활성화 트리거 ───────────────────────────────────
+    async manualToggle(activate) {
+        const label = activate ? '활성화' : '비활성화';
+        const confirmMsg = activate
+            ? '모든 단지의 프로그램을 <strong>즉시 활성화</strong>합니다.<br>신규 접수가 열립니다. 계속하시겠습니까?'
+            : '모든 단지의 프로그램을 <strong>즉시 비활성화</strong>합니다.<br>신규 접수가 차단됩니다. 계속하시겠습니까?';
+
+        showConfirm(`프로그램 ${label}`, confirmMsg, async () => {
+            const masterPw = Admin?.masterPassword || prompt('마스터 비밀번호를 입력하세요');
+            if (!masterPw) return;
+            try {
+                const res = await fetch('/api/programs/auto-toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secret: masterPw, force: activate })
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.error || '처리 실패');
+                showToast(`${json.count}개 프로그램 ${label} 완료`, 'success');
+                // 상태 패널 + 목록 동시 갱신
+                await Promise.all([this.loadScheduleStatus(), this.load()]);
+            } catch(e) {
+                showToast(`${label} 실패: ${e.message}`, 'error');
+            }
+        });
     },
     async load() {
         try {

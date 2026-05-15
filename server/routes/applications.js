@@ -1257,35 +1257,56 @@ router.post('/attendance', async (req, res) => {
             updated_at: new Date().toISOString()
         }));
 
-        // attendance_records 테이블 upsert (application_id + month unique)
-        const { error } = await sb
+        // ─────────────────────────────────────────────────────
+        // 1순위: attendance_records 테이블 upsert (있는 경우)
+        // 2순위: 없으면 applications.notes JSON에 출석 저장
+        // ─────────────────────────────────────────────────────
+        const { error: attErr } = await sb
             .from('attendance_records')
             .upsert(upserts, { onConflict: 'application_id,month' });
 
-        if (error) {
-            // 테이블이 없으면 생성 안내
-            if (error.code === '42P01') {
-                return res.status(400).json({
-                    success: false,
-                    error: 'attendance_records 테이블이 없습니다. Supabase에서 생성해주세요.',
-                    sql: `CREATE TABLE attendance_records (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  complex_id uuid NOT NULL,
-  application_id uuid NOT NULL,
-  month text NOT NULL,
-  dates jsonb DEFAULT '{}',
-  attended integer DEFAULT 0,
-  absent_noshow integer DEFAULT 0,
-  absent_excused integer DEFAULT 0,
-  charge_amount integer DEFAULT 0,
-  auto_cancel boolean DEFAULT false,
-  updated_at timestamptz DEFAULT now(),
-  UNIQUE(application_id, month)
-);`
-                });
-            }
-            throw error;
+        if (!attErr) {
+            return res.json({ success: true, saved: upserts.length, storage: 'attendance_records' });
         }
+
+        // attendance_records 테이블 없음 → applications.notes에 fallback 저장
+        if (attErr.code === 'PGRST205' || attErr.code === '42P01') {
+            let notesSaved = 0;
+            for (const u of upserts) {
+                // 현재 notes 읽기
+                const { data: appRow } = await sb
+                    .from('applications')
+                    .select('id, notes')
+                    .eq('id', u.application_id)
+                    .single();
+                if (!appRow) continue;
+
+                let notesObj = {};
+                try {
+                    const raw = appRow.notes;
+                    if (raw && typeof raw === 'string' && raw.trim().startsWith('{')) {
+                        notesObj = JSON.parse(raw);
+                    }
+                } catch { /* start fresh */ }
+
+                // attendance 키에 월별 출석 데이터 저장
+                if (!notesObj.attendance) notesObj.attendance = {};
+                notesObj.attendance[monthKey] = {
+                    attended:      u.attended,
+                    charge_amount: u.charge_amount,
+                    updated_at:    u.updated_at,
+                };
+
+                const { error: upErr } = await sb
+                    .from('applications')
+                    .update({ notes: JSON.stringify(notesObj), updated_at: new Date().toISOString() })
+                    .eq('id', u.application_id);
+                if (!upErr) notesSaved++;
+            }
+            return res.json({ success: true, saved: notesSaved, storage: 'applications.notes' });
+        }
+
+        throw attErr;
         res.json({ success: true, saved: upserts.length });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });

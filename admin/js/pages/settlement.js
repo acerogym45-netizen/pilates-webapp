@@ -1,25 +1,29 @@
-/** 월별 정산 리포트 - v4.2
- *  엑셀 통합 2시트:
- *    시트1) 동호수별 부과내역  (동↑ 호↑, 전화번호 포함, 프로그램별 소계)
- *    시트2) 상세내역          (수강자현황 + 중도해지 + 차월해지 + 차월신규접수)
+/** 월별 정산 리포트 - v5.1
+ *  엑셀 3시트 출력:
+ *    시트1) 정산 내역      (당월 수강생 + 하단 신규 섹션)
+ *    시트2) 동호수계        (세대별 최종부과액 합산)
+ *    시트3) 수강신청 내역   (다음달 수강 예정자 전체)
  *
- *  중도해지 청구 공식:
- *    위약금       = 월수강료 × 10%
- *    수강료       = 수강횟수 × 15,000원 (회당단가)
- *    총청구금액   = 위약금 + 수강료
+ *  출석횟수 입력 UI:
+ *    - 수강자 현황 테이블에서 각 행별 출석횟수 직접 입력
+ *    - 입력 즉시 최종부과액(횟수×15,000) 자동 계산
+ *    - [저장] 버튼으로 attendance_records 테이블 DB 반영
  *
- *  수강횟수 입력 UI:
- *    - 중도해지 섹션에서 인라인으로 수강횟수 입력
- *    - 입력 즉시 위약금/수강료/총청구금액 자동 계산 표시
- *    - [저장] 버튼으로 DB 반영 (PUT /api/cancellations/:id)
+ *  단가: 15,000원/회
  */
 const settlement = {
     _data:        null,
-    _midEdits:    {},   // { cancellation_id: { attended, billing } } — 로컬 편집 상태
-    _bulkItems:   [],   // 일괄등록 파싱된 항목
-    SESSION_FEE:  15000, // 회당 단가 (원)
-    PENALTY_RATE: 0.10,  // 위약금 비율 (10%)
+    _attEdits:    {},   // { application_id: attended } — 로컬 편집 상태
+    _midEdits:    {},   // { cancellation_id: { attended, billing } }
+    _sessionEdits:{},     // { program_name: session_count } — 당월 수업횟수 편집 상태
+    _nextSessionEdits:{}, // { program_name: session_count } — 차월 수업횟수 편집 상태 (수강신청 내역 시트용)
+    _bulkItems:   [],
+    SESSION_FEE:  15000,
+    PENALTY_RATE: 0.10,
 
+    // ══════════════════════════════════════════════════════
+    // render
+    // ══════════════════════════════════════════════════════
     async render() {
         const now = new Date();
         const yr  = now.getFullYear();
@@ -35,7 +39,7 @@ const settlement = {
               <h2 style="margin:0;font-size:1.3rem;font-weight:800;color:#1a252f">
                 <i class="fas fa-file-invoice-dollar" style="color:#e67e22;margin-right:6px"></i>월별 정산 리포트
               </h2>
-              <div style="font-size:.8rem;color:#888;margin-top:2px">수강자 현황 · 중도해지 · 차월해지 · 차월신규접수 자동 분류 → 엑셀 통합 다운로드 (2시트)</div>
+              <div style="font-size:.8rem;color:#888;margin-top:2px">정산 내역 · 동호수계 · 수강신청 내역 → 엑셀 3시트 다운로드</div>
             </div>
           </div>
 
@@ -53,7 +57,11 @@ const settlement = {
             </button>
             <button id="settlementExcelBtn" onclick="settlement.downloadExcel()" style="display:none;
               padding:8px 22px;background:#27ae60;color:#fff;border:none;border-radius:7px;font-size:.9rem;font-weight:700;cursor:pointer">
-              <i class="fas fa-file-excel"></i> 엑셀 다운로드 (2시트 통합)
+              <i class="fas fa-file-excel"></i> 엑셀 다운로드 (3시트)
+            </button>
+            <button onclick="settlement.toggleSessionPanel()"
+              style="padding:8px 18px;background:#f39c12;color:#fff;border:none;border-radius:7px;font-size:.9rem;font-weight:700;cursor:pointer">
+              <i class="fas fa-calendar-check"></i> 수업횟수 설정
             </button>
             <button onclick="settlement.openBulkModal()"
               style="padding:8px 18px;background:#8e44ad;color:#fff;border:none;border-radius:7px;font-size:.9rem;font-weight:700;cursor:pointer">
@@ -66,8 +74,6 @@ const settlement = {
                z-index:9999;overflow-y:auto;padding:20px">
             <div style="max-width:860px;margin:0 auto;background:#fff;border-radius:14px;
                         box-shadow:0 8px 40px rgba(0,0,0,.25);overflow:hidden">
-
-              <!-- 모달 헤더 -->
               <div style="background:#8e44ad;color:#fff;padding:16px 22px;
                           display:flex;align-items:center;justify-content:space-between">
                 <span style="font-size:1.05rem;font-weight:800">
@@ -76,8 +82,6 @@ const settlement = {
                 <button onclick="settlement.closeBulkModal()"
                   style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1">✕</button>
               </div>
-
-              <!-- STEP 1: 등록 월 + 엑셀 업로드 -->
               <div style="padding:20px 22px;border-bottom:1px solid #eee">
                 <div style="font-weight:700;font-size:.9rem;color:#555;margin-bottom:12px">
                   <span style="background:#8e44ad;color:#fff;border-radius:50%;width:20px;height:20px;
@@ -104,22 +108,17 @@ const settlement = {
                             border-radius:8px;font-size:.78rem;color:#6b21a8;line-height:1.7">
                   <b>📌 파일 형식 안내</b><br>
                   • 필수 컬럼: <b>동 / 호수 / 이름 / 전화번호 / 프로그램종류</b><br>
-                  • 선택 컬럼: <b>구분</b> (중도해지 / 차월해지 등), <b>해지일</b> (YYYY-MM-DD)<br>
-                  • 헤더 행이 포함된 일반 엑셀 형식 (보내주신 모집현황 파일 그대로 사용 가능)
+                  • 선택 컬럼: <b>구분</b> (중도해지 / 차월해지 등), <b>해지일</b> (YYYY-MM-DD)
                 </div>
               </div>
-
-              <!-- STEP 2: 미리보기 -->
               <div id="bulkPreviewArea" style="padding:20px 22px;border-bottom:1px solid #eee;display:none">
                 <div style="font-weight:700;font-size:.9rem;color:#555;margin-bottom:12px">
                   <span style="background:#8e44ad;color:#fff;border-radius:50%;width:20px;height:20px;
                     display:inline-flex;align-items:center;justify-content:center;font-size:.75rem;margin-right:6px">2</span>
-                  파싱 결과 미리보기 — 등록할 항목을 확인하세요
+                  파싱 결과 미리보기
                 </div>
                 <div id="bulkPreviewTable"></div>
               </div>
-
-              <!-- 모달 푸터 -->
               <div style="padding:16px 22px;display:flex;justify-content:flex-end;gap:10px">
                 <button onclick="settlement.closeBulkModal()"
                   style="padding:9px 22px;background:#f0f0f0;border:none;border-radius:7px;
@@ -131,6 +130,21 @@ const settlement = {
                 </button>
               </div>
             </div>
+          </div>
+
+          <!-- 월별 수업횟수 설정 패널 -->
+          <div id="sessionSettingPanel" style="display:none;background:#fff;border:1.5px solid #f39c12;
+               border-radius:10px;padding:0;margin-bottom:18px;overflow:hidden">
+            <div style="background:#fef9e7;border-bottom:2px solid #f39c12;padding:12px 18px;
+                        display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+              <span style="font-size:.95rem;font-weight:700;color:#7d6608">
+                <i class="fas fa-calendar-check" style="color:#f39c12;margin-right:6px"></i>
+                월별 수업횟수 설정
+                <span style="font-size:.75rem;font-weight:400;color:#aaa;margin-left:8px" id="sessionMonthLabel"></span>
+              </span>
+              <span style="font-size:.78rem;color:#999">수업횟수 입력 → 저장 시 요금 자동 반영 (회당 15,000원)</span>
+            </div>
+            <div id="sessionSettingBody" style="padding:16px 18px"></div>
           </div>
 
           <!-- 요약 뱃지 -->
@@ -145,6 +159,9 @@ const settlement = {
         await this.load();
     },
 
+    // ══════════════════════════════════════════════════════
+    // load
+    // ══════════════════════════════════════════════════════
     async load() {
         const monthVal = document.getElementById('settlementMonth')?.value;
         if (!monthVal) return;
@@ -155,6 +172,7 @@ const settlement = {
         const excelBtn = document.getElementById('settlementExcelBtn');
         if (excelBtn) excelBtn.style.display = 'none';
         if (sumEl)    sumEl.style.display     = 'none';
+        this._attEdits = {};
         this._midEdits = {};
         resEl.innerHTML = `<div style="text-align:center;padding:40px;color:#aaa">
           <i class="fas fa-spinner fa-spin fa-2x"></i><br><br>데이터 조회 중...</div>`;
@@ -169,7 +187,13 @@ const settlement = {
 
             this._data = json;
 
-            // DB에 저장된 수강횟수 / billing 값을 편집 상태에 초기화
+            // 수강생별 출석횟수 로컬 상태 초기화
+            (json.settlement_rows || []).forEach(r => {
+                if (r.id && r.attended_sessions !== null) {
+                    this._attEdits[r.id] = r.attended_sessions;
+                }
+            });
+            // 중도해지 로컬 상태 초기화
             (json.mid_cancel || []).forEach(r => {
                 if (r.id) {
                     this._midEdits[r.id] = {
@@ -178,29 +202,29 @@ const settlement = {
                     };
                 }
             });
+            // 월별 수업횟수 로컬 상태 초기화 (당월 + 차월)
+            this._sessionEdits     = { ...(json.prog_session_map      || {}) };
+            this._nextSessionEdits = { ...(json.next_prog_session_map || {}) };
 
             this._render(json);
+            this._renderSessionPanel(json);
             if (excelBtn) excelBtn.style.display = '';
 
             // 요약 뱃지
             if (sumEl) {
                 const s = json.summary;
+                const yr2 = json.year, mo2 = json.month;
                 sumEl.style.display = 'block';
                 sumEl.innerHTML =
                     `<span style="font-size:.82rem;color:#555;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
                       <span><i class="fas fa-users" style="color:#2980b9;margin-right:3px"></i>
-                        수강자 <strong style="color:#2980b9">${s.approved_count}</strong>명</span>
+                        ${yr2}년 ${mo2}월 수강자 <strong style="color:#2980b9">${s.settlement_total_rows ?? s.approved_count}</strong>명</span>
                       <span style="color:#ddd">|</span>
-                      <span>기존 <strong style="color:#6f42c1">${s.existing_count}</strong>명</span>
+                      <span>해지 <strong style="color:#e74c3c">${s.settlement_cancel_rows ?? (s.mid_cancel_count + s.end_cancel_count)}</strong>명</span>
                       <span style="color:#ddd">|</span>
-                      <span>차월신규 <strong style="color:#27ae60">${s.next_new_count}</strong>건</span>
+                      <span>신규 <strong style="color:#27ae60">${s.next_new_count}</strong>명</span>
                       <span style="color:#ddd">|</span>
-                      <span>중도해지 <strong style="color:#e74c3c">${s.mid_cancel_count}</strong>건</span>
-                      <span style="color:#ddd">|</span>
-                      <span>차월해지 <strong style="color:#e67e22">${s.end_cancel_count}</strong>건</span>
-                      <span style="color:#ddd">|</span>
-                      <span>총부과 <strong style="color:#8e44ad">${this._fmtFee(s.total_charge)}</strong>
-                        <span style="font-size:.72rem;color:#aaa">(중도해지 제외)</span></span>
+                      <span>합계액 <strong style="color:#6f42c1">${this._fmtFee(s.settlement_fee_sum ?? s.total_charge)}</strong></span>
                     </span>`;
             }
         } catch(e) {
@@ -209,84 +233,604 @@ const settlement = {
         }
     },
 
-    // ──────────────────────────────────────────────────
-    // 청구금액 계산
-    //   위약금   = monthly_fee × 10%
-    //   수강료   = attended × 15,000
-    //   총청구   = 위약금 + 수강료
-    // ──────────────────────────────────────────────────
-    _calcBilling(monthlyFee, attended) {
-        const fee      = Number(monthlyFee) || 0;
-        const cnt      = Number(attended)   || 0;
-        const penalty  = Math.round(fee * this.PENALTY_RATE);
-        const courseFee= cnt * this.SESSION_FEE;
-        const total    = penalty + courseFee;
-        return { penalty, courseFee, total };
-    },
-
-    // ──────────────────────────────────────────────────
-    // 화면 렌더링
-    // ──────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════
+    // _render
+    // ══════════════════════════════════════════════════════
     _render(d) {
-        const resEl  = document.getElementById('settlementResult');
-        const yr     = d.year, mo = d.month;
-        const nextKey = d.nextKey;
+        const resEl = document.getElementById('settlementResult');
+        const yr = d.year, mo = d.month;
 
         let html = '';
 
-        // ── 1. 현재 수강자
-        const approvedSorted = [...(d.approved || [])].sort((a, b) => {
-            const da = this._parseDong(a.dong), db = this._parseDong(b.dong);
-            if (da !== db) return da - db;
-            return this._parseHo(a.ho) - this._parseHo(b.ho);
-        });
-        html += this._sectionCard(
-            `<i class="fas fa-users" style="color:#2980b9"></i> ${yr}년 ${mo}월 수강자 현황`,
-            '#2980b9', '#f0f7ff',
-            approvedSorted,
-            d.summary.approved_count,
-            ['dong','ho','name','phone','program_name','preferred_time','monthly_fee'],
-            ['동','호수','이름','연락처','프로그램','시간','월수강료'],
-            { monthly_fee: v => this._fmtFee(v) }
-        );
+        // ── 1. 정산 내역 (당월 수강생)
+        html += this._settlementCard(d);
 
-        // ── 2. 중도해지자 — 수강횟수 입력 특수 테이블
+        // ── 2. 중도해지 특수 카드 (기존 기능 유지)
         html += this._midCancelCard(d.mid_cancel || [], d.summary.mid_cancel_count);
 
         // ── 3. 차월해지자
         html += this._sectionCard(
             `<i class="fas fa-calendar-times" style="color:#e67e22"></i> 차월해지자
-             <small style="font-weight:400;color:#888;font-size:.8rem">(${nextKey} 미부과 대상)</small>`,
+             <small style="font-weight:400;color:#888;font-size:.8rem">(${d.nextKey} 미부과 대상)</small>`,
             '#e67e22', '#fffaf5',
-            d.end_cancel || [],
-            d.summary.end_cancel_count,
-            ['dong','ho','name','phone','program_name','termination_date','note'],
-            ['동','호수','이름','연락처','프로그램','해지일','비고'],
-            {}
+            d.end_cancel || [], d.summary.end_cancel_count,
+            ['dong','ho','name','phone','program_name','termination_date'],
+            ['동','호수','이름','연락처','프로그램','해지일'], {}
         );
 
         // ── 4. 차월신규접수
         html += this._sectionCard(
             `<i class="fas fa-user-plus" style="color:#27ae60"></i> 차월신규접수
-             <small style="font-weight:400;color:#888;font-size:.8rem">(${nextKey}부터 부과 대상)</small>`,
+             <small style="font-weight:400;color:#888;font-size:.8rem">(${d.nextKey}부터 수강 예정)</small>`,
             '#27ae60', '#f0fff4',
-            d.next_new || [],
-            d.summary.next_new_count,
-            ['dong','ho','name','phone','program_name','preferred_time','monthly_fee','approved_at','note'],
-            ['동','호수','이름','연락처','프로그램','시간','월수강료','승인일','비고'],
+            d.next_new || [], d.summary.next_new_count,
+            ['dong','ho','name','phone','program_name','preferred_time','monthly_fee'],
+            ['동','호수','이름','연락처','프로그램','시간','월수강료'],
             { monthly_fee: v => this._fmtFee(v) }
         );
 
         resEl.innerHTML = html;
     },
 
-    // ──────────────────────────────────────────────────
-    // 중도해지 특수 카드 (수강횟수 + 월수강료 입력 + 자동계산)
-    // ──────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════
+    // 정산 내역 카드 (출석횟수 입력 + 최종부과액 자동계산)
+    // ══════════════════════════════════════════════════════
+    _settlementCard(d) {
+        const rows = d.settlement_rows || [];
+        const newRows = d.new_section_rows || [];
+        const yr = d.year, mo = d.month;
+        const totalRows = rows.length;
+        const cancelRows = rows.filter(r => r.is_end_cancel || r.is_mid_cancel).length;
+
+        const badge = `<span style="background:#2980b9;color:#fff;font-size:.72rem;font-weight:700;
+          padding:2px 9px;border-radius:20px;margin-left:8px;vertical-align:middle">${totalRows}명</span>`;
+
+        const thStyle = `padding:7px 8px;border:1px solid #ddd;font-size:.78rem;font-weight:700;
+          background:#f0f7ff;white-space:nowrap;text-align:center`;
+
+        const thead = `<tr>
+          <th style="${thStyle}">동</th>
+          <th style="${thStyle}">호수</th>
+          <th style="${thStyle}">이름</th>
+          <th style="${thStyle}">연락처</th>
+          <th style="${thStyle}">프로그램</th>
+          <th style="${thStyle}">희망시간</th>
+          <th style="${thStyle}">요금</th>
+          <th style="${thStyle}">구분</th>
+          <th style="${thStyle}">출석횟수<br><span style="font-weight:400;font-size:.7rem;color:#e74c3c">직접 입력</span></th>
+          <th style="${thStyle}">최종부과액<br><span style="font-weight:400;font-size:.7rem;color:#888">×15,000</span></th>
+          <th style="${thStyle}">저장</th>
+        </tr>`;
+
+        // 프로그램별 그룹핑 (소계용)
+        const progOrder = [];
+        const progMap = {};
+        rows.forEach(r => {
+            const p = r.program_name || '미분류';
+            if (!progMap[p]) { progMap[p] = []; progOrder.push(p); }
+            progMap[p].push(r);
+        });
+
+        let tbodyRows = '';
+        progOrder.forEach(prog => {
+            const items = progMap[prog];
+            items.forEach((r, i) => {
+                const id = r.id;
+                const savedAtt = this._attEdits[id] !== undefined ? this._attEdits[id]
+                               : (r.attended_sessions !== null ? r.attended_sessions : '');
+                if (!this._attEdits[id] && savedAtt !== '') this._attEdits[id] = savedAtt;
+
+                const finalCharge = (savedAtt !== '' && savedAtt !== null)
+                    ? (Number(savedAtt) * this.SESSION_FEE) : null;
+
+                const bgRow = r.is_mid_cancel ? 'background:#fff5f5'
+                            : r.is_end_cancel  ? 'background:#fffaf0'
+                            : i % 2 ? 'background:#fafafa' : '';
+                const tdS = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bgRow}`;
+
+                // 구분 배지
+                let catBadge = '';
+                if (r.category === '중도해지') {
+                    catBadge = `<span style="background:#e74c3c;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">중도해지</span>`;
+                } else if (r.category && r.category.includes('해지')) {
+                    catBadge = `<span style="background:#e67e22;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">${r.category}</span>`;
+                } else if (r.category === '중도합류') {
+                    catBadge = `<span style="background:#8e44ad;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">중도합류</span>`;
+                }
+
+                // 중도해지는 출석횟수/최종부과액 입력 불가 (별도 처리)
+                const isMid = r.is_mid_cancel;
+                const attCell = isMid
+                    ? `<span style="color:#bbb;font-size:.8rem">별도처리</span>`
+                    : `<input type="number" min="0" max="99"
+                         id="att-app-${id}"
+                         value="${savedAtt}"
+                         oninput="settlement._onAppAttendChange('${id}')"
+                         style="width:60px;padding:4px 6px;border:1.5px solid #e74c3c;border-radius:5px;
+                                font-size:.88rem;text-align:center;font-weight:700;color:#c0392b">
+                       <span style="font-size:.72rem;color:#999">회</span>`;
+
+                const finalCell = isMid
+                    ? `<span style="color:#bbb;font-size:.8rem">-</span>`
+                    : `<span id="final-app-${id}" style="color:#2980b9;font-weight:700;font-size:.88rem">
+                         ${finalCharge !== null ? finalCharge.toLocaleString('ko-KR') + '원' : '-'}
+                       </span>`;
+
+                const saveBtn = isMid ? '' : `<button onclick="settlement._saveAppAttendance('${id}')"
+                    id="save-app-btn-${id}"
+                    style="padding:4px 10px;background:#2980b9;color:#fff;border:none;
+                           border-radius:5px;font-size:.75rem;font-weight:700;cursor:pointer;white-space:nowrap">
+                    <i class="fas fa-save"></i> 저장
+                  </button>`;
+
+                tbodyRows += `<tr id="app-row-${id}">
+                  <td style="${tdS}">${r.dong||''}</td>
+                  <td style="${tdS}">${r.ho||''}</td>
+                  <td style="${tdS};font-weight:600">${r.name||''}</td>
+                  <td style="${tdS}">${r.phone||''}</td>
+                  <td style="${tdS};font-size:.78rem">${r.program_name||''}</td>
+                  <td style="${tdS}">${r.preferred_time||''}</td>
+                  <td style="${tdS}">${r.monthly_fee ? Number(r.monthly_fee).toLocaleString('ko-KR') + '원' : '-'}</td>
+                  <td style="${tdS}">${catBadge}</td>
+                  <td style="${tdS}">${attCell}</td>
+                  <td style="${tdS}">${finalCell}</td>
+                  <td style="${tdS}">${saveBtn}</td>
+                </tr>`;
+            });
+
+            // 소계 행
+            const subFeeSum = items.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
+            tbodyRows += `<tr style="background:#e8f4fd">
+              <td colspan="6" style="padding:5px 8px;border:1px solid #ddd;font-size:.8rem;font-weight:700;color:#1a5276;text-align:right">
+                ${prog} 소계</td>
+              <td style="padding:5px 8px;border:1px solid #ddd;font-size:.8rem;font-weight:700;color:#1a5276;text-align:center">
+                ${subFeeSum.toLocaleString('ko-KR')}원</td>
+              <td colspan="4" style="border:1px solid #ddd"></td>
+            </tr>`;
+        });
+
+        // 합계 행
+        const totalFeeSum = rows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
+        tbodyRows += `<tr style="background:#1a5276">
+          <td colspan="6" style="padding:7px 8px;border:1px solid #0d3349;font-size:.85rem;font-weight:700;color:#fff;text-align:right">
+            등록세대 ${totalRows}명 / 해지 ${cancelRows}명</td>
+          <td style="padding:7px 8px;border:1px solid #0d3349;font-size:.85rem;font-weight:800;color:#fff;text-align:center">
+            ${totalFeeSum.toLocaleString('ko-KR')}원</td>
+          <td colspan="4" style="border:1px solid #0d3349;padding:7px 8px;font-size:.8rem;color:#aed6f1;text-align:center">
+            최종부과액은 출석횟수 저장 후 확인</td>
+        </tr>`;
+
+        // 신규 섹션 (하단)
+        let newSectionHtml = '';
+        if (newRows.length) {
+            const nextLbl = d.nextKey ? d.nextKey.replace('-', '년 ') + '월' : '차월';
+            const newThStyle = `padding:7px 8px;border:1px solid #ddd;font-size:.78rem;font-weight:700;
+              background:#f0fff4;white-space:nowrap;text-align:center`;
+            const newThead = `<tr>
+              <th style="${newThStyle}" colspan="10"
+                style="background:#27ae60;color:#fff;padding:8px;font-size:.9rem;font-weight:700">
+                ▼ ${nextLbl} 신규 수강 예정자 (${newRows.length}명)
+              </th>
+            </tr>
+            <tr>
+              <th style="${newThStyle}">동</th>
+              <th style="${newThStyle}">호수</th>
+              <th style="${newThStyle}">이름</th>
+              <th style="${newThStyle}">연락처</th>
+              <th style="${newThStyle}">프로그램</th>
+              <th style="${newThStyle}">희망시간</th>
+              <th style="${newThStyle}">요금</th>
+              <th style="${newThStyle}">구분</th>
+              <th style="${newThStyle}">출석횟수</th>
+              <th style="${newThStyle}">최종부과액</th>
+              <th style="${newThStyle}"></th>
+            </tr>`;
+
+            const newTbody = newRows.map((r, i) => {
+                const isDup = r.is_duplicate;
+                const bg = isDup ? 'background:#d5f5d0' : (i % 2 ? 'background:#f9fffe' : '');
+                const tdS = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bg}`;
+                const catBadge = isDup
+                    ? `<span style="background:#27ae60;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">신규/중복수강</span>`
+                    : `<span style="background:#aaa;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">신규</span>`;
+                return `<tr>
+                  <td style="${tdS}">${r.dong||''}</td>
+                  <td style="${tdS}">${r.ho||''}</td>
+                  <td style="${tdS};font-weight:600">${r.name||''}</td>
+                  <td style="${tdS}">${r.phone||''}</td>
+                  <td style="${tdS};font-size:.78rem">${r.program_name||''}</td>
+                  <td style="${tdS}">${r.preferred_time||''}</td>
+                  <td style="${tdS}">${r.monthly_fee ? Number(r.monthly_fee).toLocaleString('ko-KR') + '원' : '-'}</td>
+                  <td style="${tdS}">${catBadge}</td>
+                  <td style="${tdS}"><span style="color:#ccc">-</span></td>
+                  <td style="${tdS}"><span style="color:#ccc">-</span></td>
+                  <td style="${tdS}"></td>
+                </tr>`;
+            }).join('');
+
+            newSectionHtml = `<div style="margin-top:4px;border-top:3px solid #27ae60">
+              <table style="width:100%;border-collapse:collapse;min-width:900px">
+                <thead>${newThead}</thead>
+                <tbody>${newTbody}</tbody>
+              </table>
+            </div>`;
+        }
+
+        const body = rows.length
+            ? `<div style="overflow-x:auto">
+                 <table style="width:100%;border-collapse:collapse;min-width:900px">
+                   <thead>${thead}</thead>
+                   <tbody>${tbodyRows}</tbody>
+                 </table>
+                 ${newSectionHtml}
+               </div>`
+            : `<div style="text-align:center;padding:22px;color:#bbb;font-size:.9rem">해당 없음</div>`;
+
+        return `
+        <div style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:18px;overflow:hidden">
+          <div style="background:#f0f7ff;border-bottom:2px solid #2980b9;padding:12px 18px;
+                      display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+            <span style="font-size:.95rem;font-weight:700;color:#222">
+              <i class="fas fa-list-alt" style="color:#2980b9"></i> ${yr}년 ${mo}월 정산 내역${badge}
+            </span>
+            <span style="font-size:.75rem;color:#888;margin-left:8px">출석횟수 입력 후 저장 → 최종부과액 자동 계산</span>
+          </div>
+          ${body}
+        </div>`;
+    },
+
+    // ══════════════════════════════════════════════════════
+    // 출석횟수 입력 이벤트 (수강생)
+    // ══════════════════════════════════════════════════════
+    _onAppAttendChange(id) {
+        const input = document.getElementById(`att-app-${id}`);
+        if (!input) return;
+        const val = input.value;
+        this._attEdits[id] = val;
+        const finalEl = document.getElementById(`final-app-${id}`);
+        if (finalEl) {
+            const n = parseInt(val);
+            finalEl.innerHTML = (!isNaN(n) && n >= 0)
+                ? (n * this.SESSION_FEE).toLocaleString('ko-KR') + '원'
+                : '-';
+        }
+    },
+
+    // 저장 버튼 → attendance_records DB 반영
+    async _saveAppAttendance(id) {
+        const input = document.getElementById(`att-app-${id}`);
+        const attended = parseInt(input?.value ?? this._attEdits[id]);
+        if (isNaN(attended) || attended < 0) {
+            showToast('출석횟수를 올바르게 입력해주세요', 'error'); return;
+        }
+        const btn = document.getElementById(`save-app-btn-${id}`);
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+
+        try {
+            const cid = getEffectiveComplexId();
+            const monthVal = document.getElementById('settlementMonth')?.value || '';
+            const [yr, mo] = monthVal.split('-');
+            const charge = attended * this.SESSION_FEE;
+
+            const res = await fetch('/api/applications/attendance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    complex_id: cid,
+                    year: parseInt(yr),
+                    month: parseInt(mo),
+                    records: [{ id, attended, charge_amount: charge }]
+                }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || '저장 실패');
+
+            // 로컬 상태 업데이트
+            this._attEdits[id] = attended;
+            if (this._data?.settlement_rows) {
+                const row = this._data.settlement_rows.find(r => r.id === id);
+                if (row) { row.attended_sessions = attended; row.final_charge = charge; }
+            }
+            if (this._data?.approved) {
+                const row = this._data.approved.find(r => r.id === id);
+                if (row) { row.attended_sessions = attended; row.final_charge = charge; }
+            }
+
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check"></i> 저장됨';
+                btn.style.background = '#27ae60';
+                setTimeout(() => {
+                    if (btn) { btn.innerHTML = '<i class="fas fa-save"></i> 저장'; btn.style.background = '#2980b9'; }
+                }, 2000);
+            }
+            const row = this._data?.settlement_rows?.find(r => r.id === id);
+            showToast(`${row?.name || ''} 출석 저장 완료 (${attended}회 → ${charge.toLocaleString('ko-KR')}원)`, 'success');
+
+        } catch(e) {
+            showToast('저장 오류: ' + e.message, 'error');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+        }
+    },
+
+    // ══════════════════════════════════════════════════════
+    // 월별 수업횟수 설정 패널 (방안 B)
+    // ══════════════════════════════════════════════════════
+
+    toggleSessionPanel() {
+        const panel = document.getElementById('sessionSettingPanel');
+        if (!panel) return;
+        const isHidden = panel.style.display === 'none';
+        panel.style.display = isHidden ? 'block' : 'none';
+        if (isHidden && this._data) {
+            this._renderSessionPanel(this._data);
+        }
+    },
+
+    _renderSessionPanel(d) {
+        const body  = document.getElementById('sessionSettingBody');
+        const label = document.getElementById('sessionMonthLabel');
+        if (!body) return;
+
+        // 조회 중인 월(당월) 및 차월 계산
+        const monthVal = document.getElementById('settlementMonth')?.value || '';
+        if (label) label.textContent = monthVal ? `(${monthVal})` : '';
+
+        let nextMonthVal = '';
+        if (monthVal) {
+            const [y, m] = monthVal.split('-').map(Number);
+            const nm = m === 12 ? 1 : m + 1;
+            const ny = m === 12 ? y + 1 : y;
+            nextMonthVal = `${ny}-${String(nm).padStart(2,'0')}`;
+        }
+
+        // prog_id_map: { program_name → program_id }
+        const progIdMap      = d.prog_id_map || {};
+        const curSessionMap  = this._sessionEdits     || {};  // 당월
+        const nextSessionMap = this._nextSessionEdits  || {};  // 차월
+
+        // 프로그램 목록: progIdMap 키를 기준으로
+        const progNames = Object.keys(progIdMap);
+        if (!progNames.length) {
+            body.innerHTML = `<div style="color:#aaa;font-size:.9rem;padding:10px 0">등록된 프로그램이 없습니다.</div>`;
+            return;
+        }
+
+        const rows = progNames.map(name => {
+            const cntCur  = curSessionMap[name]  ?? '';
+            const cntNext = nextSessionMap[name] ?? '';
+            const feeCur  = (cntCur  !== '' && Number(cntCur)  > 0) ? (Number(cntCur)  * 15000).toLocaleString('ko-KR') + '원' : '-';
+            const feeNext = (cntNext !== '' && Number(cntNext) > 0) ? (Number(cntNext) * 15000).toLocaleString('ko-KR') + '원' : '-';
+            const progId  = progIdMap[name];
+            return `
+            <div style="padding:10px 0;border-bottom:1px solid #f3e8cc">
+              <div style="font-size:.88rem;font-weight:700;color:#333;margin-bottom:8px">${name}</div>
+              <div style="display:flex;gap:18px;flex-wrap:wrap">
+                <!-- 당월 -->
+                <div style="display:flex;align-items:center;gap:6px;background:#fff8ed;
+                            border:1px solid #f5cba7;border-radius:8px;padding:6px 10px">
+                  <span style="font-size:.75rem;color:#e67e22;font-weight:600;min-width:68px">📅 ${monthVal || '당월'}</span>
+                  <input type="number" min="0" max="99"
+                    id="sess-cur-${progId}"
+                    value="${cntCur}"
+                    oninput="settlement._onSessionChange('${progId}','${name}','cur')"
+                    style="width:60px;padding:4px 6px;border:1.5px solid #f39c12;border-radius:5px;
+                           font-size:.92rem;text-align:center;font-weight:700;color:#7d5a00">
+                  <span style="font-size:.78rem;color:#aaa">회</span>
+                  <span id="sess-fee-cur-${progId}"
+                    style="font-size:.82rem;font-weight:600;color:#e67e22;min-width:80px">${feeCur}</span>
+                </div>
+                <!-- 차월 -->
+                <div style="display:flex;align-items:center;gap:6px;background:#f0f9f4;
+                            border:1px solid #a9dfbf;border-radius:8px;padding:6px 10px">
+                  <span style="font-size:.75rem;color:#27ae60;font-weight:600;min-width:68px">📅 ${nextMonthVal || '차월'} <span style="font-size:.68rem;color:#888">(수강신청)</span></span>
+                  <input type="number" min="0" max="99"
+                    id="sess-next-${progId}"
+                    value="${cntNext}"
+                    oninput="settlement._onSessionChange('${progId}','${name}','next')"
+                    style="width:60px;padding:4px 6px;border:1.5px solid #27ae60;border-radius:5px;
+                           font-size:.92rem;text-align:center;font-weight:700;color:#1a5c35">
+                  <span style="font-size:.78rem;color:#aaa">회</span>
+                  <span id="sess-fee-next-${progId}"
+                    style="font-size:.82rem;font-weight:600;color:#27ae60;min-width:80px">${feeNext}</span>
+                </div>
+              </div>
+            </div>`;
+        }).join('');
+
+        body.innerHTML = `
+          <div style="font-size:.82rem;color:#888;margin-bottom:14px;line-height:1.6">
+            <i class="fas fa-info-circle" style="color:#f39c12;margin-right:4px"></i>
+            <b>당월</b> 수업횟수 → 정산 내역 시트 요금(G열) 반영<br>
+            <i class="fas fa-info-circle" style="color:#27ae60;margin-right:4px"></i>
+            <b>차월</b> 수업횟수 → 수강신청 내역 시트 요금(G열) 반영
+          </div>
+          ${rows}
+          <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end">
+            <button onclick="settlement.saveSessionCounts()"
+              style="padding:8px 24px;background:#f39c12;color:#fff;border:none;border-radius:7px;
+                     font-size:.9rem;font-weight:700;cursor:pointer">
+              <i class="fas fa-save"></i> 저장
+            </button>
+            <button onclick="settlement.toggleSessionPanel()"
+              style="padding:8px 18px;background:#f0f0f0;border:none;border-radius:7px;
+                     font-size:.88rem;font-weight:600;cursor:pointer;color:#555">
+              닫기
+            </button>
+          </div>`;
+    },
+
+    _onSessionChange(progId, progName, which) {
+        // which: 'cur' (당월) | 'next' (차월)
+        const inputId = which === 'next' ? `sess-next-${progId}` : `sess-cur-${progId}`;
+        const feeId   = which === 'next' ? `sess-fee-next-${progId}` : `sess-fee-cur-${progId}`;
+        const input   = document.getElementById(inputId);
+        if (!input) return;
+        const cnt = Number(input.value);
+        // 로컬 상태 업데이트 (program_name 기준)
+        if (!isNaN(cnt) && cnt >= 0) {
+            if (which === 'next') this._nextSessionEdits[progName] = cnt;
+            else                  this._sessionEdits[progName]     = cnt;
+        }
+        // 예상 요금 표시 업데이트
+        const feeEl = document.getElementById(feeId);
+        if (feeEl) {
+            feeEl.textContent = (cnt > 0) ? (cnt * 15000).toLocaleString('ko-KR') + '원' : '-';
+        }
+    },
+
+    async saveSessionCounts() {
+        const cid = getEffectiveComplexId();
+        if (!cid) { showToast('단지를 선택해주세요', 'error'); return; }
+        const monthVal = document.getElementById('settlementMonth')?.value;
+        if (!monthVal) { showToast('조회 월을 선택해주세요', 'error'); return; }
+
+        // 차월 계산
+        const [y, m] = monthVal.split('-').map(Number);
+        const nm = m === 12 ? 1 : m + 1;
+        const ny = m === 12 ? y + 1 : y;
+        const nextMonthVal = `${ny}-${String(nm).padStart(2,'0')}`;
+
+        const progIdMap = this._data?.prog_id_map || {};
+
+        // 당월 세션 목록
+        const curSessions = [];
+        Object.entries(progIdMap).forEach(([name, pid]) => {
+            const cnt = this._sessionEdits[name];
+            if (cnt !== undefined && cnt !== '' && Number(cnt) >= 0) {
+                curSessions.push({ program_id: pid, session_count: Number(cnt) });
+            }
+        });
+
+        // 차월 세션 목록
+        const nextSessions = [];
+        Object.entries(progIdMap).forEach(([name, pid]) => {
+            const cnt = this._nextSessionEdits[name];
+            if (cnt !== undefined && cnt !== '' && Number(cnt) >= 0) {
+                nextSessions.push({ program_id: pid, session_count: Number(cnt) });
+            }
+        });
+
+        if (!curSessions.length && !nextSessions.length) {
+            showToast('저장할 수업횟수가 없습니다', 'error'); return;
+        }
+
+        try {
+            // 당월 저장
+            if (curSessions.length) {
+                const res = await fetch('/api/program-monthly-sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ complex_id: cid, yearMonth: monthVal, sessions: curSessions }),
+                });
+                const json = await res.json();
+                if (!json.success && json.sql) {
+                    this._showMigrationModal(json.sql, json.message || json.error);
+                    return;
+                }
+                if (!json.success) throw new Error(json.error || '당월 저장 실패');
+            }
+
+            // 차월 저장
+            if (nextSessions.length) {
+                const res2 = await fetch('/api/program-monthly-sessions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ complex_id: cid, yearMonth: nextMonthVal, sessions: nextSessions }),
+                });
+                const json2 = await res2.json();
+                if (!json2.success && json2.sql) {
+                    this._showMigrationModal(json2.sql, json2.message || json2.error);
+                    return;
+                }
+                if (!json2.success) throw new Error(json2.error || '차월 저장 실패');
+            }
+
+            const savedCur  = curSessions.length;
+            const savedNext = nextSessions.length;
+            showToast(`✅ 저장 완료 (당월 ${savedCur}개 / 차월 ${savedNext}개)`, 'success');
+            // 패널 닫고 자동 재조회
+            const panel = document.getElementById('sessionSettingPanel');
+            if (panel) panel.style.display = 'none';
+            await this.load();
+        } catch(e) {
+            showToast('저장 오류: ' + e.message, 'error');
+            console.error(e);
+        }
+    },
+
+    // DB 마이그레이션 SQL 안내 모달
+    _showMigrationModal(sql, message) {
+        // 기존 모달 제거
+        const old = document.getElementById('migrationModal');
+        if (old) old.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'migrationModal';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+        modal.innerHTML = `
+          <div style="background:#fff;border-radius:14px;max-width:680px;width:100%;
+                      box-shadow:0 8px 40px rgba(0,0,0,.3);overflow:hidden">
+            <div style="background:#e67e22;color:#fff;padding:16px 22px;
+                        display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:1rem;font-weight:800">
+                <i class="fas fa-database" style="margin-right:8px"></i>DB 테이블 초기 설정 필요
+              </span>
+              <button onclick="document.getElementById('migrationModal').remove()"
+                style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer">✕</button>
+            </div>
+            <div style="padding:20px 22px">
+              <div style="background:#fff9e6;border:1px solid #f39c12;border-radius:8px;
+                          padding:12px 14px;font-size:.85rem;color:#7d5a00;margin-bottom:16px">
+                <b>📌 안내:</b> <code>program_monthly_sessions</code> 테이블이 아직 생성되지 않았습니다.<br>
+                아래 SQL을 <b>Supabase Dashboard → SQL Editor</b>에서 한 번만 실행하면 됩니다.
+              </div>
+              <div style="position:relative">
+                <pre id="migrationSql" style="background:#1e1e2e;color:#cdd6f4;padding:14px 16px;
+                     border-radius:8px;font-size:.78rem;overflow-x:auto;line-height:1.6;
+                     max-height:240px;overflow-y:auto;white-space:pre-wrap">${sql.trim()}</pre>
+                <button onclick="settlement._copySql()"
+                  style="position:absolute;top:8px;right:8px;padding:4px 12px;background:#f39c12;
+                         color:#fff;border:none;border-radius:5px;font-size:.75rem;font-weight:700;
+                         cursor:pointer" id="copySqlBtn">
+                  <i class="fas fa-copy"></i> 복사
+                </button>
+              </div>
+            </div>
+            <div style="padding:12px 22px;border-top:1px solid #eee;display:flex;
+                        justify-content:flex-end;gap:10px">
+              <a href="https://supabase.com/dashboard/project/vkmscnpmlvgdejolfjhj/sql/new"
+                 target="_blank"
+                 style="padding:8px 18px;background:#3ecf8e;color:#fff;text-decoration:none;
+                        border-radius:7px;font-size:.88rem;font-weight:700">
+                <i class="fas fa-external-link-alt"></i> Supabase SQL Editor 열기
+              </a>
+              <button onclick="document.getElementById('migrationModal').remove()"
+                style="padding:8px 18px;background:#f0f0f0;border:none;border-radius:7px;
+                       font-size:.88rem;font-weight:600;cursor:pointer;color:#555">닫기</button>
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+    },
+
+    _copySql() {
+        const el = document.getElementById('migrationSql');
+        if (!el) return;
+        navigator.clipboard.writeText(el.textContent).then(() => {
+            const btn = document.getElementById('copySqlBtn');
+            if (btn) { btn.innerHTML = '<i class="fas fa-check"></i> 복사됨'; btn.style.background = '#27ae60'; }
+            setTimeout(() => {
+                if (btn) { btn.innerHTML = '<i class="fas fa-copy"></i> 복사'; btn.style.background = '#f39c12'; }
+            }, 2000);
+        }).catch(() => showToast('클립보드 복사 실패. 직접 선택해서 복사하세요.', 'error'));
+    },
+
+    // ══════════════════════════════════════════════════════
+    // 중도해지 특수 카드 (기존 기능 유지)
+    // ══════════════════════════════════════════════════════
     _midCancelCard(rows, count) {
         const badge = `<span style="background:#e74c3c;color:#fff;font-size:.72rem;font-weight:700;
           padding:2px 9px;border-radius:20px;margin-left:8px;vertical-align:middle">${count}건</span>`;
-
         const formula = `<span style="font-size:.75rem;color:#c0392b;margin-left:12px;font-weight:400">
           청구 = <b>위약금</b>(월수강료×10%) + <b>수강료</b>(횟수×15,000원)
         </span>`;
@@ -297,66 +841,49 @@ const settlement = {
         } else {
             const thStyle = `padding:7px 8px;border:1px solid #ddd;font-size:.78rem;font-weight:700;
               background:#f7f7f7;white-space:nowrap;text-align:center`;
-            const thead = `
-              <tr>
-                <th style="${thStyle}">동</th>
-                <th style="${thStyle}">호수</th>
-                <th style="${thStyle}">이름</th>
-                <th style="${thStyle}">연락처</th>
-                <th style="${thStyle}">프로그램</th>
-                <th style="${thStyle}">해지일</th>
-                <th style="${thStyle}">월수강료<br><span style="font-weight:400;font-size:.7rem;color:#2980b9">자동/직접입력</span></th>
-                <th style="${thStyle}">수강횟수<br><span style="font-weight:400;font-size:.7rem;color:#e74c3c">직접 입력 ↓</span></th>
-                <th style="${thStyle}">위약금<br><span style="font-weight:400;font-size:.7rem;color:#888">×10%</span></th>
-                <th style="${thStyle}">수강료<br><span style="font-weight:400;font-size:.7rem;color:#888">×15,000</span></th>
-                <th style="${thStyle}">총청구금액</th>
-                <th style="${thStyle}">저장</th>
-              </tr>`;
+            const thead = `<tr>
+              <th style="${thStyle}">동</th><th style="${thStyle}">호수</th>
+              <th style="${thStyle}">이름</th><th style="${thStyle}">연락처</th>
+              <th style="${thStyle}">프로그램</th><th style="${thStyle}">해지일</th>
+              <th style="${thStyle}">월수강료</th>
+              <th style="${thStyle}">수강횟수<br><span style="font-weight:400;font-size:.7rem;color:#e74c3c">직접 입력</span></th>
+              <th style="${thStyle}">위약금<br><span style="font-weight:400;font-size:.7rem">×10%</span></th>
+              <th style="${thStyle}">수강료<br><span style="font-weight:400;font-size:.7rem">×15,000</span></th>
+              <th style="${thStyle}">총청구금액</th>
+              <th style="${thStyle}">저장</th>
+            </tr>`;
 
             const tbodyRows = rows.map((r, i) => {
-                const id         = r.id || `idx_${i}`;
-                const hasFee     = r.monthly_fee !== null && r.monthly_fee !== undefined && Number(r.monthly_fee) > 0;
-                const initFee    = hasFee ? Number(r.monthly_fee) : (this._midEdits[id]?.fee || '');
-                const savedAtt   = this._midEdits[id]?.attended ?? (r.attended_sessions !== null ? r.attended_sessions : '');
-                const savedFee   = this._midEdits[id]?.fee ?? initFee;
-
-                // 로컬 편집 상태 초기화
-                if (!this._midEdits[id]) {
-                    this._midEdits[id] = { attended: savedAtt, fee: initFee };
-                } else {
+                const id      = r.id || `idx_${i}`;
+                const hasFee  = r.monthly_fee !== null && r.monthly_fee !== undefined && Number(r.monthly_fee) > 0;
+                const initFee = hasFee ? Number(r.monthly_fee) : (this._midEdits[id]?.fee || '');
+                const savedAtt = this._midEdits[id]?.attended ?? (r.attended_sessions !== null ? r.attended_sessions : '');
+                const savedFee = this._midEdits[id]?.fee ?? initFee;
+                if (!this._midEdits[id]) this._midEdits[id] = { attended: savedAtt, fee: initFee };
+                else {
                     if (this._midEdits[id].fee === undefined) this._midEdits[id].fee = initFee;
                     if (this._midEdits[id].attended === undefined) this._midEdits[id].attended = savedAtt;
                 }
-
-                const calc  = (savedAtt !== '' && savedFee !== '') ? this._calcBilling(savedFee, savedAtt) : null;
+                const calc = (savedAtt !== '' && savedFee !== '') ? this._calcBilling(savedFee, savedAtt) : null;
                 const bgRow = i % 2 ? 'background:#fafafa' : '';
-                const tdS   = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bgRow}`;
-
-                // 월수강료: 자동 매핑된 경우 표시만, 없으면 입력 필드
+                const tdS = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bgRow}`;
                 const feeCell = hasFee
                     ? `<span style="color:#2980b9;font-weight:700">${Number(r.monthly_fee).toLocaleString('ko-KR')}원</span>`
-                    : `<input type="number" min="0" step="1000"
-                         id="fee-${id}"
-                         value="${savedFee}"
-                         oninput="settlement._onFeeChange('${id}')"
-                         placeholder="직접 입력"
+                    : `<input type="number" min="0" step="1000" id="fee-${id}" value="${savedFee}"
+                         oninput="settlement._onFeeChange('${id}')" placeholder="직접 입력"
                          style="width:80px;padding:4px 6px;border:1.5px solid #2980b9;border-radius:5px;
                                 font-size:.82rem;text-align:right;color:#2980b9;font-weight:700">
-                       <span style="font-size:.7rem;color:#999">원</span>
-                       <div style="font-size:.68rem;color:#aaa;margin-top:1px">프로그램명 불일치</div>`;
+                       <span style="font-size:.7rem;color:#999">원</span>`;
 
                 return `<tr id="mid-row-${id}">
-                  <td style="${tdS}">${r.dong||''}</td>
-                  <td style="${tdS}">${r.ho||''}</td>
+                  <td style="${tdS}">${r.dong||''}</td><td style="${tdS}">${r.ho||''}</td>
                   <td style="${tdS};font-weight:600">${r.name||''}</td>
                   <td style="${tdS}">${r.phone||''}</td>
                   <td style="${tdS}">${r.program_name||''}</td>
                   <td style="${tdS}">${r.termination_date||''}</td>
                   <td style="${tdS}" id="fee-cell-${id}">${feeCell}</td>
                   <td style="${tdS}">
-                    <input type="number" min="0" max="99"
-                      id="att-${id}"
-                      value="${savedAtt}"
+                    <input type="number" min="0" max="99" id="att-${id}" value="${savedAtt}"
                       oninput="settlement._onAttendChange('${id}')"
                       style="width:60px;padding:4px 6px;border:1.5px solid #e74c3c;border-radius:5px;
                              font-size:.88rem;text-align:center;font-weight:700;color:#c0392b">
@@ -372,11 +899,9 @@ const settlement = {
                     ${calc ? `<span style="color:#e74c3c;font-weight:700;font-size:.9rem">${calc.total.toLocaleString('ko-KR')}원</span>` : '<span style="color:#ccc">-</span>'}
                   </td>
                   <td style="${tdS}">
-                    <button onclick="settlement._saveMidBilling('${id}')"
-                      id="save-btn-${id}"
+                    <button onclick="settlement._saveMidBilling('${id}')" id="save-btn-${id}"
                       style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;
-                             border-radius:5px;font-size:.78rem;font-weight:700;cursor:pointer;
-                             white-space:nowrap">
+                             border-radius:5px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap">
                       <i class="fas fa-save"></i> 저장
                     </button>
                   </td>
@@ -385,12 +910,9 @@ const settlement = {
 
             body = `<div style="overflow-x:auto">
               <table style="width:100%;border-collapse:collapse;min-width:820px">
-                <thead>${thead}</thead>
-                <tbody>${tbodyRows}</tbody>
-              </table>
-            </div>`;
+                <thead>${thead}</thead><tbody>${tbodyRows}</tbody>
+              </table></div>`;
         }
-
         return `
         <div style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:18px;overflow:hidden">
           <div style="background:#fff5f5;border-bottom:2px solid #e74c3c;padding:12px 18px;
@@ -398,143 +920,97 @@ const settlement = {
             <span style="font-size:.95rem;font-weight:700;color:#222">
               <i class="fas fa-cut" style="color:#e74c3c"></i> 중도해지자${badge}
               <small style="font-weight:400;color:#888;font-size:.8rem;margin-left:6px">(관리비 후청구)</small>
-            </span>
-            ${formula}
-          </div>
-          ${body}
+            </span>${formula}
+          </div>${body}
         </div>`;
     },
 
-    // 월수강료 직접 입력 시 실시간 계산 (자동 매핑 실패한 경우)
+    _calcBilling(monthlyFee, attended) {
+        const fee     = Number(monthlyFee) || 0;
+        const cnt     = Number(attended)   || 0;
+        const penalty = Math.round(fee * this.PENALTY_RATE);
+        const courseFee = cnt * this.SESSION_FEE;
+        return { penalty, courseFee, total: penalty + courseFee };
+    },
+
     _onFeeChange(id) {
         const feeInput = document.getElementById(`fee-${id}`);
         if (!feeInput) return;
-        const fee = Number(feeInput.value) || 0;
         if (!this._midEdits[id]) this._midEdits[id] = {};
-        this._midEdits[id].fee = fee;
+        this._midEdits[id].fee = Number(feeInput.value) || 0;
         this._updateCalcCells(id);
     },
 
-    // 수강횟수 입력 시 실시간 계산
     _onAttendChange(id) {
         const input = document.getElementById(`att-${id}`);
         if (!input) return;
-        const attended = input.value;
         if (!this._midEdits[id]) this._midEdits[id] = {};
-        this._midEdits[id].attended = attended;
+        this._midEdits[id].attended = input.value;
         this._updateCalcCells(id);
     },
 
-    // 계산 셀 갱신 (위약금 / 수강료 / 총청구금액)
     _updateCalcCells(id) {
-        const edit    = this._midEdits[id] || {};
-        const fee     = Number(edit.fee)      || 0;
-        const attended= edit.attended;
-        const calc    = (attended !== '' && attended !== undefined && fee > 0)
-            ? this._calcBilling(fee, attended)
-            : null;
-
+        const edit     = this._midEdits[id] || {};
+        const fee      = Number(edit.fee) || 0;
+        const attended = edit.attended;
+        const calc     = (attended !== '' && attended !== undefined && fee > 0)
+            ? this._calcBilling(fee, attended) : null;
         const penEl    = document.getElementById(`penalty-${id}`);
         const courseEl = document.getElementById(`course-${id}`);
         const totalEl  = document.getElementById(`total-${id}`);
-
-        if (penEl) penEl.innerHTML = calc
-            ? `<span style="color:#e67e22;font-weight:600">${calc.penalty.toLocaleString('ko-KR')}원</span>`
-            : `<span style="color:#ccc">-</span>`;
-        if (courseEl) courseEl.innerHTML = calc
-            ? `<span style="color:#2980b9;font-weight:600">${calc.courseFee.toLocaleString('ko-KR')}원</span>`
-            : `<span style="color:#ccc">-</span>`;
-        if (totalEl) totalEl.innerHTML = calc
-            ? `<span style="color:#e74c3c;font-weight:700;font-size:.9rem">${calc.total.toLocaleString('ko-KR')}원</span>`
-            : `<span style="color:#ccc">-</span>`;
+        if (penEl)    penEl.innerHTML    = calc ? `<span style="color:#e67e22;font-weight:600">${calc.penalty.toLocaleString('ko-KR')}원</span>` : '<span style="color:#ccc">-</span>';
+        if (courseEl) courseEl.innerHTML = calc ? `<span style="color:#2980b9;font-weight:600">${calc.courseFee.toLocaleString('ko-KR')}원</span>` : '<span style="color:#ccc">-</span>';
+        if (totalEl)  totalEl.innerHTML  = calc ? `<span style="color:#e74c3c;font-weight:700;font-size:.9rem">${calc.total.toLocaleString('ko-KR')}원</span>` : '<span style="color:#ccc">-</span>';
     },
 
-    // 저장 버튼 → DB 반영
     async _saveMidBilling(id) {
         const edit = this._midEdits[id] || {};
-
-        // 수강횟수
         const attInput = document.getElementById(`att-${id}`);
         const attended = parseInt(attInput?.value ?? edit.attended);
-        if (isNaN(attended) || attended < 0) {
-            showToast('수강횟수를 올바르게 입력해주세요', 'error'); return;
-        }
-
-        // 월수강료 (자동 or 직접 입력)
-        const feeInput  = document.getElementById(`fee-${id}`);
+        if (isNaN(attended) || attended < 0) { showToast('수강횟수를 올바르게 입력해주세요', 'error'); return; }
+        const feeInput   = document.getElementById(`fee-${id}`);
         const monthlyFee = feeInput ? parseInt(feeInput.value) : (Number(edit.fee) || 0);
-        if (!monthlyFee || monthlyFee <= 0) {
-            showToast('월수강료를 입력해주세요', 'error'); return;
-        }
-
+        if (!monthlyFee || monthlyFee <= 0) { showToast('월수강료를 입력해주세요', 'error'); return; }
         const btn = document.getElementById(`save-btn-${id}`);
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
-
         try {
             const calc = this._calcBilling(monthlyFee, attended);
-
             if (id.startsWith('idx_')) throw new Error('저장할 수 없는 레코드입니다 (id 없음)');
-
             const res = await fetch(`/api/cancellations/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    attended_sessions: attended,
-                    session_fee:       this.SESSION_FEE,
-                    billing_amount:    calc.total,
-                }),
+                body: JSON.stringify({ attended_sessions: attended, session_fee: this.SESSION_FEE, billing_amount: calc.total }),
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error || '저장 실패');
-
-            // 로컬 상태 업데이트
             this._midEdits[id] = { attended, fee: monthlyFee, billing: calc.total };
-
-            // _data 내 mid_cancel도 업데이트 (엑셀 다운로드 시 반영)
             if (this._data?.mid_cancel) {
                 const row = this._data.mid_cancel.find(r => r.id === id);
-                if (row) {
-                    row.attended_sessions = attended;
-                    row.monthly_fee       = monthlyFee;
-                    row.billing_amount    = calc.total;
-                }
+                if (row) { row.attended_sessions = attended; row.monthly_fee = monthlyFee; row.billing_amount = calc.total; }
             }
-
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-check"></i> 저장됨';
-                btn.style.background = '#27ae60';
-                setTimeout(() => {
-                    if (btn) {
-                        btn.innerHTML = '<i class="fas fa-save"></i> 저장';
-                        btn.style.background = '#e74c3c';
-                    }
-                }, 2000);
-            }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> 저장됨'; btn.style.background = '#27ae60';
+                setTimeout(() => { if (btn) { btn.innerHTML = '<i class="fas fa-save"></i> 저장'; btn.style.background = '#e74c3c'; } }, 2000); }
             const name = this._data?.mid_cancel?.find(r => r.id === id)?.name || '';
             showToast(`${name} 저장 완료 (총청구 ${calc.total.toLocaleString('ko-KR')}원)`, 'success');
-
         } catch(e) {
             showToast('저장 오류: ' + e.message, 'error');
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
         }
     },
 
-    // ──────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════
     // 공통 섹션 카드
-    // ──────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════
     _sectionCard(title, color, bg, rows, count, cols, labels, fmtMap) {
         const badge = `<span style="background:${color};color:#fff;font-size:.72rem;font-weight:700;
           padding:2px 9px;border-radius:20px;margin-left:8px;vertical-align:middle">${count}건</span>`;
-
         let tableHtml = '';
         if (!rows || !rows.length) {
             tableHtml = `<div style="text-align:center;padding:22px;color:#bbb;font-size:.9rem">해당 없음</div>`;
         } else {
             const thead = labels.map(l =>
                 `<th style="padding:7px 8px;border:1px solid #ddd;font-size:.78rem;font-weight:700;
-                  background:#f7f7f7;white-space:nowrap;text-align:center">${l}</th>`
-            ).join('');
+                  background:#f7f7f7;white-space:nowrap;text-align:center">${l}</th>`).join('');
             const tbody = rows.map((r, i) => {
                 const tds = cols.map(c => {
                     let v = r[c] ?? '';
@@ -549,21 +1025,279 @@ const settlement = {
                 <thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody>
               </table></div>`;
         }
-
         return `
         <div style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:18px;overflow:hidden">
           <div style="background:${bg};border-bottom:2px solid ${color};padding:12px 18px">
             <span style="font-size:.95rem;font-weight:700;color:#222">${title}${badge}</span>
-          </div>
-          ${tableHtml}
+          </div>${tableHtml}
         </div>`;
+    },
+
+    // ══════════════════════════════════════════════════════
+    // 엑셀 3시트 다운로드
+    // ══════════════════════════════════════════════════════
+    async downloadExcel() {
+        if (!this._data) { showToast('먼저 조회해주세요', 'error'); return; }
+        const btn = document.getElementById('settlementExcelBtn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 생성 중...'; }
+
+        try {
+            await this._loadSheetJS();
+            const XLSX = window.XLSX;
+            const d    = this._data;
+            const yr   = d.year;
+            const mo   = String(d.month).padStart(2,'0');
+            const monthLabel = `${yr}년 ${mo}월`;
+            const nextLabel  = d.nextKey ? d.nextKey.replace('-', '년 ') + '월' : '차월';
+            const wb   = XLSX.utils.book_new();
+
+            // ─────────────────────────────────────────────
+            // 시트1: 정산 내역
+            // ─────────────────────────────────────────────
+            const s1 = [];
+            const LIGHT_GREEN = { fgColor: { rgb: 'D5F5D0' } };  // 연한 연두색
+            const YELLOW_BG   = { fgColor: { rgb: 'FFF9C4' } };
+            const BLUE_HDR    = { fgColor: { rgb: 'D6EAF8' } };
+            const GREEN_HDR   = { fgColor: { rgb: 'D5F5E3' } };
+            const SUB_BG      = { fgColor: { rgb: 'E8F4FD' } };
+            const TOTAL_BG    = { fgColor: { rgb: '1A5276' } };
+
+            // 헤더
+            s1.push([`${monthLabel} 정산 내역`]);
+            s1.push([]);
+            s1.push(['동','호수','이름','전화번호','프로그램종류','희망시간대','요금','구분','출석횟수','최종부과액']);
+
+            const settlementRows = d.settlement_rows || [];
+            const newSectionRows = d.new_section_rows || [];
+
+            // 프로그램별 그룹핑 (소계용)
+            const progOrder = [];
+            const progMap   = {};
+            settlementRows.forEach(r => {
+                const p = r.program_name || '미분류';
+                if (!progMap[p]) { progMap[p] = []; progOrder.push(p); }
+                progMap[p].push(r);
+            });
+
+            const cellStyles  = {}; // { 'R:C': style }
+            let   rowIdx      = 3;  // 0-based (s1 현재 3행)
+
+            progOrder.forEach(prog => {
+                const items = progMap[prog];
+                items.forEach(r => {
+                    // 최종부과액: 로컬 편집 or DB값
+                    const attLocal = this._attEdits[r.id];
+                    const att = (attLocal !== undefined && attLocal !== '') ? Number(attLocal)
+                              : (r.attended_sessions !== null ? r.attended_sessions : '');
+                    const finalCharge = r.is_mid_cancel
+                        ? (this._midEdits[r.id]?.billing ?? (d.mid_cancel?.find(c => c.id === r.id)?.billing_amount ?? ''))
+                        : (att !== '' ? Number(att) * this.SESSION_FEE : '');
+
+                    s1.push([
+                        r.dong, r.ho, r.name, r.phone || '',
+                        r.program_name || '', r.preferred_time || '',
+                        r.monthly_fee || '', r.category || '',
+                        r.is_mid_cancel ? '' : att,
+                        finalCharge
+                    ]);
+                    rowIdx++;
+                });
+                // 소계 행
+                const subFee = items.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
+                s1.push(['', '', '', '', prog, '소계', subFee, '', '', '']);
+                rowIdx++;
+            });
+
+            // 합계 행
+            const totalFeeSum   = settlementRows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
+            const totalFinalSum = settlementRows.reduce((s, r) => {
+                if (r.is_mid_cancel) {
+                    const mc = d.mid_cancel?.find(c => c.dong === r.dong && c.ho === r.ho && c.name === r.name);
+                    return s + (Number(mc?.billing_amount) || 0);
+                }
+                const attLocal = this._attEdits[r.id];
+                const att = (attLocal !== undefined && attLocal !== '') ? Number(attLocal) : r.attended_sessions;
+                return s + (att !== null && att !== undefined ? att * this.SESSION_FEE : 0);
+            }, 0);
+            const cancelCount = settlementRows.filter(r => r.is_end_cancel || r.is_mid_cancel).length;
+
+            s1.push([]);
+            s1.push([
+                `등록세대 ${settlementRows.length}명`, '', '',
+                `해지세대 ${cancelCount}명`, '', '',
+                totalFeeSum, '합계액',
+                '', totalFinalSum
+            ]);
+            rowIdx += 2;
+
+            // 신규 섹션 (하단)
+            if (newSectionRows.length) {
+                s1.push([]);
+                s1.push([`▼ ${nextLabel} 신규 수강 예정자`]);
+                s1.push(['동','호수','이름','전화번호','프로그램종류','희망시간대','요금','구분','출석횟수','최종부과액']);
+                rowIdx += 3;
+
+                newSectionRows.forEach(r => {
+                    s1.push([
+                        r.dong, r.ho, r.name, r.phone || '',
+                        r.program_name || '', r.preferred_time || '',
+                        r.monthly_fee || '', r.category || '',
+                        '', ''
+                    ]);
+                    if (r.is_duplicate) {
+                        // 연한 연두색 표시 (엑셀 스타일은 sheet_add_aoa 후 별도 처리)
+                        cellStyles[`dup_${rowIdx}`] = true;
+                    }
+                    rowIdx++;
+                });
+            }
+
+            const ws1 = XLSX.utils.aoa_to_sheet(s1);
+            ws1['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:10},{wch:18},{wch:8},{wch:12}];
+            ws1['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:9} }];
+
+            // 헤더 행 배경
+            const hdrRow = 2; // 0-based
+            for (let c = 0; c < 10; c++) {
+                const cellRef = XLSX.utils.encode_cell({ r: hdrRow, c });
+                if (!ws1[cellRef]) ws1[cellRef] = { v: '', t: 's' };
+                ws1[cellRef].s = { fill: BLUE_HDR, font: { bold: true }, alignment: { horizontal: 'center' } };
+            }
+
+            // 소계/합계 행 배경
+            let r1 = 3;
+            progOrder.forEach(prog => {
+                const cnt = progMap[prog].length;
+                r1 += cnt;
+                // 소계 행
+                for (let c = 0; c < 10; c++) {
+                    const cellRef = XLSX.utils.encode_cell({ r: r1, c });
+                    if (!ws1[cellRef]) ws1[cellRef] = { v: '', t: 's' };
+                    if (!ws1[cellRef].s) ws1[cellRef].s = {};
+                    ws1[cellRef].s.fill = SUB_BG;
+                    ws1[cellRef].s.font = { bold: true, color: { rgb: '1A5276' } };
+                }
+                r1++;
+            });
+
+            XLSX.utils.book_append_sheet(wb, ws1, '정산 내역');
+
+            // ─────────────────────────────────────────────
+            // 시트2: 동호수계
+            // ─────────────────────────────────────────────
+            const s2 = [];
+            s2.push([`${monthLabel} 동호수계`]);
+            s2.push([]);
+            s2.push(['동','호수','이름','전화번호','프로그램','희망시간','요금','동호수계']);
+
+            const dhRows = d.dongho_settlement_rows || [];
+            const s2CellInfo = []; // { rowIdx, isMulti, isSum }
+            let r2 = 3;
+
+            dhRows.forEach(dh => {
+                const items = dh.items;
+                const isMulti = items.length > 1;
+
+                if (isMulti) {
+                    // 개별 행
+                    items.forEach(it => {
+                        s2.push([dh.dong, dh.ho, it.name, it.phone || '', it.program_name || '', it.preferred_time || '', it.final_charge || '', '']);
+                        s2CellInfo.push({ rowIdx: r2, isMulti: true, isSum: false });
+                        r2++;
+                    });
+                    // 합계 행
+                    const total = items.reduce((s, it) => s + (Number(it.final_charge) || 0), 0);
+                    s2.push(['', '', '', '', '', '', '', total]);
+                    s2CellInfo.push({ rowIdx: r2, isMulti: true, isSum: true });
+                    r2++;
+                } else {
+                    // 1명 세대
+                    const it = items[0];
+                    const fc = Number(it.final_charge) || '';
+                    s2.push([dh.dong, dh.ho, it.name, it.phone || '', it.program_name || '', it.preferred_time || '', fc, fc]);
+                    s2CellInfo.push({ rowIdx: r2, isMulti: false, isSum: false });
+                    r2++;
+                }
+            });
+
+            const ws2 = XLSX.utils.aoa_to_sheet(s2);
+            ws2['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:10},{wch:12}];
+            ws2['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }];
+
+            // 헤더 스타일
+            for (let c = 0; c < 8; c++) {
+                const cellRef = XLSX.utils.encode_cell({ r: 2, c });
+                if (!ws2[cellRef]) ws2[cellRef] = { v: '', t: 's' };
+                ws2[cellRef].s = { fill: GREEN_HDR, font: { bold: true }, alignment: { horizontal: 'center' } };
+            }
+
+            // 다인세대 연두색 스타일
+            s2CellInfo.forEach(info => {
+                if (!info.isMulti) return;
+                for (let c = 0; c < 8; c++) {
+                    const cellRef = XLSX.utils.encode_cell({ r: info.rowIdx, c });
+                    if (!ws2[cellRef]) ws2[cellRef] = { v: '', t: 's' };
+                    if (!ws2[cellRef].s) ws2[cellRef].s = {};
+                    ws2[cellRef].s.fill = LIGHT_GREEN;
+                    if (info.isSum) {
+                        ws2[cellRef].s.font = { bold: true };
+                    }
+                }
+            });
+
+            XLSX.utils.book_append_sheet(wb, ws2, '동호수계');
+
+            // ─────────────────────────────────────────────
+            // 시트3: 수강신청 내역
+            // ─────────────────────────────────────────────
+            const s3 = [];
+            s3.push([`${nextLabel} 수강신청 내역`]);
+            s3.push([]);
+            s3.push(['동','호수','이름','전화번호','프로그램','희망시간','요금']);
+
+            (d.enrollment_rows || []).forEach(r => {
+                s3.push([
+                    r.dong, r.ho, r.name, r.phone || '',
+                    r.program_name || '', r.preferred_time || '',
+                    r.monthly_fee || ''
+                ]);
+            });
+
+            const ws3 = XLSX.utils.aoa_to_sheet(s3);
+            ws3['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:10}];
+            ws3['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:6} }];
+
+            // 헤더 스타일
+            for (let c = 0; c < 7; c++) {
+                const cellRef = XLSX.utils.encode_cell({ r: 2, c });
+                if (!ws3[cellRef]) ws3[cellRef] = { v: '', t: 's' };
+                ws3[cellRef].s = { fill: { fgColor: { rgb: 'FEF9E7' } }, font: { bold: true }, alignment: { horizontal: 'center' } };
+            }
+
+            XLSX.utils.book_append_sheet(wb, ws3, '수강신청 내역');
+
+            // ─────────────────────────────────────────────
+            // 파일명: 단지명_YYYY년MM월_정산.xlsx
+            // ─────────────────────────────────────────────
+            const fileName = `${yr}년${mo}월_필라테스_정산.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            showToast(`${fileName} 다운로드 완료`, 'success');
+
+        } catch(e) {
+            showToast('엑셀 생성 오류: ' + e.message, 'error');
+            console.error(e);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-file-excel"></i> 엑셀 다운로드 (3시트)';
+            }
+        }
     },
 
     // ══════════════════════════════════════════════════════
     // 해지자 일괄등록
     // ══════════════════════════════════════════════════════
     openBulkModal() {
-        // 현재 조회 월을 기본값으로 세팅
         const monthVal = document.getElementById('settlementMonth')?.value || '';
         const tm = document.getElementById('bulkTermMonth');
         if (tm && !tm.value && monthVal) tm.value = monthVal;
@@ -572,7 +1306,6 @@ const settlement = {
 
     closeBulkModal() {
         document.getElementById('bulkCancelModal').style.display = 'none';
-        // 초기화
         const fi = document.getElementById('bulkFileInput');
         if (fi) fi.value = '';
         document.getElementById('bulkPreviewArea').style.display = 'none';
@@ -581,7 +1314,6 @@ const settlement = {
         this._bulkItems = [];
     },
 
-    // 엑셀 파일 → 파싱
     async onBulkFileChange(evt) {
         const file = evt.target.files?.[0];
         if (!file) return;
@@ -590,13 +1322,10 @@ const settlement = {
             const XLSX = window.XLSX;
             const ab   = await file.arrayBuffer();
             const wb   = XLSX.read(ab, { type: 'array' });
-
-            // 모집현황 파일: 시트3 우선, 없으면 첫 시트
             let wsName = wb.SheetNames[0];
-            if (wb.SheetNames.length >= 3) wsName = wb.SheetNames[2];  // 시트3
+            if (wb.SheetNames.length >= 3) wsName = wb.SheetNames[2];
             const ws   = wb.Sheets[wsName];
             const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-
             this._parseBulkRows(rows);
         } catch(e) {
             showToast('파일 파싱 오류: ' + e.message, 'error');
@@ -604,23 +1333,18 @@ const settlement = {
         }
     },
 
-    // 행 배열 → _bulkItems 변환 + 미리보기 렌더
     _parseBulkRows(rows) {
-        // 헤더 행 찾기 (동/호수/이름 포함한 행)
         let headerIdx = -1;
-        let colMap    = {};  // { dong, ho, name, phone, program, gubun, date }
-
+        let colMap    = {};
         for (let i = 0; i < Math.min(rows.length, 10); i++) {
             const r = rows[i].map(c => String(c).replace(/\s/g,''));
-            const dongIdx    = r.findIndex(c => c === '동');
-            const hoIdx      = r.findIndex(c => c === '호수');
-            const nameIdx    = r.findIndex(c => c === '이름');
+            const dongIdx = r.findIndex(c => c === '동');
+            const hoIdx   = r.findIndex(c => c === '호수');
+            const nameIdx = r.findIndex(c => c === '이름');
             if (dongIdx >= 0 && hoIdx >= 0 && nameIdx >= 0) {
                 headerIdx = i;
                 colMap = {
-                    dong:    dongIdx,
-                    ho:      hoIdx,
-                    name:    nameIdx,
+                    dong:    dongIdx, ho: hoIdx, name: nameIdx,
                     phone:   r.findIndex(c => c === '전화번호'),
                     program: r.findIndex(c => c.includes('프로그램')),
                     gubun:   r.findIndex(c => c === '구분'),
@@ -629,114 +1353,79 @@ const settlement = {
                 break;
             }
         }
-        if (headerIdx < 0) {
-            showToast('헤더를 찾을 수 없습니다. 동/호수/이름 열이 있는지 확인해주세요', 'error');
-            return;
-        }
-
+        if (headerIdx < 0) { showToast('헤더를 찾을 수 없습니다', 'error'); return; }
         const CANCEL_KEYWORDS = ['해지','중도해지','중도 해지','5월 수강 해지','차월해지'];
         const MID_KEYWORDS    = ['중도해지','중도 해지','중도'];
-
         const items = [];
         for (let i = headerIdx + 1; i < rows.length; i++) {
             const r    = rows[i];
             const dong = String(r[colMap.dong] ?? '').replace(/동/g,'').trim();
             const ho   = String(r[colMap.ho]   ?? '').replace(/호/g,'').trim();
             const name = String(r[colMap.name] ?? '').trim();
-            if (!dong || !ho || !name) continue;
-            // 헤더 재등장 방지
-            if (dong === '동' || name === '이름') continue;
-
+            if (!dong || !ho || !name || dong === '동' || name === '이름') continue;
             const phone   = colMap.phone   >= 0 ? String(r[colMap.phone]   ?? '').trim() : '';
             const program = colMap.program >= 0 ? String(r[colMap.program] ?? '').trim() : '';
             const gubun   = colMap.gubun   >= 0 ? String(r[colMap.gubun]   ?? '').trim() : '';
             const dateRaw = colMap.date    >= 0 ? String(r[colMap.date]    ?? '').trim() : '';
-
-            // 구분 컬럼 없으면 전체 행을 해지자로 간주
-            // 구분 컬럼 있으면 해지 키워드 포함 행만
             if (colMap.gubun >= 0 && gubun && !CANCEL_KEYWORDS.some(k => gubun.includes(k))) continue;
-
             const isMid = MID_KEYWORDS.some(k => gubun.toLowerCase().includes(k.toLowerCase()));
-
-            // 해지일 정리 (숫자형 시리얼 → 날짜 변환)
             let termDate = '';
             if (dateRaw && dateRaw !== '' && dateRaw !== '0') {
                 const asNum = Number(dateRaw);
                 if (!isNaN(asNum) && asNum > 40000) {
-                    // Excel date serial → JS Date
                     const d = new Date(Math.round((asNum - 25569) * 86400 * 1000));
                     termDate = d.toISOString().slice(0, 10);
                 } else if (/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
                     termDate = dateRaw;
                 }
             }
-
             items.push({ dong, ho, name, phone, program, gubun, termDate, isMid, _selected: true });
         }
-
         this._bulkItems = items;
         this._renderBulkPreview();
     },
 
     _renderBulkPreview() {
-        const area    = document.getElementById('bulkPreviewArea');
-        const tableEl = document.getElementById('bulkPreviewTable');
+        const area      = document.getElementById('bulkPreviewArea');
+        const tableEl   = document.getElementById('bulkPreviewTable');
         const submitBtn = document.getElementById('bulkSubmitBtn');
-
         if (!this._bulkItems.length) {
-            tableEl.innerHTML = `<div style="color:#e74c3c;padding:12px">파싱된 해지자가 없습니다. 파일과 구분 컬럼을 확인해주세요.</div>`;
+            tableEl.innerHTML = `<div style="color:#e74c3c;padding:12px">파싱된 해지자가 없습니다.</div>`;
             area.style.display = 'block';
             if (submitBtn) submitBtn.style.display = 'none';
             return;
         }
-
         const midCount = this._bulkItems.filter(i => i.isMid).length;
         const endCount = this._bulkItems.length - midCount;
-
-        const thS = `padding:7px 8px;border:1px solid #ddd;font-size:.75rem;font-weight:700;
-                     background:#f7f7f7;white-space:nowrap;text-align:center`;
+        const thS = `padding:7px 8px;border:1px solid #ddd;font-size:.75rem;font-weight:700;background:#f7f7f7;white-space:nowrap;text-align:center`;
         const thead = `<tr>
-          <th style="${thS}"><input type="checkbox" id="bulkChkAll" checked
-            onchange="settlement.toggleAllBulk(this.checked)"></th>
+          <th style="${thS}"><input type="checkbox" id="bulkChkAll" checked onchange="settlement.toggleAllBulk(this.checked)"></th>
           <th style="${thS}">동</th><th style="${thS}">호수</th><th style="${thS}">이름</th>
           <th style="${thS}">전화번호</th><th style="${thS}">프로그램</th>
-          <th style="${thS}">구분</th><th style="${thS}">해지일</th>
-          <th style="${thS}">유형</th>
+          <th style="${thS}">구분</th><th style="${thS}">해지일</th><th style="${thS}">유형</th>
         </tr>`;
-
         const tbody = this._bulkItems.map((it, idx) => {
             const tdS = `padding:5px 7px;border:1px solid #eee;font-size:.8rem;text-align:center;${idx%2?'background:#fafafa':''}`;
             const badge = it.isMid
                 ? `<span style="background:#e74c3c;color:#fff;font-size:.68rem;padding:1px 7px;border-radius:10px">중도해지</span>`
                 : `<span style="background:#e67e22;color:#fff;font-size:.68rem;padding:1px 7px;border-radius:10px">차월해지</span>`;
             return `<tr id="bulk-row-${idx}">
-              <td style="${tdS}"><input type="checkbox" ${it._selected ? 'checked' : ''}
-                onchange="settlement.toggleBulkRow(${idx}, this.checked)"></td>
-              <td style="${tdS}">${it.dong}</td>
-              <td style="${tdS}">${it.ho}</td>
+              <td style="${tdS}"><input type="checkbox" ${it._selected?'checked':''} onchange="settlement.toggleBulkRow(${idx},this.checked)"></td>
+              <td style="${tdS}">${it.dong}</td><td style="${tdS}">${it.ho}</td>
               <td style="${tdS};font-weight:600">${it.name}</td>
-              <td style="${tdS}">${it.phone}</td>
-              <td style="${tdS};font-size:.75rem">${it.program}</td>
+              <td style="${tdS}">${it.phone}</td><td style="${tdS};font-size:.75rem">${it.program}</td>
               <td style="${tdS};font-size:.72rem;color:#777">${it.gubun}</td>
-              <td style="${tdS}">${it.termDate || '-'}</td>
-              <td style="${tdS}">${badge}</td>
+              <td style="${tdS}">${it.termDate||'-'}</td><td style="${tdS}">${badge}</td>
             </tr>`;
         }).join('');
-
-        tableEl.innerHTML = `
-          <div style="margin-bottom:8px;font-size:.82rem;color:#555">
+        tableEl.innerHTML = `<div style="margin-bottom:8px;font-size:.82rem;color:#555">
             총 <b>${this._bulkItems.length}</b>건 파싱됨
-            (<span style="color:#e74c3c">중도해지 ${midCount}건</span> /
-             <span style="color:#e67e22">차월해지 ${endCount}건</span>)
-            — 등록할 항목만 체크하세요
+            (<span style="color:#e74c3c">중도해지 ${midCount}건</span> / <span style="color:#e67e22">차월해지 ${endCount}건</span>)
           </div>
           <div style="overflow-x:auto;max-height:340px;overflow-y:auto">
             <table style="width:100%;border-collapse:collapse;min-width:680px">
-              <thead>${thead}</thead>
-              <tbody>${tbody}</tbody>
-            </table>
-          </div>`;
-
+              <thead>${thead}</thead><tbody>${tbody}</tbody>
+            </table></div>`;
         area.style.display = 'block';
         if (submitBtn) submitBtn.style.display = '';
     },
@@ -753,233 +1442,49 @@ const settlement = {
         if (this._bulkItems[idx]) this._bulkItems[idx]._selected = checked;
     },
 
-    // 확인 등록 실행
     async submitBulk() {
         const cid = getEffectiveComplexId();
         if (!cid) { showToast('단지를 선택해주세요', 'error'); return; }
-
         const termMonth = document.getElementById('bulkTermMonth')?.value;
         if (!termMonth) { showToast('해지 처리 월을 선택해주세요', 'error'); return; }
-
         const selected = this._bulkItems.filter(it => it._selected);
         if (!selected.length) { showToast('등록할 항목을 선택해주세요', 'error'); return; }
-
         const btn = document.getElementById('bulkSubmitBtn');
         if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 등록 중...'; }
-
         try {
             const items = selected.map(it => ({
-                dong:             it.dong,
-                ho:               it.ho,
-                name:             it.name,
-                phone:            it.phone || '-',
-                program_name:     it.program,
+                dong: it.dong, ho: it.ho, name: it.name,
+                phone: it.phone || '-', program_name: it.program,
                 termination_type: it.isMid ? 'mid' : 'end',
                 termination_date: it.termDate || null,
                 termination_month: termMonth,
             }));
-
             const res  = await fetch('/api/cancellations/bulk', {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ complex_id: cid, items }),
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ complex_id: cid, items }),
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error || '등록 실패');
-
-            const msg = `✅ ${json.inserted}건 등록 완료` +
-                (json.skipped ? ` / ${json.skipped}건 스킵(중복)` : '');
-            showToast(msg, 'success');
+            showToast(`✅ ${json.inserted}건 등록 완료` + (json.skipped ? ` / ${json.skipped}건 스킵` : ''), 'success');
             this.closeBulkModal();
-
-            // 결과 상세 콘솔 출력
-            if (json.errors?.length) {
-                console.warn('[일괄등록 스킵/오류]', json.errors);
-            }
-
-            // 정산 리포트 새로고침
             await this.load();
-
         } catch(e) {
             showToast('등록 오류: ' + e.message, 'error');
-            console.error(e);
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-check"></i> 확인 등록';
-            }
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> 확인 등록'; }
         }
     },
 
+    // ══════════════════════════════════════════════════════
+    // 헬퍼
+    // ══════════════════════════════════════════════════════
     _parseDong(d) { return parseInt((d || '').replace(/[^0-9]/g, '')) || 0; },
     _parseHo(h)   { return parseInt((h || '').replace(/[^0-9]/g, '')) || 0; },
-
     _fmtFee(v) {
         if (v === null || v === undefined || v === '') return '-';
         const n = Number(v);
         if (isNaN(n) || n === 0) return '-';
         return n.toLocaleString('ko-KR') + '원';
-    },
-
-    // ══════════════════════════════════════════════════════
-    // 엑셀 2시트 통합 다운로드
-    // ══════════════════════════════════════════════════════
-    async downloadExcel() {
-        if (!this._data) { showToast('먼저 조회해주세요', 'error'); return; }
-        const btn = document.getElementById('settlementExcelBtn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 생성 중...'; }
-
-        try {
-            await this._loadSheetJS();
-            const XLSX = window.XLSX;
-            const d    = this._data;
-            const yr   = d.year;
-            const mo   = String(d.month).padStart(2,'0');
-            const monthLabel = `${yr}년 ${mo}월`;
-            const wb   = XLSX.utils.book_new();
-
-            // ─────────────────────────────────────────────
-            // 시트1: 동호수별 부과내역
-            // ─────────────────────────────────────────────
-            const s1 = [];
-            s1.push([`${monthLabel} 필라테스 관리비 부과내역`]);
-            s1.push([]);
-            s1.push(['동', '호수', '이름', '연락처', '프로그램종류', '희망시간대', '요금', '비고']);
-
-            let grandTotal1 = 0;
-            (d.dongho_rows || []).forEach(dh => {
-                dh.items.forEach(it => {
-                    const isMid = it.is_mid_cancel;
-                    const fee   = isMid ? '' : (it.monthly_fee || '');
-                    const note  = isMid ? '중도해지(후청구)' : (it.is_next_new ? '차월신규' : '');
-                    s1.push([
-                        dh.dong, dh.ho,
-                        it.name,
-                        it.phone || dh.phone || '',
-                        it.program_name   || '',
-                        it.preferred_time || '',
-                        fee, note
-                    ]);
-                    if (!isMid) grandTotal1 += Number(it.monthly_fee) || 0;
-                });
-                if (dh.items.length > 1) {
-                    const sub = dh.items.reduce((s, it) =>
-                        it.is_mid_cancel ? s : s + (Number(it.monthly_fee)||0), 0);
-                    s1.push(['', '', `[${dh.dong} ${dh.ho} 소계]`, '', '', '', sub, '']);
-                }
-            });
-            s1.push([]);
-            s1.push(['', '', '', '', '', '합계', grandTotal1, '']);
-
-            const ws1 = XLSX.utils.aoa_to_sheet(s1);
-            ws1['!cols'] = [{wch:8},{wch:8},{wch:10},{wch:14},{wch:24},{wch:16},{wch:10},{wch:16}];
-            ws1['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }];
-            XLSX.utils.book_append_sheet(wb, ws1, '동호수별 부과내역');
-
-            // ─────────────────────────────────────────────
-            // 시트2: 상세내역
-            // ─────────────────────────────────────────────
-            const s2 = [];
-
-            // ① 수강자 현황
-            s2.push([`[${monthLabel} 수강자 현황]  총 ${d.summary.approved_count}명`]);
-            s2.push(['동','호수','이름','연락처','프로그램종류','희망시간대','요금']);
-
-            const progOrder = [];
-            const progMap   = new Map();
-            const appSorted = [...(d.approved||[])].sort((a,b) =>
-                (a.program_name||'') < (b.program_name||'') ? -1 :
-                (a.program_name||'') > (b.program_name||'') ?  1 : 0);
-            appSorted.forEach(a => {
-                const p = a.program_name || '미분류';
-                if (!progMap.has(p)) { progMap.set(p,[]); progOrder.push(p); }
-                progMap.get(p).push(a);
-            });
-
-            let grandTotal2 = 0;
-            progOrder.forEach(prog => {
-                const items = progMap.get(prog);
-                items.forEach(a => s2.push([
-                    a.dong, a.ho, a.name, a.phone||'',
-                    a.program_name||'', a.preferred_time||'', a.monthly_fee||''
-                ]));
-                const sub = items.reduce((s,a)=>s+(Number(a.monthly_fee)||0),0);
-                grandTotal2 += sub;
-                s2.push(['','','','', prog, '소계', sub]);
-            });
-            s2.push(['','','','','','합계', grandTotal2]);
-            s2.push([]);
-
-            // ② 중도해지자 — 수강횟수·청구 포함
-            if (d.mid_cancel && d.mid_cancel.length) {
-                s2.push([`[중도해지자]  ${d.mid_cancel.length}명  ※ 위약금(월수강료×10%) + 수강료(횟수×15,000원)`]);
-                s2.push(['동','호수','이름','연락처','프로그램종류','해지일',
-                         '월수강료','수강횟수','위약금(10%)','수강료(×15,000)','총청구금액']);
-                d.mid_cancel.forEach(r => {
-                    const id  = r.id;
-                    const edit = this._midEdits[id] || {};
-                    // 수강횟수: 로컬 편집 → DB 저장값 → 빈값 순
-                    const att = edit.attended !== undefined ? edit.attended
-                              : (r.attended_sessions !== null ? r.attended_sessions : '');
-                    // 월수강료: 로컬 편집 → API 응답값 순
-                    const fee = Number(edit.fee || r.monthly_fee) || 0;
-                    const calc = (att !== '' && att !== undefined && att >= 0 && fee > 0)
-                        ? this._calcBilling(fee, att) : null;
-                    s2.push([
-                        r.dong, r.ho, r.name, r.phone||'',
-                        r.program_name||'', r.termination_date||'',
-                        fee || '',
-                        att !== '' && att !== undefined ? att : '',
-                        calc ? calc.penalty   : '',
-                        calc ? calc.courseFee : '',
-                        calc ? calc.total     : '',
-                    ]);
-                });
-                s2.push([]);
-            }
-
-            // ③ 차월해지자
-            if (d.end_cancel && d.end_cancel.length) {
-                s2.push([`[차월해지자]  ${d.end_cancel.length}명  ※ ${d.nextKey} 미부과 대상`]);
-                s2.push(['동','호수','이름','연락처','프로그램종류','해지일','비고']);
-                d.end_cancel.forEach(r => s2.push([
-                    r.dong, r.ho, r.name, r.phone||'',
-                    r.program_name||'', r.termination_date||'', r.note||''
-                ]));
-                s2.push([]);
-            }
-
-            // ④ 차월신규접수
-            if (d.next_new && d.next_new.length) {
-                s2.push([`[차월신규접수]  ${d.next_new.length}명  ※ ${d.nextKey}부터 부과 대상`]);
-                s2.push(['동','호수','이름','연락처','프로그램종류','희망시간대','요금','승인일','비고']);
-                d.next_new.forEach(r => s2.push([
-                    r.dong, r.ho, r.name, r.phone||'',
-                    r.program_name||'', r.preferred_time||'',
-                    r.monthly_fee||'', r.approved_at||'', r.note||''
-                ]));
-            }
-
-            const ws2 = XLSX.utils.aoa_to_sheet(s2);
-            ws2['!cols'] = [
-                {wch:8},{wch:8},{wch:10},{wch:14},{wch:24},{wch:12},
-                {wch:10},{wch:8},{wch:10},{wch:12},{wch:12}
-            ];
-            XLSX.utils.book_append_sheet(wb, ws2, '상세내역');
-
-            const fileName = `${yr}년${mo}월_필라테스_정산.xlsx`;
-            XLSX.writeFile(wb, fileName);
-            showToast(`${fileName} 다운로드 완료`, 'success');
-
-        } catch(e) {
-            showToast('엑셀 생성 오류: ' + e.message, 'error');
-            console.error(e);
-        } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-file-excel"></i> 엑셀 다운로드 (2시트 통합)';
-            }
-        }
     },
 
     _loadSheetJS() {

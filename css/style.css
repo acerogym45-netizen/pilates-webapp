@@ -142,6 +142,9 @@ button { font-family: inherit; cursor: pointer; }
 .quick-row--four {
     grid-template-columns: repeat(4,1fr);
 }
+.quick-row--three {
+    grid-template-columns: repeat(3,1fr);
+}
 /* 기본 버튼 */
 .quick-btn {
     display: flex; flex-direction: column; align-items: center;
@@ -742,7 +745,8 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
    반응형
 ════════════════════════════════════════════════ */
 @media (max-width: 400px) {
-    .quick-row--four { grid-template-columns: repeat(2,1fr); }
+    .quick-row--four  { grid-template-columns: repeat(2,1fr); }
+    .quick-row--three { grid-template-columns: repeat(3,1fr); }
     .form-row      { grid-template-columns: 1fr; }
     .btn-group     { flex-direction: column; }
     .header        { padding: 14px 16px; }
