@@ -22,25 +22,68 @@ const instructors = {
     renderList() {
         const c = document.getElementById('instructorList');
         if (!this.data.length) { c.innerHTML = '<p class="empty-hint">등록된 강사가 없습니다</p>'; return; }
-        c.innerHTML = this.data.map(i => `
-            <div class="list-item">
+        c.innerHTML = this.data.map(i => {
+            const rates = i.hourly_rates || {};
+            const rateStr = [
+                rates.group   ? `그룹 ${Number(rates.group).toLocaleString('ko-KR')}원`   : '',
+                rates.private ? `개인 ${Number(rates.private).toLocaleString('ko-KR')}원` : '',
+                rates.duet    ? `듀엣 ${Number(rates.duet).toLocaleString('ko-KR')}원`    : '',
+            ].filter(Boolean).join(' · ') || '-';
+            const progs = Array.isArray(i.assigned_programs) && i.assigned_programs.length
+                ? i.assigned_programs.map(p => `<span style="background:#e8f8f0;color:#27ae60;font-size:.72rem;padding:2px 7px;border-radius:10px;margin-right:3px">${escHtml(p)}</span>`).join('')
+                : '<span style="color:#bbb;font-size:.78rem">담당 미지정</span>';
+            return `
+            <div class="list-item" style="flex-wrap:wrap;gap:4px">
                 ${i.photo_url ? `<img src="${i.photo_url}" class="item-thumb" alt="${i.name}">` : '<div class="item-thumb-placeholder"><i class="fas fa-user"></i></div>'}
-                <div class="item-main">
+                <div class="item-main" style="flex:1;min-width:0">
                     <strong>${i.name}</strong>
-                    <p>${i.title || '-'}</p>
+                    <p style="margin:2px 0">${i.title || '-'}</p>
+                    <p style="margin:2px 0;font-size:.78rem;color:#e67e22">
+                        <i class="fas fa-won-sign" style="font-size:.7rem"></i> ${rateStr}
+                    </p>
+                    <div style="margin-top:4px">${progs}</div>
                 </div>
                 <div class="item-actions">
                     <button class="btn-ghost dark btn-sm" onclick="instructors.showForm('${i.id}')"><i class="fas fa-edit"></i></button>
                     <button class="btn-ghost dark btn-sm" onclick="instructors.deleteItem('${i.id}')"><i class="fas fa-trash"></i></button>
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
     },
-    showForm(id) {
+    async showForm(id) {
         const i = id ? this.data.find(x => x.id === id) : null;
+
+        // 담당 프로그램 목록 로드 (프로그램 API)
+        let progOptions = '';
+        try {
+            const cid = getEffectiveComplexId() || (i?.complex_id);
+            const url = cid ? `/api/programs?complexId=${cid}` : '/api/programs';
+            const res = await fetch(url);
+            const json = await res.json();
+            const progs = (json.data || []).filter(p => p.name);
+            const assigned = (i?.assigned_programs) || [];
+            progOptions = progs.map(p => {
+                const checked = assigned.includes(p.name) ? 'checked' : '';
+                return `<label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;cursor:pointer;font-size:.88rem">
+                    <input type="checkbox" name="iProgram" value="${escHtml(p.name)}" ${checked}
+                        style="width:15px;height:15px;cursor:pointer">
+                    <span>${escHtml(p.name)}</span>
+                </label>`;
+            }).join('');
+        } catch(e) {
+            progOptions = `<p style="color:#aaa;font-size:.82rem">프로그램 목록 로드 실패</p>`;
+        }
+
+        // 타임당 단가 (hourly_rates)
+        const rates = i?.hourly_rates || {};
+        const rateGroup   = rates.group   || 0;
+        const ratePrivate = rates.private  || 0;
+        const rateDuet    = rates.duet     || 0;
+
         const body = `
             <div class="form-group"><label>이름 *</label><input type="text" id="iName" value="${i ? escHtml(i.name) : ''}"></div>
             <div class="form-group"><label>직함</label><input type="text" id="iTitle" value="${i ? escHtml(i.title||'') : ''}" placeholder="예: 필라테스 전문 강사"></div>
-            <div class="form-group"><label>소개</label><textarea id="iBio" rows="4">${i ? escHtml(i.bio||'') : ''}</textarea></div>
+            <div class="form-group"><label>소개</label><textarea id="iBio" rows="3">${i ? escHtml(i.bio||'') : ''}</textarea></div>
             <div class="form-group">
                 <label>사진 URL</label>
                 <input type="text" id="iPhoto" value="${i ? escHtml(i.photo_url||'') : ''}" placeholder="https://... 또는 /uploads/파일명">
@@ -50,7 +93,44 @@ const instructors = {
                     ${i?.photo_url ? `<img src="${i.photo_url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">` : ''}
                 </div>
             </div>
-            <div class="form-group"><label>표시 순서</label><input type="number" id="iOrder" value="${i?.display_order||0}"></div>`;
+            <div class="form-group"><label>표시 순서</label><input type="number" id="iOrder" value="${i?.display_order||0}"></div>
+
+            <!-- ── 타임당 단가 ── -->
+            <div class="form-group" style="background:#f8f9fa;border:1.5px solid #e0e0e0;border-radius:8px;padding:14px 16px;margin-top:4px">
+                <label style="font-weight:700;color:#333;margin-bottom:10px;display:block">
+                    <i class="fas fa-won-sign" style="color:#e67e22;margin-right:4px"></i>타임당 단가 (원)
+                </label>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+                    <div>
+                        <label style="font-size:.78rem;color:#666;font-weight:600;margin-bottom:4px;display:block">그룹 수업</label>
+                        <input type="number" id="iRateGroup" value="${rateGroup}" min="0" step="1000"
+                            placeholder="0"
+                            style="width:100%;padding:7px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
+                    </div>
+                    <div>
+                        <label style="font-size:.78rem;color:#666;font-weight:600;margin-bottom:4px;display:block">개인 레슨</label>
+                        <input type="number" id="iRatePrivate" value="${ratePrivate}" min="0" step="1000"
+                            placeholder="0"
+                            style="width:100%;padding:7px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
+                    </div>
+                    <div>
+                        <label style="font-size:.78rem;color:#666;font-weight:600;margin-bottom:4px;display:block">듀엣 레슨</label>
+                        <input type="number" id="iRateDuet" value="${rateDuet}" min="0" step="1000"
+                            placeholder="0"
+                            style="width:100%;padding:7px 10px;border:1.5px solid #ddd;border-radius:6px;font-size:.9rem;font-weight:700;text-align:right">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── 담당 프로그램 ── -->
+            <div class="form-group" style="background:#f0fff4;border:1.5px solid #a9dfbf;border-radius:8px;padding:14px 16px;margin-top:4px">
+                <label style="font-weight:700;color:#333;margin-bottom:10px;display:block">
+                    <i class="fas fa-dumbbell" style="color:#27ae60;margin-right:4px"></i>담당 프로그램
+                </label>
+                <div id="iPrograms" style="max-height:180px;overflow-y:auto;padding-right:4px">
+                    ${progOptions || '<p style="color:#aaa;font-size:.82rem">프로그램 없음</p>'}
+                </div>
+            </div>`;
         const footer = `
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
             <button class="btn-primary" onclick="instructors.save('${id||''}')"><i class="fas fa-save"></i> 저장</button>`;
@@ -136,11 +216,25 @@ const instructors = {
         }
 
         try {
+            // 담당 프로그램 체크박스 수집
+            const assignedPrograms = Array.from(
+                document.querySelectorAll('input[name="iProgram"]:checked')
+            ).map(cb => cb.value);
+
+            // 타임당 단가 수집
+            const hourlyRates = {
+                group:   parseInt(document.getElementById('iRateGroup')?.value)   || 0,
+                private: parseInt(document.getElementById('iRatePrivate')?.value) || 0,
+                duet:    parseInt(document.getElementById('iRateDuet')?.value)    || 0,
+            };
+
             const data = {
                 name, title: document.getElementById('iTitle').value,
                 bio: document.getElementById('iBio').value,
                 photo_url: photoUrl,
-                display_order: parseInt(document.getElementById('iOrder').value)||0
+                display_order: parseInt(document.getElementById('iOrder').value)||0,
+                hourly_rates: hourlyRates,
+                assigned_programs: assignedPrograms,
             };
             if (id) {
                 await API.instructors.update(id, data);

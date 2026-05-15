@@ -308,7 +308,7 @@ router.get('/instructors', async (req, res) => {
 
 router.post('/instructors', async (req, res) => {
     try {
-        const { complex_id, name, title, bio, photo_url, display_order } = req.body;
+        const { complex_id, name, title, bio, photo_url, display_order, hourly_rates, assigned_programs } = req.body;
         if (!complex_id || !name) return res.status(400).json({ success: false, error: '필수 항목 누락' });
         const sb = getSupabase();
         const { data, error } = await sb
@@ -316,7 +316,9 @@ router.post('/instructors', async (req, res) => {
             .insert({
                 complex_id, name,
                 title: title || '', bio: bio || '', photo_url: photo_url || '',
-                display_order: display_order || 0
+                display_order: display_order || 0,
+                hourly_rates:      hourly_rates      || { group: 0, private: 0, duet: 0 },
+                assigned_programs: assigned_programs || [],
             })
             .select()
             .single();
@@ -327,15 +329,20 @@ router.post('/instructors', async (req, res) => {
 
 router.put('/instructors/:id', async (req, res) => {
     try {
-        const { name, title, bio, photo_url, display_order, is_active } = req.body;
+        const { name, title, bio, photo_url, display_order, is_active, hourly_rates, assigned_programs } = req.body;
         const sb = getSupabase();
+        const updatePayload = {
+            name, title, bio, photo_url,
+            display_order: display_order || 0,
+            is_active: is_active !== undefined ? Boolean(is_active) : true,
+        };
+        // 컬럼이 존재할 때만 반영 (DB 마이그레이션 미완시 무시)
+        if (hourly_rates      !== undefined) updatePayload.hourly_rates      = hourly_rates;
+        if (assigned_programs !== undefined) updatePayload.assigned_programs = assigned_programs;
+
         const { data, error } = await sb
             .from('instructors')
-            .update({
-                name, title, bio, photo_url,
-                display_order: display_order || 0,
-                is_active: is_active !== undefined ? Boolean(is_active) : true
-            })
+            .update(updatePayload)
             .eq('id', req.params.id)
             .select()
             .single();
