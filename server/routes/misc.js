@@ -1138,30 +1138,21 @@ router.get('/settlement-report', async (req, res) => {
             });
         }
 
-        // 수업횟수 기반 요금 계산 (타임별 합계 횟수 × 15,000)
-        // 미설정 시 → 정액(monthly_fee or program.price) 그대로 사용
+        // ── 요금 헬퍼 ─────────────────────────────────────────
+        // getFee   : 정산 내역 "요금" 컬럼 = 수강료 정액
+        //            우선순위: applications.monthly_fee → programs.price
+        //            ※ 수업횟수×15,000은 "최종부과액" 계산에만 사용 (여기서는 쓰지 않음)
+        // getNextFee: 차월 수강신청 내역 요금 (동일 우선순위)
+        // SESSION_UNIT: 출석 1회당 단가 (최종부과액 = 출석횟수 × SESSION_UNIT)
         const SESSION_UNIT = 15000;
 
-        // 당월 수업횟수 기반 요금 (정산 내역 / 동호수계용) — 타임별 합계 사용
-        const getSessionFee = (programName) => {
-            const total = progSessionTotalMap[programName];
-            if (total != null && total > 0) return total * SESSION_UNIT;
-            return null;
-        };
         const getFee = (app) => {
-            const sessionFee = getSessionFee(app.program_name);
-            if (sessionFee !== null) return sessionFee;
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
             return progPriceMap[app.program_name] || 0;
         };
 
-        // 차월 수업횟수 기반 요금 (수강신청 내역용)
         const getNextFee = (app) => {
-            const totalNext = nextProgSessionTotalMap[app.program_name];
-            if (totalNext != null && totalNext > 0) return totalNext * SESSION_UNIT;
-            const totalCur = progSessionTotalMap[app.program_name];
-            if (totalCur != null && totalCur > 0) return totalCur * SESSION_UNIT;
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
             return progPriceMap[app.program_name] || 0;
