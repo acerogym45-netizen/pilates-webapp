@@ -41,17 +41,29 @@ const instructors = {
                     `<span style="background:#e8f8f0;color:#27ae60;font-size:.72rem;padding:2px 7px;border-radius:10px;margin-right:3px">${escHtml(p)}</span>`
                 ).join('');
             } else {
-                // 신 형식: 프로그램별로 묶어서 "프로그램명 (09:00, 10:00)" 형태로 표시
+                // 신 형식: 프로그램별로 묶어서 표시
+                // - 그룹 수업: 프로그램명 (09:00, 10:00)
+                // - 개인/듀엣: 프로그램명 (최윤서, 이미나)
                 const progMap = {};
                 ap.forEach(a => {
                     if (!progMap[a.program_name]) progMap[a.program_name] = [];
-                    progMap[a.program_name].push(a.time_slot === 'free' ? '자유' : a.time_slot);
+                    if (a.time_slot === 'free') {
+                        // 수강생 이름으로 표시, 없으면 '자유'
+                        progMap[a.program_name].push(a.student_name || '자유');
+                    } else {
+                        progMap[a.program_name].push(a.time_slot);
+                    }
                 });
-                progBadges = Object.entries(progMap).map(([name, slots]) =>
-                    `<span style="background:#e8f8f0;color:#1a6b3c;font-size:.72rem;padding:2px 8px;border-radius:10px;margin-right:3px;margin-bottom:2px;display:inline-block">
-                        ${escHtml(name)}<span style="color:#27ae60;margin-left:3px">(${slots.join(', ')})</span>
-                    </span>`
-                ).join('')
+                progBadges = Object.entries(progMap).map(([name, items]) => {
+                    // 수강생 이름 목록인지 타임 목록인지 구분
+                    const isStudentList = ap.some(a => a.program_name === name && a.time_slot === 'free' && a.student_name);
+                    const badgeColor = isStudentList ? '#e67e22' : '#27ae60';
+                    const bgColor    = isStudentList ? '#fef9e7' : '#e8f8f0';
+                    const fgColor    = isStudentList ? '#7d5a00' : '#1a6b3c';
+                    return `<span style="background:${bgColor};color:${fgColor};font-size:.72rem;padding:2px 8px;border-radius:10px;margin-right:3px;margin-bottom:2px;display:inline-block">
+                        ${escHtml(name)}<span style="color:${badgeColor};margin-left:3px">(${items.map(s=>escHtml(s)).join(', ')})</span>
+                    </span>`;
+                }).join('');
             }
             return `
             <div class="list-item" style="flex-wrap:wrap;gap:4px">
@@ -74,51 +86,39 @@ const instructors = {
     async showForm(id) {
         const i = id ? this.data.find(x => x.id === id) : null;
 
-        // 담당 타임 목록: assigned_programs는 이제 객체 배열
-        // 구조: [{ program_id, program_name, time_slot, type, applicant_ids? }, ...]
-        // time_slot이 'free'이면 개인/듀엣(자유시간)
-        const assignedArr = Array.isArray(i?.assigned_programs)
-            ? i.assigned_programs
-            : [];
-        // 기존 문자열 배열 구조 하위호환 (마이그레이션 전 데이터)
-        const isLegacy = assignedArr.length > 0 && typeof assignedArr[0] === 'string';
+        // assigned_programs: 객체 배열
+        // 그룹 수업: { program_id, program_name, time_slot, type }
+        // 개인/듀엣: { program_id, program_name, time_slot:'free', type, application_id, student_name, student_dong, student_ho }
+        const assignedArr = Array.isArray(i?.assigned_programs) ? i.assigned_programs : [];
+        const isLegacy    = assignedArr.length > 0 && typeof assignedArr[0] === 'string';
 
-        // { "program_id|time_slot" → true } 형태로 빠른 조회
-        const assignedSet = new Set(
-            isLegacy ? [] : assignedArr.map(a => `${a.program_id}|${a.time_slot}`)
+        // 그룹 수업 담당 Set: "program_id|time_slot"
+        const assignedSlotSet = new Set(
+            isLegacy ? [] : assignedArr
+                .filter(a => a.time_slot !== 'free')
+                .map(a => `${a.program_id}|${a.time_slot}`)
+        );
+        // 개인/듀엣 담당 Set: "program_id|application_id"
+        const assignedStudentSet = new Set(
+            isLegacy ? [] : assignedArr
+                .filter(a => a.time_slot === 'free' && a.application_id)
+                .map(a => `${a.program_id}|${a.application_id}`)
         );
 
-        // { "program_id|free" → Set<applicant_id> } — 기존 저장된 담당 수강생 복원용
-        const savedApplicantIds = {};
-        if (!isLegacy) {
-            assignedArr.forEach(a => {
-                if (a.time_slot === 'free' && Array.isArray(a.applicant_ids)) {
-                    savedApplicantIds[`${a.program_id}|free`] = new Set(a.applicant_ids);
-                }
-            });
-        }
-
-        // 프로그램+타임 목록 로드
-        let progTimeHtml = '';
-        let loadedProgs = [];
         const cid = getEffectiveComplexId() || i?.complex_id;
-
-        // 자유시간 프로그램별 승인 수강생 캐시 { program_name → [applicant, ...] }
-        const approvedApplicants = {};
+        let progTimeHtml = '';
 
         try {
-            const url = cid ? `/api/programs?complexId=${cid}` : '/api/programs';
-            const res  = await fetch(url);
-            const json = await res.json();
-            // 같은 단지의 프로그램만, 중복 id 제거
+            // 1) 프로그램 목록 로드
+            const progRes  = await fetch(cid ? `/api/programs?complexId=${cid}` : '/api/programs');
+            const progJson = await progRes.json();
             const seen = new Set();
-            loadedProgs = (json.data || []).filter(p => {
+            const loadedProgs = (progJson.data || []).filter(p => {
                 if (!p.name || seen.has(p.id)) return false;
-                seen.add(p.id);
-                return true;
+                seen.add(p.id); return true;
             });
 
-            // 수업 유형 추정: 프로그램명 기준
+            // 수업 유형 추정
             const getType = (name) => {
                 const n = (name||'').toLowerCase();
                 if (n.includes('개인') || n.includes('1:1')) return 'private';
@@ -126,109 +126,123 @@ const instructors = {
                 return 'group';
             };
 
-            // 자유시간(time_slots=[]) 프로그램의 승인 수강생 미리 로드
+            // 2) 개인/듀엣 프로그램이 있으면 승인 수강생 미리 로드
             const freeProgs = loadedProgs.filter(p =>
                 !(Array.isArray(p.time_slots) && p.time_slots.length)
             );
+            // { program_name → [{ id, name, dong, ho, preferred_time }, ...] }
+            const studentsMap = {};
             if (freeProgs.length && cid) {
-                const aRes  = await fetch(`/api/applications?complexId=${encodeURIComponent(cid)}&status=approved&limit=500`);
-                const aJson = await aRes.json();
-                const allApproved = aJson.data || [];
-                freeProgs.forEach(p => {
-                    approvedApplicants[p.name] = allApproved.filter(a => a.program_name === p.name);
-                });
+                try {
+                    const appRes  = await fetch(`/api/applications?complexId=${encodeURIComponent(cid)}&status=approved&limit=500`);
+                    const appJson = await appRes.json();
+                    (appJson.data || []).forEach(a => {
+                        const pn = a.program_name || '';
+                        if (!studentsMap[pn]) studentsMap[pn] = [];
+                        studentsMap[pn].push(a);
+                    });
+                } catch(e2) {
+                    console.warn('[instructor] 수강생 로드 실패:', e2.message);
+                }
             }
 
             if (!loadedProgs.length) {
                 progTimeHtml = '<p style="color:#aaa;font-size:.82rem">등록된 프로그램 없음</p>';
             } else {
                 progTimeHtml = loadedProgs.map(p => {
-                    const slots = Array.isArray(p.time_slots) ? p.time_slots : [];
-                    const pType = getType(p.name);
+                    const slots    = Array.isArray(p.time_slots) ? p.time_slots : [];
+                    const pType    = getType(p.name);
                     const typeLabel = { group:'그룹', private:'개인', duet:'듀엣' }[pType];
-                    const typeBadge = `<span style="font-size:.68rem;padding:1px 6px;border-radius:8px;font-weight:700;margin-left:4px;${pType==='group'?'background:#e8f4fd;color:#2980b9':pType==='private'?'background:#fef9e7;color:#e67e22':'background:#f5eef8;color:#8e44ad'}">${typeLabel}</span>`;
+                    const typeBadge = `<span style="font-size:.68rem;padding:1px 6px;border-radius:8px;font-weight:700;margin-left:4px;${
+                        pType==='group' ? 'background:#e8f4fd;color:#2980b9'
+                        : pType==='private' ? 'background:#fef9e7;color:#e67e22'
+                        : 'background:#f5eef8;color:#8e44ad'}">${typeLabel}</span>`;
+
+                    let bodyHtml;
 
                     if (slots.length) {
-                        // ── 타임 슬롯이 있는 수업 → 슬롯별 체크박스
-                        const slotRows = slots.map(slot => {
-                            const key     = `${p.id}|${slot}`;
-                            const checked = assignedSet.has(key) ? 'checked' : '';
-                            return `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;margin:2px 6px 2px 0;font-size:.82rem;background:#f8f8f8;border:1px solid #e0e0e0;border-radius:6px;padding:3px 8px">
-                                <input type="checkbox" name="iTimeSlot"
-                                    data-prog-id="${p.id}"
-                                    data-prog-name="${escHtml(p.name)}"
-                                    data-slot="${escHtml(slot)}"
-                                    data-type="${pType}"
-                                    ${checked}
-                                    style="cursor:pointer">
-                                <span style="font-weight:600">${slot}</span>
-                            </label>`;
-                        }).join('');
-
-                        return `<div style="padding:8px 0;border-bottom:1px solid #e8f5e9">
-                            <div style="font-size:.85rem;font-weight:700;color:#1a252f;margin-bottom:5px">
-                                ${escHtml(p.name)}${typeBadge}
-                            </div>
-                            <div style="display:flex;flex-wrap:wrap;gap:2px">${slotRows}</div>
-                        </div>`;
+                        // ── 그룹 수업: 타임별 체크박스 ──
+                        bodyHtml = `<div style="display:flex;flex-wrap:wrap;gap:2px">` +
+                            slots.map(slot => {
+                                const checked = assignedSlotSet.has(`${p.id}|${slot}`) ? 'checked' : '';
+                                return `<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;
+                                    margin:2px 4px 2px 0;font-size:.82rem;background:#f8f8f8;
+                                    border:1px solid #e0e0e0;border-radius:6px;padding:3px 9px">
+                                    <input type="checkbox" name="iTimeSlot"
+                                        data-prog-id="${p.id}"
+                                        data-prog-name="${escHtml(p.name)}"
+                                        data-slot="${escHtml(slot)}"
+                                        data-type="${pType}"
+                                        ${checked} style="cursor:pointer">
+                                    <span style="font-weight:600">${slot}</span>
+                                </label>`;
+                            }).join('') + `</div>`;
 
                     } else {
-                        // ── 자유시간 프로그램(개인/듀엣) → 담당 체크박스 + 수강생 지정 목록
-                        const freeKey     = `${p.id}|free`;
-                        const freeChecked = assignedSet.has(freeKey) ? 'checked' : '';
-                        const savedIds    = savedApplicantIds[freeKey] || new Set();
+                        // ── 개인/듀엣: 승인된 수강생 카드 리스트 ──
+                        const students = studentsMap[p.name] || [];
 
-                        const applicants = approvedApplicants[p.name] || [];
-                        const applicantRows = applicants.length
-                            ? applicants.map(ap => {
-                                const apChecked = savedIds.has(ap.id) ? 'checked' : '';
-                                const loc = (ap.dong && ap.ho) ? `${ap.dong}동 ${ap.ho}호`
-                                          : (ap.dong || ap.ho || '');
-                                const timeHint = ap.preferred_time
-                                    ? `<span style="color:#888;font-size:.72rem;margin-left:6px;font-weight:400">${escHtml(ap.preferred_time)}</span>`
-                                    : '';
-                                return `<label style="display:flex;align-items:flex-start;gap:7px;cursor:pointer;padding:6px 9px;border-radius:6px;border:1px solid #e8d5b0;background:#fffdf5;margin-bottom:4px;transition:background .15s" onmouseover="this.style.background='#fff8e1'" onmouseout="this.style.background='#fffdf5'">
-                                    <input type="checkbox" name="iApplicant_${p.id}"
+                        if (!students.length) {
+                            bodyHtml = `<div style="padding:8px 12px;background:#fafafa;border:1px dashed #ddd;
+                                border-radius:7px;font-size:.8rem;color:#999;text-align:center">
+                                <i class="fas fa-info-circle" style="margin-right:4px"></i>
+                                승인된 수강생이 없습니다
+                            </div>`;
+                        } else {
+                            const cards = students.map(st => {
+                                const key     = `${p.id}|${st.id}`;
+                                const checked = assignedStudentSet.has(key) ? 'checked' : '';
+                                const loc     = [st.dong && st.dong+'동', st.ho && st.ho+'호'].filter(Boolean).join(' ');
+                                const timeInfo = st.preferred_time
+                                    ? `<div style="font-size:.72rem;color:#888;margin-top:1px">${escHtml(st.preferred_time)}</div>` : '';
+                                return `<label style="display:flex;align-items:center;gap:9px;cursor:pointer;
+                                    padding:8px 10px;border:1.5px solid ${checked ? '#e67e22' : '#ebebeb'};
+                                    border-radius:8px;margin-bottom:5px;background:${checked ? '#fffbf5' : '#fafafa'};
+                                    transition:border-color .12s,background .12s"
+                                    onmouseenter="this.style.borderColor='#e67e22';this.style.background='#fffbf5'"
+                                    onmouseleave="if(!this.querySelector('input').checked){this.style.borderColor='#ebebeb';this.style.background='#fafafa'}">
+                                    <input type="checkbox" name="iTimeSlot"
                                         data-prog-id="${p.id}"
-                                        data-applicant-id="${ap.id}"
-                                        ${apChecked}
-                                        style="cursor:pointer;margin-top:3px;flex-shrink:0;accent-color:#e67e22">
-                                    <div style="line-height:1.4">
-                                        <span style="font-weight:700;font-size:.84rem">${escHtml(ap.name)}</span>
-                                        ${loc ? `<span style="color:#777;font-size:.78rem;margin-left:5px">${escHtml(loc)}</span>` : ''}
-                                        ${timeHint}
+                                        data-prog-name="${escHtml(p.name)}"
+                                        data-slot="free"
+                                        data-type="${pType}"
+                                        data-app-id="${escHtml(st.id)}"
+                                        data-student-name="${escHtml(st.name||'')}"
+                                        data-student-dong="${escHtml(st.dong||'')}"
+                                        data-student-ho="${escHtml(st.ho||'')}"
+                                        ${checked}
+                                        onchange="(function(cb,lbl){lbl.style.borderColor=cb.checked?'#e67e22':'#ebebeb';lbl.style.background=cb.checked?'#fffbf5':'#fafafa';})(this,this.closest('label'))"
+                                        style="cursor:pointer;width:16px;height:16px;accent-color:#e67e22;flex-shrink:0">
+                                    <div style="flex:1;min-width:0">
+                                        <div style="font-weight:700;font-size:.86rem;color:#1a252f">
+                                            ${escHtml(st.name||'이름 없음')}
+                                            ${loc ? `<span style="font-weight:400;font-size:.75rem;color:#777;margin-left:5px">${escHtml(loc)}</span>` : ''}
+                                        </div>
+                                        ${timeInfo}
                                     </div>
+                                    <span style="flex-shrink:0;font-size:.68rem;padding:2px 7px;border-radius:10px;font-weight:600;${
+                                        pType==='private' ? 'background:#fef9e7;color:#e67e22' : 'background:#f5eef8;color:#8e44ad'}">${typeLabel}</span>
                                 </label>`;
-                            }).join('')
-                            : `<p style="color:#bbb;font-size:.79rem;margin:2px 0 0 2px;font-style:italic">승인된 수강생 없음</p>`;
+                            }).join('');
 
-                        const applicantSection = `<div id="freeApplicants_${p.id}"
-                            style="margin-top:8px;padding:10px 12px;background:#fffbf0;border:1px solid #f0d88a;border-radius:8px;${freeChecked ? '' : 'display:none'}">
-                            <div style="font-size:.78rem;color:#b7770d;font-weight:700;margin-bottom:7px">
-                                <i class="fas fa-users" style="margin-right:4px"></i>담당 수강생 지정
-                                <span style="font-weight:400;color:#aaa;margin-left:5px">이 강사가 담당할 수강생을 선택하세요</span>
-                            </div>
-                            ${applicantRows}
-                        </div>`;
-
-                        return `<div style="padding:8px 0;border-bottom:1px solid #e8f5e9">
-                            <div style="font-size:.85rem;font-weight:700;color:#1a252f;margin-bottom:5px">
-                                ${escHtml(p.name)}${typeBadge}
-                            </div>
-                            <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;margin:2px 6px 2px 0;font-size:.82rem;background:#fef9e7;border:1px solid #f9e6b0;border-radius:6px;padding:4px 11px">
-                                <input type="checkbox" name="iTimeSlot"
-                                    data-prog-id="${p.id}"
-                                    data-prog-name="${escHtml(p.name)}"
-                                    data-slot="free"
-                                    data-type="${pType}"
-                                    ${freeChecked}
-                                    onchange="(function(cb){var sec=document.getElementById('freeApplicants_${p.id}');if(sec)sec.style.display=cb.checked?'block':'none';})(this)"
-                                    style="cursor:pointer;accent-color:#e67e22">
-                                <span style="font-weight:700;color:#b7770d">자유시간 담당</span>
-                            </label>
-                            ${applicantSection}
-                        </div>`;
+                            bodyHtml = `<div>
+                                <div style="font-size:.73rem;color:#888;margin-bottom:7px;display:flex;align-items:center;gap:4px">
+                                    <i class="fas fa-user-check" style="color:#e67e22"></i>
+                                    담당할 수강생을 선택하세요
+                                    <span style="background:#e67e22;color:#fff;font-size:.65rem;font-weight:700;
+                                        padding:1px 6px;border-radius:10px;margin-left:4px">${students.length}명 승인됨</span>
+                                </div>
+                                ${cards}
+                            </div>`;
+                        }
                     }
+
+                    return `<div style="padding:8px 0;border-bottom:1px solid #e8f5e9">
+                        <div style="font-size:.85rem;font-weight:700;color:#1a252f;margin-bottom:6px">
+                            ${escHtml(p.name)}${typeBadge}
+                        </div>
+                        ${bodyHtml}
+                    </div>`;
                 }).join('');
             }
         } catch(e) {
@@ -289,13 +303,13 @@ const instructors = {
                 </div>
             </div>
 
-            <!-- ── 담당 타임 설정 ── -->
+            <!-- ── 담당 타임/수강생 설정 ── -->
             <div class="form-group" style="background:#f0fff4;border:1.5px solid #a9dfbf;border-radius:8px;padding:14px 16px;margin-top:4px">
                 <label style="font-weight:700;color:#333;margin-bottom:4px;display:block">
-                    <i class="fas fa-clock" style="color:#27ae60;margin-right:4px"></i>담당 타임 설정
-                    <span style="font-size:.75rem;font-weight:400;color:#999;margin-left:6px">강사가 직접 담당하는 프로그램·시간대 체크</span>
+                    <i class="fas fa-clock" style="color:#27ae60;margin-right:4px"></i>담당 설정
+                    <span style="font-size:.75rem;font-weight:400;color:#999;margin-left:6px">그룹: 타임 체크 / 개인·듀엣: 담당 수강생 선택</span>
                 </label>
-                <div id="iTimeSlots" style="max-height:260px;overflow-y:auto;padding-right:4px">
+                <div id="iTimeSlots" style="max-height:360px;overflow-y:auto;padding-right:4px">
                     ${progTimeHtml}
                 </div>
             </div>`;
@@ -386,7 +400,8 @@ const instructors = {
 
         try {
             // 담당 타임 체크박스 수집 → 객체 배열로 변환
-            // 구조: [{ program_id, program_name, time_slot, type, applicant_ids? }, ...]
+            // 그룹 수업: { program_id, program_name, time_slot, type }
+            // 개인/듀엣: { program_id, program_name, time_slot:'free', type, application_id, student_name, student_dong, student_ho }
             const assignedPrograms = Array.from(
                 document.querySelectorAll('input[name="iTimeSlot"]:checked')
             ).map(cb => {
@@ -396,11 +411,12 @@ const instructors = {
                     time_slot:    cb.dataset.slot,
                     type:         cb.dataset.type,
                 };
-                // 자유시간 담당인 경우: 체크된 수강생 applicant_ids 수집
-                if (cb.dataset.slot === 'free') {
-                    entry.applicant_ids = Array.from(
-                        document.querySelectorAll(`input[name="iApplicant_${cb.dataset.progId}"]:checked`)
-                    ).map(apCb => apCb.dataset.applicantId);
+                // 개인/듀엣 수강생 배정: data-app-id, data-student-* 포함
+                if (cb.dataset.slot === 'free' && cb.dataset.appId) {
+                    entry.application_id  = cb.dataset.appId;
+                    entry.student_name    = cb.dataset.studentName  || '';
+                    entry.student_dong    = cb.dataset.studentDong  || '';
+                    entry.student_ho      = cb.dataset.studentHo    || '';
                 }
                 return entry;
             });

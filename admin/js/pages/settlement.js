@@ -1749,7 +1749,7 @@ const settlement = {
             // 헤더: 강사명 / 프로그램 / 담당타임 / 수업유형 / 타임별횟수 / 타임당단가 / 인건비
             const data = [
                 [`${monthLabel} 강사 인건비 정산서`], [],
-                ['강사명', '프로그램', '담당 타임', '수업 유형', '월 수업횟수', '타임당 단가(원)', '인건비(원)'],
+                ['강사명', '프로그램', '담당 타임/수강생', '수업 유형', '월 수업횟수', '타임당 단가(원)', '인건비(원)'],
             ];
             const styleRows = []; // { rowIdx, style:'subtotal'|'grand' }
             let rowIdx = 3;
@@ -1777,7 +1777,7 @@ const settlement = {
 
                     let sessions = 0;
                     if (time_slot === 'free') {
-                        // 개인/듀엣 자유시간 → _total 또는 전체 슬롯 합계
+                        // 개인/듀엣: 전체 슬롯 합계 (_total 포함)
                         const pm = slotSessionMap[program_name] || {};
                         sessions = Object.values(pm).reduce((a,b) => a + (Number(b)||0), 0);
                     } else {
@@ -1787,10 +1787,15 @@ const settlement = {
                     const payroll = sessions * rate;
                     instrTotal   += payroll;
 
+                    // 개인/듀엣: 수강생 이름 표시 (application_id 기반)
+                    const studentLabel = (time_slot === 'free' && a.student_name)
+                        ? a.student_name + (a.student_dong ? ` (${a.student_dong}동 ${a.student_ho}호)` : '')
+                        : (time_slot === 'free' ? '자유시간' : time_slot);
+
                     data.push([
                         instr.name,
                         program_name,
-                        time_slot === 'free' ? '자유시간' : time_slot,
+                        studentLabel,
                         typeLabel,
                         sessions,
                         rate,
