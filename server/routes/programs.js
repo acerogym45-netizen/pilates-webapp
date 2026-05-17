@@ -243,8 +243,14 @@ router.post('/auto-toggle', async (req, res) => {
         const { complexId } = req.body;
         // 빈 문자열이나 비UUID 값이 들어오면 무시 (UUID 타입 오류 방지)
         const validComplexId = complexId && /^[0-9a-f-]{36}$/i.test(complexId) ? complexId : null;
-        let query = sb.from('programs').update({ is_active: activateTarget }).neq('id', '');
-        if (validComplexId) query = query.eq('complex_id', validComplexId);
+        // .neq('id','') 제거 — UUID 컬럼에 빈 문자열 비교 시 syntax 오류 발생
+        let query = sb.from('programs').update({ is_active: activateTarget });
+        if (validComplexId) {
+            query = query.eq('complex_id', validComplexId);
+        } else {
+            // 전체 행 업데이트 보장을 위해 is_active 컬럼 존재 여부 필터
+            query = query.not('id', 'is', null);
+        }
 
         const { data, error } = await query.select('id, name, is_active, complex_id');
         if (error) throw error;
