@@ -216,8 +216,9 @@ app.get('*', async (req, res) => {
         .replace('</head>', `${ogBlock}\n</head>`);
 
     res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-    // 크롤러 캐시: 1분(공유캐시 10분) — 단지명이 바뀌는 경우 대비 짧게 설정
-    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=600');
+    // 캐시 완전 비활성화 — 크롤러(네이버 QR 등)가 항상 최신 단지명을 가져가도록
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
     res.send(html);
 });
 
