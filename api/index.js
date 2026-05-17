@@ -162,10 +162,8 @@ app.get('/admin/*', (req, res) => {
 });
 
 // ── 루트: OG 태그 동적 삽입 ──────────────────────────────────────────────────
-// 지원 URL 형식:
-//   ① /apt-sclass          (경로 방식 — 네이버 QR 권장)
-//   ② /?complex=apt-sclass (쿼리파라미터 방식 — 기존 호환)
-// 크롤러가 쿼리스트링을 무시하는 경우를 대비해 경로 방식을 우선 처리
+// ?complex= 파라미터로 단지명 조회 → <title> 및 OG 메타태그 치환
+// 네이버 QR, 카카오톡 링크 미리보기 등 크롤러가 올바른 단지명을 읽도록 함
 app.get('*', async (req, res) => {
     const indexPath = path.join(ROOT_DIR, 'index.html');
     let html;
@@ -181,13 +179,7 @@ app.get('*', async (req, res) => {
     let pageDesc    = '수업 신청, 취소, 변경을 간편하게 처리하세요.';
     const pageUrl   = `https://apt-webapp.vercel.app${req.originalUrl}`;
 
-    // ① 경로 방식 우선: /apt-sclass → complexCode = 'apt-sclass'
-    // ② 쿼리파라미터 방식 폴백: ?complex=apt-sclass
-    const pathMatch = req.path.match(/^\/([a-zA-Z0-9_-]+)\/?$/);
-    const complexCode = (pathMatch && pathMatch[1] !== 'admin')
-        ? pathMatch[1]
-        : req.query.complex;
-
+    const complexCode = req.query.complex;
     if (complexCode) {
         try {
             const sb = getSupabase();
@@ -224,9 +216,8 @@ app.get('*', async (req, res) => {
         .replace('</head>', `${ogBlock}\n</head>`);
 
     res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-    // 캐시 완전 비활성화 — 크롤러(네이버 QR 등)가 항상 최신 단지명을 가져가도록
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
+    // 크롤러 캐시: 1분(공유캐시 10분) — 단지명이 바뀌는 경우 대비 짧게 설정
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=600');
     res.send(html);
 });
 
