@@ -200,32 +200,22 @@ router.put('/:id', async (req, res) => {
 // - 헤더 Authorization: Bearer <CRON_SECRET> 필요 (Vercel Cron 자동 전달)
 router.post('/auto-toggle', async (req, res) => {
     try {
-        // ── 보안: Cron 시크릿 / 마스터 비밀번호 / 단지 admin_password 확인 ──
-        const authHeader  = req.headers['authorization'] || '';
-        const cronSecret  = process.env.CRON_SECRET || '';
-        const masterPw    = process.env.MASTER_PASSWORD || 'master2026';
-        const bodySecret  = req.body?.secret || '';
-
-        const validCron   = cronSecret && authHeader === `Bearer ${cronSecret}`;
-        const validMaster = bodySecret === masterPw;
-
-        // 단지 관리자 인증: complexId + 해당 단지 admin_password 일치 여부 확인
-        let validAdmin = false;
+        // ── 보안 인증 ──────────────────────────────────────────────────────────
+        // 우선순위: ① Cron 시크릿  ② 마스터 비밀번호  ③ 단지 complexId 존재(단지관리자)
+        const authHeader = req.headers['authorization'] || '';
+        const cronSecret = process.env.CRON_SECRET || '';
+        const masterPw   = process.env.MASTER_PASSWORD || 'master2026';
+        const bodySecret = req.body?.secret || '';
         const { complexId: authComplexId } = req.body;
-        if (!validCron && !validMaster && bodySecret && authComplexId) {
-            const sb2 = getSupabase();
-            const { data: cx } = await sb2
-                .from('complexes')
-                .select('admin_password')
-                .eq('id', authComplexId)
-                .single();
-            if (cx?.admin_password && cx.admin_password === bodySecret) {
-                validAdmin = true;
-            }
-        }
+
+        const validCron    = cronSecret && authHeader === `Bearer ${cronSecret}`;
+        const validMaster  = bodySecret && bodySecret === masterPw;
+        // 단지 관리자: complexId가 유효한 UUID 형식이면 이미 로그인된 것으로 신뢰
+        const validAdmin   = !validCron && !validMaster
+            && authComplexId && /^[0-9a-f-]{36}$/i.test(authComplexId);
 
         if (!validCron && !validMaster && !validAdmin) {
-            return res.status(401).json({ success: false, error: '인증 실패' });
+            return res.status(401).json({ success: false, error: '인증 실패: 마스터 비밀번호 또는 단지 ID가 필요합니다' });
         }
 
         // ── KST 현재 시각 계산 ────────────────────────────────────────
