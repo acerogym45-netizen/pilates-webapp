@@ -153,33 +153,11 @@ app.get('/:file([^/]+\\.html)', (req, res) => {
     }
 });
 
-// ── /admin HTTP Basic Auth 미들웨어 ──────────────────────────────────────────
-function basicAuth(req, res, next) {
-    // 환경변수 미설정 시 인증 우회 (로컬 개발 편의)
-    const BASIC_USER = process.env.ADMIN_BASIC_USER;
-    const BASIC_PASS = process.env.ADMIN_BASIC_PASS;
-    if (!BASIC_USER || !BASIC_PASS) return next();
-
-    const authHeader = req.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Basic ')) {
-        const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
-        const colonIdx = decoded.indexOf(':');
-        if (colonIdx !== -1) {
-            const user = decoded.slice(0, colonIdx);
-            const pass = decoded.slice(colonIdx + 1);
-            if (user === BASIC_USER && pass === BASIC_PASS) return next();
-        }
-    }
-
-    res.set('WWW-Authenticate', 'Basic realm="Admin Area"');
-    return res.status(401).send('관리자 인증이 필요합니다.');
-}
-
 // ── SPA 라우팅 ────────────────────────────────────────────────────────────────
-app.get('/admin', basicAuth, (req, res) => {
+app.get('/admin', (req, res) => {
     res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));
 });
-app.get('/admin/*', basicAuth, (req, res) => {
+app.get('/admin/*', (req, res) => {
     res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));
 });
 
