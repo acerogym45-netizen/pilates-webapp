@@ -39,17 +39,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     await initializeComplexContext();
     console.log('✅ Complex context initialized');
     
-    // 2. URL action 처리 (대기 수락 등)
-    const _urlParams = new URLSearchParams(window.location.search);
-    if (_urlParams.get('action') === 'accept-waiting') {
-        const _waitingId = _urlParams.get('id');
-        if (_waitingId) {
-            // 약간 지연 후 모달 표시 (페이지 렌더 완료 후)
-            setTimeout(() => showAcceptWaitingModal(_waitingId), 600);
-        }
-    }
-    
-    // 3. 나머지 초기화
+    // 2. 나머지 초기화
     setupEventListeners();
     setMinDate();
     setSignatureDate();
@@ -1193,66 +1183,17 @@ async function loadPublicInquiries() {
 // Show cancellation form modal (기간 체크 추가)
 
 /* ═══════════════════════════════════════════════════════════════
-   신청기간 판단 헬퍼 — 단지 커스텀 기간 우선, 없으면 22~26일 기본값
-   반환: { isOpen: bool, label: string }
+   내 신청 취소·변경 탭바 초기화 (페이지 로드 시)
    ═══════════════════════════════════════════════════════════════ */
-let _applyPeriodCache = null; // { isOpen, label, fetchedAt }
-let _applyPeriodFetching = false;
-
-async function getApplyPeriodStatus() {
-    const now = new Date();
-
-    // 캐시 유효 시간: 60초
-    if (_applyPeriodCache && (now - _applyPeriodCache.fetchedAt) < 60000) {
-        return _applyPeriodCache;
-    }
-
-    const complexId = complexContext?.getComplexId?.();
-    if (complexId && !_applyPeriodFetching) {
-        _applyPeriodFetching = true;
-        try {
-            const res  = await fetch(`/api/complexes/${complexId}/apply-period`);
-            const json = await res.json();
-            if (json.success) {
-                const d = json.data;
-                let label = '매월 22일 09시 ~ 26일 09시';
-                if (d.apply_period_enabled && d.apply_start && d.apply_end) {
-                    const fmt = (s) => {
-                        const kd = new Date(new Date(s).getTime() + 9*60*60*1000);
-                        return `${kd.getUTCFullYear()}년 ${kd.getUTCMonth()+1}월 ${kd.getUTCDate()}일 ${String(kd.getUTCHours()).padStart(2,'0')}:${String(kd.getUTCMinutes()).padStart(2,'0')}`;
-                    };
-                    label = `${fmt(d.apply_start)} ~ ${fmt(d.apply_end)}`;
-                } else if (d.apply_period_enabled) {
-                    label = '상시 개방';
-                }
-                _applyPeriodCache = { isOpen: d.is_open, label, mode: d.mode, fetchedAt: now };
-                _applyPeriodFetching = false;
-                return _applyPeriodCache;
-            }
-        } catch(_) {}
-        _applyPeriodFetching = false;
-    }
-
-    // 폴백: 기본 22~26일 로직
-    const kst  = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-    const day  = kst.getUTCDate();
-    const hour = kst.getUTCHours();
-    const mon  = kst.getUTCMonth() + 1;
+function initManageTabBar() {
+    const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+    const day  = nowKst.getUTCDate();
+    const hour = nowKst.getUTCHours();
+    // 신청 취소·변경 가능 기간: 매월 22일 09:00 ~ 26일 09:00 KST
     const isOpen =
         (day === 22 && hour >= 9) ||
         (day > 22 && day < 26)   ||
         (day === 26 && hour < 9);
-    return { isOpen, label: `매월 22일 09시 ~ 26일 09시`, mode: 'auto', fetchedAt: now };
-}
-
-// 신청기간 캐시 초기화 (단지 변경 등)
-function invalidateApplyPeriodCache() { _applyPeriodCache = null; }
-
-/* ═══════════════════════════════════════════════════════════════
-   내 신청 취소·변경 탭바 초기화 (페이지 로드 시)
-   ═══════════════════════════════════════════════════════════════ */
-async function initManageTabBar() {
-    const { isOpen } = await getApplyPeriodStatus();
 
     // ① 탭바 버튼 스타일
     const tabBtn = document.getElementById('manageTabBtn');
@@ -1285,7 +1226,7 @@ async function initManageTabBar() {
 /* ═══════════════════════════════════════════════════════════════
    내 신청 취소·변경 (매월 22일 09:00 ~ 26일 09:00 KST)
    ═══════════════════════════════════════════════════════════════ */
-async function showMyManageModal() {
+function showMyManageModal() {
     const modal = document.getElementById('myManageModal');
     if (!modal) return;
     // 입력 초기화
@@ -1295,21 +1236,27 @@ async function showMyManageModal() {
     });
     document.getElementById('manageResult').innerHTML = '';
 
-    // 기간 배너 표시 (커스텀 기간 또는 22~26일 기본값)
-    const { isOpen, label } = await getApplyPeriodStatus();
+    // 기간 배너 표시 (매월 22일 09:00 ~ 26일 09:00 KST)
+    const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+    const day  = nowKst.getUTCDate();
+    const hour = nowKst.getUTCHours();
     const banner = document.getElementById('managePeriodBanner');
     if (banner) {
+        const isOpen =
+            (day === 22 && hour >= 9) ||
+            (day > 22 && day < 26)   ||
+            (day === 26 && hour < 9);
         banner.innerHTML = isOpen
             ? `<div style="background:#dcfce7;border:1px solid #22c55e;border-radius:8px;
                            padding:10px 13px;font-size:.82rem;color:#166534;margin-bottom:8px">
                    <i class="fas fa-calendar-check"></i>
-                   <strong> 신청 취소·변경 가능 기간입니다 (${label})</strong>
+                   <strong> 신청 취소·변경 가능 기간입니다 (매월 22일 09시 ~ 26일 09시)</strong>
                </div>`
             : `<div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;
                            padding:10px 13px;font-size:.82rem;color:#92400e;margin-bottom:8px">
                    <i class="fas fa-clock"></i>
-                   <strong> 신청 취소·변경 기간이 아닙니다</strong><br>
-                   <span style="font-size:.78rem">신청 가능 기간: ${label} · 현재는 조회만 가능합니다</span>
+                   <strong> 신청 취소·변경은 매월 22일 09시 ~ 26일 09시에만 가능합니다</strong><br>
+                   <span style="font-size:.78rem">현재는 조회만 가능합니다</span>
                </div>`;
     }
 
@@ -1361,8 +1308,14 @@ async function loadMyManageList() {
             return;
         }
 
-        const { isOpen, label: periodLabel } = await getApplyPeriodStatus();
-        // 취소·변경 가능 기간: 커스텀 기간 또는 매월 22~26일
+        const nowKst  = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+        const dayKst  = nowKst.getUTCDate();
+        const hourKst = nowKst.getUTCHours();
+        // 취소·변경 가능 기간: 매월 22일 09:00 ~ 26일 09:00 KST
+        const isOpen =
+            (dayKst === 22 && hourKst >= 9) ||
+            (dayKst > 22 && dayKst < 26)   ||
+            (dayKst === 26 && hourKst < 9);
 
         const fmtTime = t => {
             if (!t) return '-';
@@ -1452,8 +1405,8 @@ async function loadMyManageList() {
                             </button>
                         </div>` : `
                         <div style="text-align:center;font-size:.78rem;color:#9ca3af;padding:4px 0">
-                            <i class="fas fa-lock"></i> 신청 철회·변경 기간이 아닙니다 (${periodLabel})<br>
-                            <span style="font-size:.72rem;color:#c0c0c0">※ 익월 해지신청은 <strong>해지 신청 탭</strong>을 통하여 해지 신청 기간에 접수하세요</span>
+                            <i class="fas fa-lock"></i> 신청 철회·변경은 매월 22일 09시 ~ 26일 09시에 가능합니다<br>
+                            <span style="font-size:.72rem;color:#c0c0c0">※ 익월 해지신청은 <strong>해지 신청 탭</strong>을 통하여 매월 22일 09시~26일 09시 해지 신청 기간에 접수하세요</span>
                         </div>`}
                     </div>`;
                 }).join('')}
@@ -1876,42 +1829,77 @@ async function cancelWaitingApplication(appId, programName) {
 }
 
 // ===== 접수·해지 기간 배너 =====
-async function renderPeriodBanner() {
+function renderPeriodBanner() {
     const banner = document.getElementById('periodBanner');
     if (!banner) return;
 
-    const { isOpen, label } = await getApplyPeriodStatus();
     const now  = new Date();
     const kst  = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const day  = kst.getUTCDate();
     const mon  = kst.getUTCMonth() + 1;
 
-    if (isOpen) {
+    const hour = kst.getUTCHours();
+
+    // 등록 접수 기간 = 해지 신청 기간: 매월 22일 09:00 ~ 26일 09:00 KST (시간 단위 정밀 체크)
+    const isEnrollPeriod =
+        (day === 22 && hour >= 9) ||
+        (day > 22 && day < 26)   ||
+        (day === 26 && hour < 9);
+    const isCancelPeriod = isEnrollPeriod; // 동일 기간
+
+    if (isEnrollPeriod) {
         banner.innerHTML = `
             <div class="period-banner-active period-banner-enroll">
                 <i class="fas fa-calendar-check" style="font-size:1.2rem"></i>
-                <span>📝 <strong>${mon}월 등록 접수 · 해지 신청 기간입니다</strong> (${label}) — 신청 및 해지는 이 기간에만 가능합니다!</span>
+                <span>📝 <strong>${mon}월 등록 접수 · 해지 신청 기간입니다</strong> (${mon}월 22일 09시 ~ 26일 09시) — 신청 및 해지는 이 기간에만 가능합니다!</span>
+            </div>`;
+    } else if (false) { // isCancelPeriod는 isEnrollPeriod와 동일하므로 별도 분기 불필요
+        const nextMon = mon === 12 ? 1 : mon + 1;
+        banner.innerHTML = `
+            <div class="period-banner-active period-banner-cancel">
+                <i class="fas fa-exclamation-triangle" style="font-size:1.2rem"></i>
+                <span>⚠️ <strong>해지 신청 기간입니다</strong> (${mon}월 22일 09시 ~ 26일 09시) — 해지를 원하시면 아래 버튼을 눌러 신청하세요.<br>
+                <small style="font-weight:400;opacity:.85">당월 정상 수강 후 ${nextMon}월부터 해지 적용 · 기간 외 접수 불가</small></span>
             </div>`;
     } else {
+        // 기간 아님 → 다음 기간 안내
+        let nextLabel = '';
+        const isBeforeCancel = day < 22 || (day === 22 && hour < 9);
+        const isAfterCancel  = day > 26 || (day === 26 && hour >= 9);
+        if (isBeforeCancel) {
+            // 이번달 22일 09시가 아직 안 됨
+            nextLabel = `다음 등록 접수 · 해지 신청 기간: <strong>${mon}월 22일 09시 ~ 26일 09시</strong>`;
+        } else if (isAfterCancel) {
+            const nm = mon === 12 ? 1 : mon + 1;
+            nextLabel = `다음 등록 접수 · 해지 신청 기간: <strong>${nm}월 22일 09시 ~ 26일 09시</strong>`;
+        } else {
+            nextLabel = `다음 등록 접수 · 해지 신청 기간: <strong>${mon}월 22일 09시 ~ 26일 09시</strong>`;
+        }
         banner.innerHTML = `
             <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;
                         background:#f9fafb;border:1px solid #e5e7eb;font-size:.81rem;color:#6b7280">
                 <i class="fas fa-calendar-alt"></i>
-                <span>다음 등록 접수 · 해지 신청 기간: <strong>${label}</strong></span>
+                <span>${nextLabel}</span>
             </div>`;
     }
 }
 
 async function showCancellationForm() {
-    // === 해지 접수 기간 체크 (complex_apply_settings 우선 → 단지기간 → 22~26일) ===
-    const { isOpen: isInCancelPeriod, label: cancelLabel } = await getApplyPeriodStatus();
+    // === 해지 접수 기간 체크 (매월 22일 09:00 ~ 26일 09:00 KST만 가능) ===
     const now = new Date();
-    const kstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-    const currentMonth = kstDate.getUTCMonth() + 1;
+    const kstOffset = 9 * 60 * 60 * 1000;
+    const kstDate = new Date(now.getTime() + kstOffset);
     const currentDay   = kstDate.getUTCDate();
     const currentHour  = kstDate.getUTCHours();
+    const currentMonth = kstDate.getUTCMonth() + 1;
+
+    const isInCancelPeriod =
+        (currentDay === 22 && currentHour >= 9) ||
+        (currentDay > 22 && currentDay < 26)    ||
+        (currentDay === 26 && currentHour < 9);
 
     if (!isInCancelPeriod) {
-        showCancellationPeriodWarning(currentMonth, currentDay, currentHour, cancelLabel);
+        showCancellationPeriodWarning(currentMonth, currentDay, currentHour);
         return;
     }
 
@@ -2175,16 +2163,16 @@ function showToastMain(msg, type = 'success') {
 }
 
 // 🆕 Show cancellation period warning
-function showCancellationPeriodWarning(currentMonth, currentDay, currentHour = 0, periodLabel = null) {
+function showCancellationPeriodWarning(currentMonth, currentDay, currentHour = 0) {
     const modal = document.getElementById('cancellationPeriodWarningModal');
     const content = document.getElementById('cancellationPeriodWarningContent');
+    // 26일 09시 이후면 다음달 22일, 그렇지 않으면 이번달 22일
     const isAfterClose = currentDay > 26 || (currentDay === 26 && currentHour >= 9);
     const nextMonth = isAfterClose ? (currentMonth === 12 ? 1 : currentMonth + 1) : currentMonth;
     const hourStr = String(currentHour).padStart(2, '0');
-    const nextPeriodLabel = periodLabel || `${nextMonth}월 22일 09:00 ~ ${nextMonth}월 26일 09:00`;
     content.innerHTML = `
         <p><strong>현재 날짜:</strong> ${currentMonth}월 ${currentDay}일 ${hourStr}시 (한국시간)</p>
-        <p><strong>신청 가능 기간:</strong> ${nextPeriodLabel}</p>
+        <p><strong>다음 접수 기간:</strong> ${nextMonth}월 22일 09:00 ~ ${nextMonth}월 26일 09:00</p>
     `;
     modal.classList.add('active');
 }
@@ -2256,12 +2244,6 @@ function displayNotices(notices) {
                 <div class="notice-content">
                     ${escapeHtml(notice.content || '')}
                 </div>
-                ${notice.image_url ? `
-                <div class="notice-image">
-                    <img src="${notice.image_url}" alt="공지 이미지"
-                         onclick="notices_openImageModal('${notice.image_url}')"
-                         style="max-width:100%;border-radius:8px;cursor:pointer;margin-top:8px">
-                </div>` : ''}
                 <div class="notice-date">
                     <i class="fas fa-calendar"></i> ${kstDateStr(notice.created_at)}
                 </div>
@@ -2270,42 +2252,7 @@ function displayNotices(notices) {
     }).join('');
 }
 
-// ===== NOTICE IMAGE MODAL =====
-
-// 공지사항 이미지 확대 보기
-function notices_openImageModal(imageUrl) {
-    // 기존 모달이 있으면 제거
-    const existing = document.getElementById('noticeImgModal');
-    if (existing) existing.remove();
-
-    const overlay = document.createElement('div');
-    overlay.id = 'noticeImgModal';
-    overlay.style.cssText = [
-        'position:fixed', 'inset:0', 'z-index:9999',
-        'background:rgba(0,0,0,.85)', 'display:flex',
-        'align-items:center', 'justify-content:center',
-        'padding:20px', 'cursor:zoom-out'
-    ].join(';');
-    overlay.innerHTML = `
-        <div style="position:relative;max-width:90vw;max-height:90vh">
-            <img src="${imageUrl}" alt="공지 이미지"
-                 style="max-width:100%;max-height:85vh;border-radius:8px;display:block">
-            <button onclick="document.getElementById('noticeImgModal').remove()"
-                    style="position:absolute;top:-14px;right:-14px;width:32px;height:32px;
-                           border-radius:50%;border:none;background:#fff;color:#333;
-                           font-size:1.1rem;cursor:pointer;line-height:32px;text-align:center;
-                           box-shadow:0 2px 8px rgba(0,0,0,.3)">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>`;
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) overlay.remove();
-    });
-    document.body.appendChild(overlay);
-}
-
 // ===== LOAD PROGRAMS =====
-
 
 // Load programs from database
 async function loadPrograms() {
@@ -2783,286 +2730,5 @@ async function submitRefundRequest() {
         alert('접수 중 오류가 발생했습니다: ' + e.message);
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> 환불 신청 접수'; }
-    }
-}
-
-/* ════════════════════════════════════════════════════════════════
-   시간표 모달
-════════════════════════════════════════════════════════════════ */
-async function showTimetableModal() {
-    // 모달이 없으면 동적 생성
-    let modal = document.getElementById('timetableModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'timetableModal';
-        modal.className = 'modal-overlay';
-        modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto;padding:12px;box-sizing:border-box';
-        modal.innerHTML = `
-            <div style="background:#fff;border-radius:16px;max-width:720px;width:100%;margin:auto;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.3)">
-                <!-- 헤더 -->
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff">
-                    <span style="font-size:1rem;font-weight:800;display:flex;align-items:center;gap:8px">
-                        <i class="fas fa-table"></i> 시간표
-                    </span>
-                    <div style="display:flex;align-items:center;gap:8px">
-                        <button id="timetableDownloadBtn" onclick="downloadTimetableImage()" style="display:none;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:5px 12px;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer">
-                            <i class="fas fa-download"></i> 이미지 저장
-                        </button>
-                        <button onclick="closeTimetableModal()" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1;padding:2px 4px">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                </div>
-                <!-- 본문 -->
-                <div id="timetableModalBody" style="padding:16px;min-height:140px;display:flex;align-items:center;justify-content:center">
-                    <span style="color:#999;font-size:.9rem"><i class="fas fa-spinner fa-spin"></i> 불러오는 중…</span>
-                </div>
-            </div>`;
-        modal.addEventListener('click', (e) => { if (e.target === modal) closeTimetableModal(); });
-        document.body.appendChild(modal);
-    }
-
-    modal.style.display = 'block';
-    document.body.style.overflow = 'hidden';
-
-    // 다운로드 버튼 초기 숨김
-    const dlBtn = document.getElementById('timetableDownloadBtn');
-    if (dlBtn) dlBtn.style.display = 'none';
-    window._timetableUrl = null;
-
-    const body = document.getElementById('timetableModalBody');
-    try {
-        const complexCode = complexContext?.getComplexCode?.() || '';
-        if (!complexCode) {
-            body.innerHTML = `<p style="color:#999;font-size:.9rem;text-align:center">단지 정보를 불러올 수 없습니다</p>`;
-            return;
-        }
-        const res  = await fetch(`/api/complexes/timetable?code=${encodeURIComponent(complexCode)}`);
-        const json = await res.json();
-
-        if (!json.success || !json.timetable_url) {
-            body.innerHTML = `
-                <div style="text-align:center;padding:24px 0;color:#666">
-                    <i class="fas fa-table" style="font-size:2.5rem;color:#ccc;display:block;margin-bottom:12px"></i>
-                    <p style="font-size:.95rem;font-weight:600;margin:0 0 6px">등록된 시간표가 없습니다</p>
-                    <p style="font-size:.82rem;color:#999;margin:0">관리자에게 문의해주세요</p>
-                </div>`;
-            return;
-        }
-
-        const url   = json.timetable_url;
-        const isPdf = url.startsWith('data:application/pdf') || url.toLowerCase().includes('.pdf');
-
-        window._timetableUrl = url;
-
-        if (isPdf) {
-            // PDF → iframe으로 브라우저 내 바로 보기
-            // data URL이면 blob으로 변환해 iframe에 주입
-            let iframeSrc = url;
-            if (url.startsWith('data:application/pdf')) {
-                const byteStr = atob(url.split(',')[1]);
-                const arr = new Uint8Array(byteStr.length);
-                for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
-                const blob = new Blob([arr], { type: 'application/pdf' });
-                iframeSrc  = URL.createObjectURL(blob);
-                window._timetableBlobUrl = iframeSrc;
-            }
-            body.style.padding = '0';
-            body.style.display = 'block';
-            body.innerHTML = `
-                <iframe src="${iframeSrc}" style="width:100%;height:75vh;border:none;display:block;border-radius:0 0 16px 16px"
-                        title="시간표 PDF"></iframe>
-                <div style="padding:8px 16px 12px;text-align:center;background:#f9f9f9;border-top:1px solid #eee">
-                    <a href="${iframeSrc}" download="시간표.pdf"
-                       style="display:inline-flex;align-items:center;gap:6px;padding:7px 20px;background:#e74c3c;color:#fff;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:700">
-                        <i class="fas fa-file-pdf"></i> PDF 다운로드
-                    </a>
-                </div>`;
-        } else {
-            // 이미지 → 전체 표시 + 헤더 다운로드 버튼 활성화
-            body.style.padding = '12px';
-            body.style.display = 'block';
-            body.innerHTML = `
-                <div style="text-align:center">
-                    <img id="timetableImg" src="${url}" alt="시간표"
-                         style="max-width:100%;border-radius:10px;border:1px solid #eee;display:block;margin:0 auto"
-                         onerror="this.style.display='none';document.getElementById('timetableImgErr').style.display='block'">
-                    <div id="timetableImgErr" style="display:none;color:#e74c3c;font-size:.85rem;padding:20px">이미지를 불러올 수 없습니다</div>
-                    <p style="font-size:.75rem;color:#bbb;margin:8px 0 0">상단 <b>이미지 저장</b> 버튼 또는 이미지를 꾹 눌러서 저장할 수 있습니다</p>
-                </div>`;
-            if (dlBtn) dlBtn.style.display = '';
-        }
-    } catch(e) {
-        body.innerHTML = `<p style="color:#e74c3c;font-size:.85rem;text-align:center">불러오기 실패: ${e.message}</p>`;
-    }
-}
-
-function closeTimetableModal() {
-    const modal = document.getElementById('timetableModal');
-    if (modal) modal.style.display = 'none';
-    document.body.style.overflow = '';
-    // blob URL 해제
-    if (window._timetableBlobUrl) {
-        URL.revokeObjectURL(window._timetableBlobUrl);
-        window._timetableBlobUrl = null;
-    }
-}
-
-// 이미지 다운로드 (헤더 버튼)
-function downloadTimetableImage() {
-    const url = window._timetableUrl;
-    if (!url) return;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '시간표.jpg';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-}
-
-// ══════════════════════════════════════════════════════════════════════
-// 대기 수락 모달 (문자 링크 → 입주민 페이지 → 수락 버튼)
-// URL: /?complex=CODE&action=accept-waiting&id=APPLICATION_ID
-// ══════════════════════════════════════════════════════════════════════
-async function showAcceptWaitingModal(applicationId) {
-    // 신청 정보 조회
-    let appData = null;
-    try {
-        const res  = await fetch(`/api/applications/${applicationId}`);
-        const json = await res.json();
-        if (json.success) appData = json.data;
-    } catch(e) {}
-
-    // 만료 여부 사전 체크
-    if (appData && appData.waiting_expires_at) {
-        const expiresAt = new Date(appData.waiting_expires_at);
-        const now       = new Date();
-        if (now > expiresAt) {
-            showModal(
-                '대기 시간 초과',
-                `<div style="text-align:center;padding:20px 0">
-                    <i class="fas fa-clock" style="font-size:3rem;color:#dc2626;margin-bottom:16px;display:block"></i>
-                    <p style="font-size:1rem;color:#374151;margin-bottom:8px">대기 응답 시간이 초과되었습니다.</p>
-                    <p style="font-size:.88rem;color:#6b7280">다음 기회에 다시 신청해 주세요.</p>
-                </div>`,
-                null, null, true
-            );
-            return;
-        }
-    }
-
-    // 남은 시간 계산
-    let timeLeftText = '';
-    if (appData?.waiting_expires_at) {
-        const ms   = new Date(appData.waiting_expires_at) - new Date();
-        const mins = Math.max(0, Math.floor(ms / 60000));
-        const hrs  = Math.floor(mins / 60);
-        const rem  = mins % 60;
-        timeLeftText = hrs > 0
-            ? `<span style="color:#dc2626;font-weight:700">${hrs}시간 ${rem}분</span> 남음`
-            : `<span style="color:#dc2626;font-weight:700">${rem}분</span> 남음`;
-    }
-
-    const programName   = appData?.program_name   || '';
-    const preferredTime = appData?.preferred_time  || '';
-    const waitingOrder  = appData?.waiting_order   || '';
-
-    const body = `
-    <div style="text-align:center;padding:8px 0 16px">
-        <i class="fas fa-bell" style="font-size:2.8rem;color:#f59e0b;margin-bottom:14px;display:block"></i>
-        <p style="font-size:1.05rem;font-weight:700;color:#111827;margin-bottom:6px">
-            수강 자리가 났습니다!
-        </p>
-        <p style="font-size:.88rem;color:#6b7280;margin-bottom:18px">
-            아래 내용을 확인하고 수락해 주세요.
-        </p>
-        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:14px;text-align:left">
-            <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-                <span style="color:#6b7280;font-size:.85rem">프로그램</span>
-                <strong style="font-size:.9rem">${programName}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-                <span style="color:#6b7280;font-size:.85rem">시간대</span>
-                <strong style="font-size:.9rem">${preferredTime}</strong>
-            </div>
-            <div style="display:flex;justify-content:space-between">
-                <span style="color:#6b7280;font-size:.85rem">대기 순번</span>
-                <strong style="font-size:.9rem">${waitingOrder}번</strong>
-            </div>
-        </div>
-        ${timeLeftText ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">응답 기한: ${timeLeftText}</p>` : ''}
-        <div style="margin-bottom:4px">
-            <label style="font-size:.85rem;color:#374151;display:block;text-align:left;margin-bottom:6px">
-                <i class="fas fa-lock" style="font-size:.8rem"></i> 본인 확인: 전화번호 뒷 4자리
-            </label>
-            <input type="number" id="acceptWaitingPhone4"
-                   placeholder="숫자 4자리 입력"
-                   maxlength="4" inputmode="numeric"
-                   style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:1rem;text-align:center;box-sizing:border-box">
-        </div>
-    </div>`;
-
-    const footer = `
-        <button class="btn-secondary" onclick="closeModal()">취소</button>
-        <button class="btn-primary" onclick="confirmAcceptWaiting('${applicationId}')"
-                style="background:#10b981">
-            <i class="fas fa-check-circle"></i> 수락하기
-        </button>`;
-
-    showModal(
-        '<i class="fas fa-bell" style="color:#f59e0b"></i> 대기 수락',
-        body, null, footer, true
-    );
-
-    // 포커스
-    setTimeout(() => {
-        const inp = document.getElementById('acceptWaitingPhone4');
-        if (inp) inp.focus();
-    }, 300);
-}
-
-async function confirmAcceptWaiting(applicationId) {
-    const phone4El = document.getElementById('acceptWaitingPhone4');
-    const phone4   = (phone4El?.value || '').replace(/\D/g, '');
-    if (!/^\d{4}$/.test(phone4)) {
-        alert('전화번호 뒷 4자리를 입력해 주세요.');
-        return;
-    }
-
-    try {
-        const res  = await fetch(`/api/applications/${applicationId}/accept-waiting`, {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ phone4 }),
-        });
-        const json = await res.json();
-
-        if (json.success) {
-            closeModal();
-            // 성공 모달
-            showModal(
-                '수락 완료!',
-                `<div style="text-align:center;padding:20px 0">
-                    <i class="fas fa-check-circle" style="font-size:3rem;color:#10b981;margin-bottom:16px;display:block"></i>
-                    <p style="font-size:1rem;font-weight:700;color:#111827;margin-bottom:8px">
-                        수강 신청이 확정되었습니다!
-                    </p>
-                    <p style="font-size:.88rem;color:#6b7280">
-                        ${json.data?.program_name || ''} ${json.data?.preferred_time || ''}<br>
-                        수강을 환영합니다 🎉
-                    </p>
-                </div>`,
-                null, `<button class="btn-primary" onclick="closeModal()">확인</button>`, true
-            );
-            // URL 파라미터 정리
-            const url = new URL(window.location.href);
-            url.searchParams.delete('action');
-            url.searchParams.delete('id');
-            window.history.replaceState({}, '', url.toString());
-        } else {
-            alert(json.error || '수락 처리 중 오류가 발생했습니다.');
-        }
-    } catch(e) {
-        alert('수락 처리 중 오류: ' + e.message);
     }
 }
