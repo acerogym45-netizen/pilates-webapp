@@ -30,163 +30,12 @@ const programs = {
                     <button class="btn-danger btn-sm" onclick="programs.manualToggle(false)">
                         <i class="fas fa-stop"></i> 즉시 비활성화
                     </button>
-                    <button class="btn-secondary btn-sm" onclick="programs.setScheduleMode('auto')">
-                        <i class="fas fa-sync-alt"></i> 자동 스케줄로 복귀
-                    </button>
-                    <span class="schedule-panel__hint">즉시 활성화/비활성화 클릭 시 자동 스케줄이 해제됩니다</span>
-                </div>
-            </div>
-
-            <!-- ── 시간표 관리 패널 ── -->
-            <div id="timetablePanel" class="schedule-panel" style="margin-top:12px">
-                <div class="schedule-panel__header">
-                    <span class="schedule-panel__title">
-                        <i class="fas fa-table"></i> 시간표 관리
-                    </span>
-                    <button class="btn-ghost btn-xs" onclick="programs.loadTimetable()" title="새로고침">
-                        <i class="fas fa-sync-alt" id="timetableRefreshIcon"></i>
-                    </button>
-                </div>
-                <div id="timetableStatus" class="schedule-panel__body" style="padding:12px 0">
-                    <span class="loading-text"><i class="fas fa-spinner fa-spin"></i> 확인 중…</span>
-                </div>
-                <div class="schedule-panel__actions" style="flex-wrap:wrap;gap:8px">
-                    <label class="btn-primary btn-sm" style="cursor:pointer;margin:0">
-                        <i class="fas fa-upload"></i> 시간표 업로드 (이미지/PDF)
-                        <input type="file" id="timetableFileInput" accept="image/*,.pdf"
-                               style="display:none" onchange="programs.uploadTimetable(this)">
-                    </label>
-                    <button class="btn-danger btn-sm" id="timetableDeleteBtn" style="display:none"
-                            onclick="programs.deleteTimetable()">
-                        <i class="fas fa-trash"></i> 시간표 삭제
-                    </button>
-                    <span class="schedule-panel__hint">JPG·PNG·GIF·WEBP·PDF 최대 15MB · 입주민 페이지 퀵액션 "시간표" 탭에 표시됩니다</span>
+                    <span class="schedule-panel__hint">수동 조작 시 자동 스케줄과 무관하게 즉시 반영됩니다</span>
                 </div>
             </div>
 
             <div id="programList" class="data-list"><div class="loading-mini"><i class="fas fa-spinner fa-spin"></i></div></div>`;
-        await Promise.all([this.load(), this.loadScheduleStatus(), this.loadTimetable()]);
-    },
-
-    // ── 시간표 로드 ────────────────────────────────────────────────────
-    async loadTimetable() {
-        const el  = document.getElementById('timetableStatus');
-        const delBtn = document.getElementById('timetableDeleteBtn');
-        const icon   = document.getElementById('timetableRefreshIcon');
-        if (!el) return;
-        if (icon) icon.classList.add('fa-spin');
-        try {
-            const complexId = getEffectiveComplexId();
-            if (!complexId) {
-                el.innerHTML = '<span style="color:#999;font-size:.85rem">단지를 선택하면 시간표를 관리할 수 있습니다</span>';
-                return;
-            }
-            const res  = await fetch(`/api/complexes/timetable?id=${complexId}`);
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error || '조회 실패');
-
-            if (json.timetable_url) {
-                const url = json.timetable_url;
-                const isPdf = url.startsWith('data:application/pdf') || url.toLowerCase().endsWith('.pdf');
-                if (isPdf) {
-                    el.innerHTML = `
-                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                            <i class="fas fa-file-pdf" style="font-size:2rem;color:#e74c3c"></i>
-                            <div>
-                                <div style="font-weight:700;color:#333;font-size:.9rem">PDF 시간표 등록됨</div>
-                                <a href="${url}" target="_blank" style="font-size:.82rem;color:#1565c0;text-decoration:none">
-                                    <i class="fas fa-external-link-alt"></i> 새 탭에서 보기
-                                </a>
-                            </div>
-                        </div>`;
-                } else {
-                    el.innerHTML = `
-                        <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
-                            <img src="${url}" alt="시간표"
-                                 style="max-width:320px;max-height:200px;border-radius:8px;border:1px solid #ddd;cursor:pointer;object-fit:contain"
-                                 onclick="programs._previewTimetable('${url.replace(/'/g,"\\'")}')">
-                            <div style="font-size:.82rem;color:#555;margin-top:4px">
-                                <i class="fas fa-image" style="color:#27ae60"></i> 이미지 시간표 등록됨<br>
-                                <span style="color:#999">클릭하면 크게 볼 수 있습니다</span>
-                            </div>
-                        </div>`;
-                }
-                if (delBtn) delBtn.style.display = '';
-            } else {
-                el.innerHTML = '<span style="color:#999;font-size:.88rem"><i class="fas fa-info-circle"></i> 등록된 시간표가 없습니다</span>';
-                if (delBtn) delBtn.style.display = 'none';
-            }
-        } catch(e) {
-            el.innerHTML = `<span style="color:#e74c3c;font-size:.85rem">로드 실패: ${e.message}</span>`;
-        } finally {
-            if (icon) icon.classList.remove('fa-spin');
-        }
-    },
-
-    // ── 시간표 업로드 ─────────────────────────────────────────────────
-    async uploadTimetable(input) {
-        const file = input?.files?.[0];
-        if (!file) return;
-        const complexId = getEffectiveComplexId();
-        if (!complexId) { showToast('단지를 먼저 선택해주세요', 'error'); input.value = ''; return; }
-
-        // 15MB 체크
-        if (file.size > 15 * 1024 * 1024) {
-            showToast('파일 크기가 15MB를 초과합니다', 'error');
-            input.value = '';
-            return;
-        }
-
-        const el = document.getElementById('timetableStatus');
-        if (el) el.innerHTML = `<span class="loading-text"><i class="fas fa-spinner fa-spin"></i> 업로드 중… (${(file.size/1024/1024).toFixed(1)}MB)</span>`;
-
-        try {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('complex_id', complexId);
-
-            const res  = await fetch('/api/upload/timetable', { method: 'POST', body: formData });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error || '업로드 실패');
-
-            showToast('시간표가 등록되었습니다', 'success');
-            await this.loadTimetable();
-        } catch(e) {
-            showToast('업로드 실패: ' + e.message, 'error');
-            await this.loadTimetable();
-        } finally {
-            input.value = '';
-        }
-    },
-
-    // ── 시간표 삭제 ─────────────────────────────────────────────────
-    deleteTimetable() {
-        showConfirm('시간표 삭제', '등록된 시간표를 삭제하시겠습니까?<br>입주민 페이지에서도 즉시 숨겨집니다.', async () => {
-            try {
-                const complexId = getEffectiveComplexId();
-                const res  = await fetch('/api/upload/timetable', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ complex_id: complexId })
-                });
-                const json = await res.json();
-                if (!json.success) throw new Error(json.error || '삭제 실패');
-                showToast('시간표가 삭제되었습니다', 'success');
-                await this.loadTimetable();
-            } catch(e) {
-                showToast('삭제 실패: ' + e.message, 'error');
-            }
-        });
-    },
-
-    // ── 시간표 미리보기 ───────────────────────────────────────────────
-    _previewTimetable(url) {
-        const body = `
-            <div style="text-align:center">
-                <img src="${url}" alt="시간표"
-                     style="max-width:100%;max-height:80vh;border-radius:8px;object-fit:contain">
-            </div>`;
-        openGlobalModal('<i class="fas fa-table"></i> 시간표', body);
+        await Promise.all([this.load(), this.loadScheduleStatus()]);
     },
 
     // ── 자동 스케줄 상태 로드 ──────────────────────────────────────────
@@ -196,95 +45,36 @@ const programs = {
         if (!el) return;
         if (icon) { icon.classList.add('fa-spin'); }
         try {
-            const complexId = getEffectiveComplexId();
-            const qs = complexId ? `?complexId=${complexId}` : '';
-            const res = await fetch(`/api/programs/schedule-status${qs}`);
+            const res = await fetch('/api/programs/schedule-status');
             const json = await res.json();
             if (!json.success) throw new Error(json.error || '조회 실패');
 
-            const { isInPeriod, currentStatus, nextToggleKst, nextAction, scheduleMode } = json;
-
-            // ── 모드별 UI ──────────────────────────────────────────────
-            const modeLabels = {
-                auto:       { text: '자동 스케줄',  color: '#1565c0', bg: '#e3f2fd', icon: 'fa-sync-alt' },
-                always_on:  { text: '상시 모집 중', color: '#2e7d32', bg: '#e8f5e9', icon: 'fa-circle-check' },
-                always_off: { text: '상시 비활성',  color: '#b71c1c', bg: '#fce4ec', icon: 'fa-circle-xmark' },
-            };
-            const modeInfo = modeLabels[scheduleMode] || modeLabels.auto;
-
-            const statusColor  = isInPeriod ? '#e8f5e9' : '#fce4ec';
+            const { isInPeriod, currentStatus, nextToggleKst, nextAction, periodInfo } = json;
+            const statusColor = isInPeriod ? '#e8f5e9' : '#fce4ec';
             const statusBorder = isInPeriod ? '#66bb6a' : '#ef5350';
-            const statusIcon   = isInPeriod
+            const statusIcon = isInPeriod
                 ? '<i class="fas fa-circle" style="color:#43a047"></i>'
                 : '<i class="fas fa-circle" style="color:#ef5350"></i>';
 
-            const modeBadge = `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;font-size:.75rem;font-weight:700;background:${modeInfo.bg};color:${modeInfo.color};border:1px solid ${modeInfo.color}40">
-                <i class="fas ${modeInfo.icon}"></i> ${modeInfo.text}
-            </span>`;
-
-            if (scheduleMode === 'always_on' || scheduleMode === 'always_off') {
-                // 상시 모드: 자동 스케줄 무시 안내
-                const isOn = scheduleMode === 'always_on';
-                el.innerHTML = `
-                    <div class="schedule-status-box" style="background:${modeInfo.bg};border-left:4px solid ${modeInfo.color}">
-                        <div class="schedule-status-row">
-                            <i class="fas ${modeInfo.icon}" style="color:${modeInfo.color}"></i>
-                            <strong>${isOn ? '상시 모집 중' : '상시 비활성화'}</strong>
-                            ${modeBadge}
-                        </div>
-                        <div class="schedule-status-meta" style="color:#666">
-                            <span><i class="fas fa-info-circle"></i> 자동 스케줄(22~26일)이 <strong>비활성화</strong>된 상태입니다.</span>
-                            <span><i class="fas fa-redo"></i> 자동 스케줄로 복귀하려면 아래 버튼을 클릭하세요.</span>
-                        </div>
-                    </div>`;
-            } else {
-                // auto 모드: 기존 UI
-                el.innerHTML = `
-                    <div class="schedule-status-box" style="background:${statusColor};border-left:4px solid ${statusBorder}">
-                        <div class="schedule-status-row">
-                            ${statusIcon}
-                            <strong>${isInPeriod ? '접수 기간 중' : '접수 기간 외'}</strong>
-                            <span class="schedule-status-badge" style="background:${statusBorder};color:#fff">${currentStatus}</span>
-                            ${modeBadge}
-                        </div>
-                        <div class="schedule-status-meta">
-                            <span><i class="fas fa-calendar-alt"></i> 접수 기간: 매월 22일 09:00 ~ 26일 09:00 KST</span>
-                            <span><i class="fas fa-arrow-right"></i> 다음 전환: <strong>${nextToggleKst}</strong> → ${nextAction}</span>
-                        </div>
-                    </div>`;
-            }
+            el.innerHTML = `
+                <div class="schedule-status-box" style="background:${statusColor};border-left:4px solid ${statusBorder}">
+                    <div class="schedule-status-row">
+                        ${statusIcon}
+                        <strong>${isInPeriod ? '접수 기간 중' : '접수 기간 외'}</strong>
+                        <span class="schedule-status-badge" style="background:${statusBorder};color:#fff">
+                            ${currentStatus}
+                        </span>
+                    </div>
+                    <div class="schedule-status-meta">
+                        <span><i class="fas fa-calendar-alt"></i> 접수 기간: 매월 22일 09:00 ~ 26일 09:00 KST</span>
+                        <span><i class="fas fa-arrow-right"></i> 다음 전환: <strong>${nextToggleKst}</strong> → ${nextAction}</span>
+                    </div>
+                </div>`;
         } catch(e) {
             el.innerHTML = `<span class="error-hint"><i class="fas fa-exclamation-circle"></i> 상태 조회 실패: ${e.message}</span>`;
         } finally {
             if (icon) { icon.classList.remove('fa-spin'); }
         }
-    },
-
-    // ── 스케줄 모드 변경 (auto 복귀) ──────────────────────────────────
-    async setScheduleMode(mode) {
-        const complexId = getEffectiveComplexId();
-        if (!complexId) { showToast('단지 정보가 없습니다. 다시 로그인해주세요.', 'error'); return; }
-        const modeText = { auto: '자동 스케줄', always_on: '상시 모집', always_off: '상시 비활성' };
-        showConfirm(
-            `모드 변경`,
-            `이 단지를 <strong>${modeText[mode] || mode}</strong> 모드로 변경합니다.<br>` +
-            (mode === 'auto' ? '이후 매월 22~26일 자동 스케줄이 다시 적용됩니다.' : ''),
-            async () => {
-                try {
-                    const sb_res = await fetch('/api/complexes/schedule-mode', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ complexId, mode })
-                    });
-                    const json = await sb_res.json();
-                    if (!json.success) throw new Error(json.error || '변경 실패');
-                    showToast(`${modeText[mode]} 모드로 변경됐습니다.`, 'success');
-                    await this.loadScheduleStatus();
-                } catch(e) {
-                    showToast(`모드 변경 실패: ${e.message}`, 'error');
-                }
-            }
-        );
     },
 
     // ── 수동 활성화/비활성화 트리거 ───────────────────────────────────
@@ -295,16 +85,12 @@ const programs = {
             : '모든 단지의 프로그램을 <strong>즉시 비활성화</strong>합니다.<br>신규 접수가 차단됩니다. 계속하시겠습니까?';
 
         showConfirm(`프로그램 ${label}`, confirmMsg, async () => {
+            const masterPw = Admin?.masterPassword || prompt('마스터 비밀번호를 입력하세요');
+            if (!masterPw) return;
             try {
                 const complexId = getEffectiveComplexId();
-                const secret    = Admin?.masterSecret || Admin?.adminSecret || null;
-                // 마스터: secret 필수 / 단지관리자: complexId 있으면 인증 통과
-                if (!secret && !complexId) {
-                    showToast('인증 정보가 없습니다. 다시 로그인해주세요.', 'error'); return;
-                }
-                const body = { force: activate };
-                if (secret)    body.secret    = secret;
-                if (complexId) body.complexId = complexId;
+                const body = { secret: masterPw, force: activate };
+                if (complexId) body.complexId = complexId;  // 유효한 UUID일 때만 포함
                 const res = await fetch('/api/programs/auto-toggle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
