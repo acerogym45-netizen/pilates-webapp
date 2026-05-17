@@ -30,7 +30,10 @@ const programs = {
                     <button class="btn-danger btn-sm" onclick="programs.manualToggle(false)">
                         <i class="fas fa-stop"></i> 즉시 비활성화
                     </button>
-                    <span class="schedule-panel__hint">수동 조작 시 자동 스케줄과 무관하게 즉시 반영됩니다</span>
+                    <button class="btn-secondary btn-sm" onclick="programs.setScheduleMode('auto')">
+                        <i class="fas fa-sync-alt"></i> 자동 스케줄로 복귀
+                    </button>
+                    <span class="schedule-panel__hint">즉시 활성화/비활성화 클릭 시 자동 스케줄이 해제됩니다</span>
                 </div>
             </div>
 
@@ -45,36 +48,95 @@ const programs = {
         if (!el) return;
         if (icon) { icon.classList.add('fa-spin'); }
         try {
-            const res = await fetch('/api/programs/schedule-status');
+            const complexId = getEffectiveComplexId();
+            const qs = complexId ? `?complexId=${complexId}` : '';
+            const res = await fetch(`/api/programs/schedule-status${qs}`);
             const json = await res.json();
             if (!json.success) throw new Error(json.error || '조회 실패');
 
-            const { isInPeriod, currentStatus, nextToggleKst, nextAction, periodInfo } = json;
-            const statusColor = isInPeriod ? '#e8f5e9' : '#fce4ec';
+            const { isInPeriod, currentStatus, nextToggleKst, nextAction, scheduleMode } = json;
+
+            // ── 모드별 UI ──────────────────────────────────────────────
+            const modeLabels = {
+                auto:       { text: '자동 스케줄',  color: '#1565c0', bg: '#e3f2fd', icon: 'fa-sync-alt' },
+                always_on:  { text: '상시 모집 중', color: '#2e7d32', bg: '#e8f5e9', icon: 'fa-circle-check' },
+                always_off: { text: '상시 비활성',  color: '#b71c1c', bg: '#fce4ec', icon: 'fa-circle-xmark' },
+            };
+            const modeInfo = modeLabels[scheduleMode] || modeLabels.auto;
+
+            const statusColor  = isInPeriod ? '#e8f5e9' : '#fce4ec';
             const statusBorder = isInPeriod ? '#66bb6a' : '#ef5350';
-            const statusIcon = isInPeriod
+            const statusIcon   = isInPeriod
                 ? '<i class="fas fa-circle" style="color:#43a047"></i>'
                 : '<i class="fas fa-circle" style="color:#ef5350"></i>';
 
-            el.innerHTML = `
-                <div class="schedule-status-box" style="background:${statusColor};border-left:4px solid ${statusBorder}">
-                    <div class="schedule-status-row">
-                        ${statusIcon}
-                        <strong>${isInPeriod ? '접수 기간 중' : '접수 기간 외'}</strong>
-                        <span class="schedule-status-badge" style="background:${statusBorder};color:#fff">
-                            ${currentStatus}
-                        </span>
-                    </div>
-                    <div class="schedule-status-meta">
-                        <span><i class="fas fa-calendar-alt"></i> 접수 기간: 매월 22일 09:00 ~ 26일 09:00 KST</span>
-                        <span><i class="fas fa-arrow-right"></i> 다음 전환: <strong>${nextToggleKst}</strong> → ${nextAction}</span>
-                    </div>
-                </div>`;
+            const modeBadge = `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:20px;font-size:.75rem;font-weight:700;background:${modeInfo.bg};color:${modeInfo.color};border:1px solid ${modeInfo.color}40">
+                <i class="fas ${modeInfo.icon}"></i> ${modeInfo.text}
+            </span>`;
+
+            if (scheduleMode === 'always_on' || scheduleMode === 'always_off') {
+                // 상시 모드: 자동 스케줄 무시 안내
+                const isOn = scheduleMode === 'always_on';
+                el.innerHTML = `
+                    <div class="schedule-status-box" style="background:${modeInfo.bg};border-left:4px solid ${modeInfo.color}">
+                        <div class="schedule-status-row">
+                            <i class="fas ${modeInfo.icon}" style="color:${modeInfo.color}"></i>
+                            <strong>${isOn ? '상시 모집 중' : '상시 비활성화'}</strong>
+                            ${modeBadge}
+                        </div>
+                        <div class="schedule-status-meta" style="color:#666">
+                            <span><i class="fas fa-info-circle"></i> 자동 스케줄(22~26일)이 <strong>비활성화</strong>된 상태입니다.</span>
+                            <span><i class="fas fa-redo"></i> 자동 스케줄로 복귀하려면 아래 버튼을 클릭하세요.</span>
+                        </div>
+                    </div>`;
+            } else {
+                // auto 모드: 기존 UI
+                el.innerHTML = `
+                    <div class="schedule-status-box" style="background:${statusColor};border-left:4px solid ${statusBorder}">
+                        <div class="schedule-status-row">
+                            ${statusIcon}
+                            <strong>${isInPeriod ? '접수 기간 중' : '접수 기간 외'}</strong>
+                            <span class="schedule-status-badge" style="background:${statusBorder};color:#fff">${currentStatus}</span>
+                            ${modeBadge}
+                        </div>
+                        <div class="schedule-status-meta">
+                            <span><i class="fas fa-calendar-alt"></i> 접수 기간: 매월 22일 09:00 ~ 26일 09:00 KST</span>
+                            <span><i class="fas fa-arrow-right"></i> 다음 전환: <strong>${nextToggleKst}</strong> → ${nextAction}</span>
+                        </div>
+                    </div>`;
+            }
         } catch(e) {
             el.innerHTML = `<span class="error-hint"><i class="fas fa-exclamation-circle"></i> 상태 조회 실패: ${e.message}</span>`;
         } finally {
             if (icon) { icon.classList.remove('fa-spin'); }
         }
+    },
+
+    // ── 스케줄 모드 변경 (auto 복귀) ──────────────────────────────────
+    async setScheduleMode(mode) {
+        const complexId = getEffectiveComplexId();
+        if (!complexId) { showToast('단지 정보가 없습니다. 다시 로그인해주세요.', 'error'); return; }
+        const modeText = { auto: '자동 스케줄', always_on: '상시 모집', always_off: '상시 비활성' };
+        showConfirm(
+            `모드 변경`,
+            `이 단지를 <strong>${modeText[mode] || mode}</strong> 모드로 변경합니다.<br>` +
+            (mode === 'auto' ? '이후 매월 22~26일 자동 스케줄이 다시 적용됩니다.' : ''),
+            async () => {
+                try {
+                    const sb_res = await fetch('/api/complexes/schedule-mode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ complexId, mode })
+                    });
+                    const json = await sb_res.json();
+                    if (!json.success) throw new Error(json.error || '변경 실패');
+                    showToast(`${modeText[mode]} 모드로 변경됐습니다.`, 'success');
+                    await this.loadScheduleStatus();
+                } catch(e) {
+                    showToast(`모드 변경 실패: ${e.message}`, 'error');
+                }
+            }
+        );
     },
 
     // ── 수동 활성화/비활성화 트리거 ───────────────────────────────────

@@ -40,7 +40,7 @@ router.get('/', async (req, res) => {
 });
 
 // ── 현재 자동 스케줄 상태 조회 ───────────────────────────────────
-// GET /api/programs/schedule-status
+// GET /api/programs/schedule-status?complexId=
 // ※ 반드시 /:id 라우트보다 앞에 위치해야 함 (라우트 충돌 방지)
 router.get('/schedule-status', async (req, res) => {
     try {
@@ -56,17 +56,15 @@ router.get('/schedule-status', async (req, res) => {
             (dayKst > 22 && dayKst < 26)   ||
             (dayKst === 26 && hourKst < 9);
 
-        // 다음 전환 시각 계산
+        // 다음 전환 시각 계산 (auto 모드용)
         let nextToggleKst, nextAction;
         if (isInPeriod) {
-            // 현재 활성화 기간 → 다음 전환: 26일 09:00 비활성화
             const nextDate = new Date(nowKst);
             nextDate.setUTCDate(26); nextDate.setUTCHours(9); nextDate.setUTCMinutes(0); nextDate.setUTCSeconds(0);
             if (nextDate <= nowKst) { nextDate.setUTCMonth(nextDate.getUTCMonth() + 1); }
             nextToggleKst = `${nextDate.getUTCMonth()+1}월 26일 09:00`;
             nextAction = '비활성화';
         } else {
-            // 현재 비활성화 기간 → 다음 전환: 22일 09:00 활성화
             const nextDate = new Date(nowKst);
             nextDate.setUTCDate(22); nextDate.setUTCHours(9); nextDate.setUTCMinutes(0); nextDate.setUTCSeconds(0);
             if (nextDate <= nowKst) { nextDate.setUTCMonth(nextDate.getUTCMonth() + 1); }
@@ -74,10 +72,24 @@ router.get('/schedule-status', async (req, res) => {
             nextAction = '활성화';
         }
 
+        // 단지별 schedule_mode 조회
+        let scheduleMode = 'auto';
+        const { complexId } = req.query;
+        if (complexId && /^[0-9a-f-]{36}$/i.test(complexId)) {
+            const sb = getSupabase();
+            const { data: cx } = await sb
+                .from('complexes')
+                .select('schedule_mode')
+                .eq('id', complexId)
+                .single();
+            if (cx?.schedule_mode) scheduleMode = cx.schedule_mode;
+        }
+
         res.json({
             success: true,
             kst: `${monKst}월 ${dayKst}일 ${String(hourKst).padStart(2,'0')}:${String(minKst).padStart(2,'0')} KST`,
             isInPeriod,
+            scheduleMode,
             currentStatus: isInPeriod ? '접수 기간 (활성화)' : '비접수 기간 (비활성화)',
             nextToggleKst,
             nextAction,
@@ -239,16 +251,23 @@ router.post('/auto-toggle', async (req, res) => {
 
         const sb = getSupabase();
 
-        // ── 단지 필터 (유효한 UUID 형식 complexId 지정 시 해당 단지만, 없으면 전체) ──
+        // ── 단지 필터 + schedule_mode 업데이트 ───────────────────────
         const { complexId } = req.body;
-        // 빈 문자열이나 비UUID 값이 들어오면 무시 (UUID 타입 오류 방지)
         const validComplexId = complexId && /^[0-9a-f-]{36}$/i.test(complexId) ? complexId : null;
-        // .neq('id','') 제거 — UUID 컬럼에 빈 문자열 비교 시 syntax 오류 발생
+
+        // 즉시 활성화/비활성화 시 해당 단지의 schedule_mode도 함께 업데이트
+        // force=true  → always_on  (Cron이 덮어쓰지 않음)
+        // force=false → always_off (Cron이 덮어쓰지 않음)
+        // forceValue가 undefined이면 auto 모드 (Cron 스케줄대로)
+        if (validComplexId && forceValue !== undefined) {
+            const newMode = forceValue ? 'always_on' : 'always_off';
+            await sb.from('complexes').update({ schedule_mode: newMode }).eq('id', validComplexId);
+        }
+
         let query = sb.from('programs').update({ is_active: activateTarget });
         if (validComplexId) {
             query = query.eq('complex_id', validComplexId);
         } else {
-            // 전체 행 업데이트 보장을 위해 is_active 컬럼 존재 여부 필터
             query = query.not('id', 'is', null);
         }
 
