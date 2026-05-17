@@ -85,12 +85,13 @@ const programs = {
             : '모든 단지의 프로그램을 <strong>즉시 비활성화</strong>합니다.<br>신규 접수가 차단됩니다. 계속하시겠습니까?';
 
         showConfirm(`프로그램 ${label}`, confirmMsg, async () => {
-            const masterPw = Admin?.masterPassword || prompt('마스터 비밀번호를 입력하세요');
-            if (!masterPw) return;
+            // 마스터: masterSecret, 일반 단지관리자: adminSecret 사용 (prompt 불필요)
+            const secret = Admin?.masterSecret || Admin?.adminSecret;
+            if (!secret) { showToast('인증 정보가 없습니다. 다시 로그인해주세요.', 'error'); return; }
             try {
                 const complexId = getEffectiveComplexId();
-                const body = { secret: masterPw, force: activate };
-                if (complexId) body.complexId = complexId;  // 유효한 UUID일 때만 포함
+                const body = { secret, force: activate };
+                if (complexId) body.complexId = complexId;
                 const res = await fetch('/api/programs/auto-toggle', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
