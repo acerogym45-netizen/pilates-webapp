@@ -240,16 +240,29 @@ router.post('/schedule-mode', async (req, res) => {
             .eq('id', complexId);
         if (modeErr) throw sbErr(modeErr, 'POST /complexes/schedule-mode');
 
-        // always_on → 프로그램 즉시 활성화, always_off → 즉시 비활성화
-        if (mode === 'always_on' || mode === 'always_off') {
-            const isActive = mode === 'always_on';
-            await sb.from('programs')
-                .update({ is_active: isActive })
-                .eq('complex_id', complexId)
-                .not('id', 'is', null);
+        // 모드별 프로그램 is_active 즉시 동기화
+        let syncActive;
+        if (mode === 'always_on') {
+            syncActive = true;
+        } else if (mode === 'always_off') {
+            syncActive = false;
+        } else {
+            // auto 복귀: 현재 KST 시각 기준으로 22~26일 여부 계산해서 즉시 반영
+            const nowKst  = new Date(Date.now() + 9 * 60 * 60 * 1000);
+            const dayKst  = nowKst.getUTCDate();
+            const hourKst = nowKst.getUTCHours();
+            syncActive =
+                (dayKst === 22 && hourKst >= 9) ||
+                (dayKst > 22 && dayKst < 26)   ||
+                (dayKst === 26 && hourKst < 9);
         }
 
-        res.json({ success: true, mode });
+        await sb.from('programs')
+            .update({ is_active: syncActive })
+            .eq('complex_id', complexId)
+            .not('id', 'is', null);
+
+        res.json({ success: true, mode, is_active: syncActive });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
