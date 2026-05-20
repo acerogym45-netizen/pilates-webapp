@@ -2242,7 +2242,7 @@ function displayNotices(notices) {
                     </span>
                 </div>
                 <div class="notice-content">
-                    ${escapeHtml(notice.content || '')}
+                    ${escapeHtml(notice.content || '').replace(/\n/g, '<br>')}
                 </div>
                 <div class="notice-date">
                     <i class="fas fa-calendar"></i> ${kstDateStr(notice.created_at)}
