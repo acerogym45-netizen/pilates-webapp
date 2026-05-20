@@ -218,4 +218,77 @@ router.put('/:id/self', async (req, res) => {
     }
 });
 
+// ── 단지별 스케줄 모드 변경 ───────────────────────────────────────
+// POST /api/complexes/schedule-mode
+// body: { complexId, mode: 'auto' | 'always_on' | 'always_off' }
+router.post('/schedule-mode', async (req, res) => {
+    try {
+        const { complexId, mode } = req.body;
+        const validModes = ['auto', 'always_on', 'always_off'];
+        if (!complexId || !validModes.includes(mode)) {
+            return res.status(400).json({ success: false, error: 'complexId와 유효한 mode(auto|always_on|always_off)가 필요합니다' });
+        }
+        if (!/^[0-9a-f-]{36}$/i.test(complexId)) {
+            return res.status(400).json({ success: false, error: '유효하지 않은 complexId 형식입니다' });
+        }
+        const sb = getSupabase();
+
+        // schedule_mode 업데이트
+        const { error: modeErr } = await sb
+            .from('complexes')
+            .update({ schedule_mode: mode })
+            .eq('id', complexId);
+        if (modeErr) throw sbErr(modeErr, 'POST /complexes/schedule-mode');
+
+        // 모드별 프로그램 is_active 즉시 동기화
+        let syncActive;
+        if (mode === 'always_on') {
+            syncActive = true;
+        } else if (mode === 'always_off') {
+            syncActive = false;
+        } else {
+            // auto 복귀: 현재 KST 시각 기준으로 22~26일 여부 계산해서 즉시 반영
+            const nowKst  = new Date(Date.now() + 9 * 60 * 60 * 1000);
+            const dayKst  = nowKst.getUTCDate();
+            const hourKst = nowKst.getUTCHours();
+            syncActive =
+                (dayKst === 22 && hourKst >= 9) ||
+                (dayKst > 22 && dayKst < 26)   ||
+                (dayKst === 26 && hourKst < 9);
+        }
+
+        await sb.from('programs')
+            .update({ is_active: syncActive })
+            .eq('complex_id', complexId)
+            .not('id', 'is', null);
+
+        res.json({ success: true, mode, is_active: syncActive });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 시간표 조회 (입주민용) ─────────────────────────────────────────────
+// GET /api/complexes/timetable?code=<complex_code>
+// GET /api/complexes/timetable?id=<complex_id>
+router.get('/timetable', async (req, res) => {
+    try {
+        const { code, id } = req.query;
+        if (!code && !id) return res.status(400).json({ success: false, error: 'code 또는 id 필수' });
+        const sb = getSupabase();
+        let query = sb.from('complexes').select('id, code, name, timetable_url');
+        if (id)   query = query.eq('id', id);
+        else      query = query.eq('code', code);
+        const { data, error } = await query.single();
+        if (error || !data) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+        res.json({
+            success: true,
+            timetable_url: data.timetable_url || null,
+            complex_name: data.name
+        });
+    } catch(e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 module.exports = router;

@@ -30,8 +30,6 @@ function kstDateTimeStr(iso) {
 // State Management
 let formData = {};
 let signaturePad = null;
-let adminClickCount = 0;
-let adminClickTimer = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
@@ -49,7 +47,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadTimeSlotStatus();
     loadPublicInquiries();
     loadNotices();
-    setupAdminTrigger();
     renderPeriodBanner();   // 접수·해지 기간 배너
     initManageTabBar();     // 내 신청 취소·변경 탭바 초기화
     
@@ -1181,60 +1178,6 @@ async function loadPublicInquiries() {
     }
 }
 
-// Setup admin trigger - 5번 빠르게 클릭하면 관리자 페이지로
-function setupAdminTrigger() {
-    const logoText = document.getElementById('logoText');
-    
-    console.log('🔧 Admin trigger setup:', logoText ? 'Found' : 'NOT FOUND');
-    
-    if (!logoText) {
-        console.error('❌ logoText element not found!');
-        return;
-    }
-    
-    logoText.addEventListener('click', function(e) {
-        e.preventDefault();
-        adminClickCount++;
-        
-        console.log(`👆 Click ${adminClickCount}/5`);
-        
-        // Clear previous timer
-        if (adminClickTimer) {
-            clearTimeout(adminClickTimer);
-        }
-        
-        // Check if clicked 5 times within 2 seconds
-        if (adminClickCount >= 5) {
-            console.log('🎉 Trigger activated! Opening password modal...');
-            
-            // Visual feedback
-            logoText.style.color = '#667eea';
-            logoText.style.transition = 'color 0.3';
-            
-            // Show password modal
-            setTimeout(() => {
-                logoText.style.color = ''; // Reset color
-                showAdminPasswordModal();
-            }, 300);
-            
-            adminClickCount = 0;
-            return;
-        }
-        
-        // Reset counter after 2 seconds
-        adminClickTimer = setTimeout(() => {
-            console.log('⏰ Timer reset');
-            adminClickCount = 0;
-        }, 2000);
-    });
-    
-    // Add visible cursor for testing
-    logoText.style.cursor = 'pointer';
-    logoText.style.userSelect = 'none';
-    
-    console.log('✅ Admin trigger ready!');
-}
-
 // ===== CANCELLATION FUNCTIONS =====
 
 // Show cancellation form modal (기간 체크 추가)
@@ -1463,7 +1406,7 @@ async function loadMyManageList() {
                         </div>` : `
                         <div style="text-align:center;font-size:.78rem;color:#9ca3af;padding:4px 0">
                             <i class="fas fa-lock"></i> 신청 철회·변경은 매월 22일 09시 ~ 26일 09시에 가능합니다<br>
-                            <span style="font-size:.72rem;color:#c0c0c0">※ 수강 중 해지는 매월 22일 09시~26일 09시 해지 신청 기간에 접수하세요</span>
+                            <span style="font-size:.72rem;color:#c0c0c0">※ 익월 해지신청은 <strong>해지 신청 탭</strong>을 통하여 매월 22일 09시~26일 09시 해지 신청 기간에 접수하세요</span>
                         </div>`}
                     </div>`;
                 }).join('')}
@@ -1494,7 +1437,7 @@ async function confirmCancelApplication(appId, programName, status) {
             ? `[${programName}] 대기 신청을 취소하시겠습니까?\n\n취소하면 대기 순번이 제거됩니다.`
             : `[${programName}] 신청을 철회하시겠습니까?\n\n` +
               `※ 이 기능은 수강 시작 전 신청을 철회하는 것입니다.\n` +
-              `수강 중 해지는 매월 22일 09시~26일 09시 해지 신청 기간에 별도 접수하세요.`
+              `익월 해지신청은 해지 신청 탭을 통하여 매월 22일 09시~26일 09시 해지 신청 기간에 접수하세요.`
     );
     if (!confirmed) return;
 
@@ -2431,211 +2374,6 @@ function formatPrice(price) {
 }
 
 
-// ===== ADMIN PASSWORD MODAL (2단계: 일반 / 총괄) =====
-
-// 마스터 비밀번호 (프론트 1차 검증용)
-const MASTER_PW = 'master2026';
-
-/* 모달 열기 — 항상 Step1(일반 관리자)부터 */
-function showAdminPasswordModal() {
-    const modal = document.getElementById('adminPasswordModal');
-    modal.classList.add('active');
-    _showAdminStep(1);
-    _loadComplexListForAdminModal();
-}
-
-/* 모달 닫기 */
-function closeAdminPasswordModal() {
-    const modal = document.getElementById('adminPasswordModal');
-    modal.classList.remove('active');
-    const pw1 = document.getElementById('adminPasswordInput');
-    const pw2 = document.getElementById('masterPasswordInput');
-    if (pw1) pw1.value = '';
-    if (pw2) pw2.value = '';
-    _hideAdminError('adminPasswordError');
-    _hideAdminError('masterPasswordError');
-}
-
-/* Step 전환 */
-function showAdminStep2() { _showAdminStep(2); }
-function showAdminStep1() { _showAdminStep(1); }
-
-function _showAdminStep(step) {
-    document.getElementById('adminStep1').style.display = step === 1 ? 'block' : 'none';
-    document.getElementById('adminStep2').style.display = step === 2 ? 'block' : 'none';
-    setTimeout(() => {
-        const target = step === 1
-            ? document.getElementById('adminPasswordInput')
-            : document.getElementById('masterPasswordInput');
-        target?.focus();
-    }, 80);
-}
-
-/* 에러 표시/숨김 헬퍼 */
-function _showAdminError(id, msg) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const textEl = el.querySelector('span') || el;
-    if (msg) textEl.textContent = msg;
-    el.style.display = 'flex';
-    setTimeout(() => { el.style.display = 'none'; }, 3500);
-}
-function _hideAdminError(id) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-}
-
-/* 버튼 로딩 상태 */
-function _setAdminBtnLoading(btnId, loading) {
-    const btn = document.getElementById(btnId);
-    if (!btn) return;
-    if (loading) {
-        btn.disabled = true;
-        btn._origHtml = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 인증 중...';
-    } else {
-        btn.disabled = false;
-        if (btn._origHtml) btn.innerHTML = btn._origHtml;
-    }
-}
-
-/* 단지 목록 로드 (드롭다운) */
-async function _loadComplexListForAdminModal() {
-    const select = document.getElementById('adminComplexSelect');
-    const status = document.getElementById('adminComplexLoadStatus');
-    if (!select) return;
-
-    // 현재 단지가 있으면 자동 선택 후 고정
-    const currentCode = (typeof complexContext !== 'undefined') ? complexContext.getComplexCode() : '';
-    if (currentCode) {
-        const currentName = (typeof complexContext !== 'undefined') ? (complexContext.getComplex()?.name || currentCode) : currentCode;
-        select.innerHTML = `<option value="${currentCode}">${currentName || currentCode}</option>`;
-        select.disabled = true;
-        if (status) status.textContent = `현재 단지: ${currentName || currentCode}`;
-        return;
-    }
-
-    // 단지 코드 없는 경우: API에서 전체 목록 로드
-    if (status) status.textContent = '단지 목록 로딩 중...';
-    try {
-        const res = await fetch('/api/complexes');
-        const data = await res.json();
-        const list = (data.data || []).filter(c => c.is_active);
-        if (!list.length) {
-            if (status) status.textContent = '등록된 단지가 없습니다';
-            return;
-        }
-        select.innerHTML = '<option value="">— 단지를 선택하세요 —</option>' +
-            list.map(c => `<option value="${c.code}">${c.name}</option>`).join('');
-        select.disabled = false;
-        if (status) status.textContent = '';
-    } catch(e) {
-        if (status) { status.textContent = '목록 로드 실패'; status.style.color = '#e53935'; }
-        console.warn('단지 목록 로드 실패:', e);
-    }
-}
-
-/* ── Step1: 일반 관리자 비밀번호 확인 ── */
-async function checkAdminPassword() {
-    const selectEl   = document.getElementById('adminComplexSelect');
-    const pwEl       = document.getElementById('adminPasswordInput');
-    const complexCode = selectEl ? selectEl.value : '';
-    const password    = pwEl ? pwEl.value.trim() : '';
-
-    _hideAdminError('adminPasswordError');
-
-    if (!complexCode) {
-        _showAdminError('adminPasswordError', '단지를 선택하세요');
-        selectEl?.focus(); return;
-    }
-    if (!password) {
-        _showAdminError('adminPasswordError', '비밀번호를 입력하세요');
-        pwEl?.focus(); return;
-    }
-
-    _setAdminBtnLoading('adminLoginBtn', true);
-
-    try {
-        const response = await fetch('/api/complexes/verify-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ complexCode, password })
-        });
-        const result = await response.json();
-
-        if (result.success) {
-            console.log('✅ Admin password correct! Role:', result.role);
-            sessionStorage.setItem('adminRole',    result.role);
-            sessionStorage.setItem('adminComplex', JSON.stringify(result.complex || {}));
-            closeAdminPasswordModal();
-            const logoEl = document.getElementById('logoText');
-            if (logoEl) { logoEl.style.color = '#27ae60'; setTimeout(() => logoEl.style.color = '', 600); }
-            setTimeout(() => { window.location.href = '/admin/'; }, 250);
-        } else {
-            _setAdminBtnLoading('adminLoginBtn', false);
-            _showAdminError('adminPasswordError', '비밀번호가 올바르지 않습니다');
-            if (pwEl) { pwEl.value = ''; pwEl.focus(); }
-        }
-    } catch(e) {
-        _setAdminBtnLoading('adminLoginBtn', false);
-        _showAdminError('adminPasswordError', '오류가 발생했습니다. 다시 시도하세요');
-        console.error('Admin password check error:', e);
-    }
-}
-
-/* ── Step2: 총괄 관리자 마스터 비밀번호 확인 ── */
-async function checkMasterPassword() {
-    const pwEl    = document.getElementById('masterPasswordInput');
-    const password = pwEl ? pwEl.value.trim() : '';
-
-    _hideAdminError('masterPasswordError');
-
-    if (!password) {
-        _showAdminError('masterPasswordError', '마스터 비밀번호를 입력하세요');
-        pwEl?.focus(); return;
-    }
-
-    _setAdminBtnLoading('masterLoginBtn', true);
-
-    // 1차: 프론트 하드코드 검증 (master2026)
-    if (password === MASTER_PW) {
-        sessionStorage.setItem('adminRole',    'master');
-        sessionStorage.setItem('adminComplex', JSON.stringify({ code: 'master', name: '마스터 관리자' }));
-        closeAdminPasswordModal();
-        const logoEl = document.getElementById('logoText');
-        if (logoEl) { logoEl.style.color = '#f39c12'; setTimeout(() => logoEl.style.color = '', 600); }
-        setTimeout(() => { window.location.href = '/admin/'; }, 250);
-        return;
-    }
-
-    // 2차: 서버 API 검증 (단지코드 '' = master 모드)
-    try {
-        const response = await fetch('/api/complexes/verify-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ complexCode: '', password })
-        });
-        const result = await response.json();
-
-        if (result.success && result.role === 'master') {
-            sessionStorage.setItem('adminRole',    'master');
-            sessionStorage.setItem('adminComplex', JSON.stringify(result.complex || { code: 'master', name: '마스터 관리자' }));
-            closeAdminPasswordModal();
-            const logoEl = document.getElementById('logoText');
-            if (logoEl) { logoEl.style.color = '#f39c12'; setTimeout(() => logoEl.style.color = '', 600); }
-            setTimeout(() => { window.location.href = '/admin/'; }, 250);
-        } else {
-            _setAdminBtnLoading('masterLoginBtn', false);
-            _showAdminError('masterPasswordError', '마스터 비밀번호가 올바르지 않습니다');
-            if (pwEl) { pwEl.value = ''; pwEl.focus(); }
-        }
-    } catch(e) {
-        _setAdminBtnLoading('masterLoginBtn', false);
-        _showAdminError('masterPasswordError', '오류가 발생했습니다. 다시 시도하세요');
-        console.error('Master password check error:', e);
-    }
-}
-
 // ===== 🆕 CURRICULUM FUNCTIONS =====
 
 // Show curriculum modal
@@ -2993,4 +2731,92 @@ async function submitRefundRequest() {
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> 환불 신청 접수'; }
     }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   시간표 모달
+════════════════════════════════════════════════════════════════ */
+async function showTimetableModal() {
+    // 모달이 없으면 동적 생성
+    let modal = document.getElementById('timetableModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'timetableModal';
+        modal.className = 'modal-overlay';
+        modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;overflow-y:auto;padding:16px;box-sizing:border-box';
+        modal.innerHTML = `
+            <div style="background:#fff;border-radius:16px;max-width:680px;margin:auto;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+                <!-- 헤더 -->
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(135deg,#1b5e20,#388e3c);color:#fff">
+                    <span style="font-size:1rem;font-weight:800;display:flex;align-items:center;gap:8px">
+                        <i class="fas fa-table"></i> 시간표
+                    </span>
+                    <button onclick="closeTimetableModal()" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <!-- 본문 -->
+                <div id="timetableModalBody" style="padding:20px;min-height:120px;display:flex;align-items:center;justify-content:center">
+                    <span style="color:#999;font-size:.9rem"><i class="fas fa-spinner fa-spin"></i> 불러오는 중…</span>
+                </div>
+            </div>`;
+        // 배경 클릭 닫기
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeTimetableModal(); });
+        document.body.appendChild(modal);
+    }
+
+    modal.style.display = 'block';
+    document.body.style.overflow = 'hidden';
+
+    const body = document.getElementById('timetableModalBody');
+    try {
+        const complexCode = complexContext?.getComplexCode?.() || '';
+        if (!complexCode) {
+            body.innerHTML = `<p style="color:#999;font-size:.9rem;text-align:center">단지 정보를 불러올 수 없습니다</p>`;
+            return;
+        }
+        const res  = await fetch(`/api/complexes/timetable?code=${encodeURIComponent(complexCode)}`);
+        const json = await res.json();
+
+        if (!json.success || !json.timetable_url) {
+            body.innerHTML = `
+                <div style="text-align:center;padding:20px 0;color:#666">
+                    <i class="fas fa-table" style="font-size:2.5rem;color:#ccc;display:block;margin-bottom:12px"></i>
+                    <p style="font-size:.95rem;font-weight:600;margin:0 0 6px">등록된 시간표가 없습니다</p>
+                    <p style="font-size:.82rem;color:#999;margin:0">관리자에게 문의해주세요</p>
+                </div>`;
+            return;
+        }
+
+        const url    = json.timetable_url;
+        const isPdf  = url.startsWith('data:application/pdf') || url.toLowerCase().includes('.pdf');
+
+        if (isPdf) {
+            body.innerHTML = `
+                <div style="text-align:center;padding:16px 0">
+                    <i class="fas fa-file-pdf" style="font-size:3rem;color:#e74c3c;display:block;margin-bottom:14px"></i>
+                    <p style="font-size:.95rem;font-weight:700;margin:0 0 14px;color:#333">PDF 시간표</p>
+                    <a href="${url}" target="_blank" download
+                       style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#e74c3c;color:#fff;border-radius:8px;text-decoration:none;font-size:.9rem;font-weight:700">
+                        <i class="fas fa-download"></i> PDF 열기 / 다운로드
+                    </a>
+                </div>`;
+        } else {
+            body.innerHTML = `
+                <div style="text-align:center;width:100%">
+                    <img src="${url}" alt="시간표"
+                         style="max-width:100%;border-radius:10px;border:1px solid #eee;display:block;margin:0 auto"
+                         onerror="this.parentElement.innerHTML='<p style=\\'color:#e74c3c;font-size:.85rem\\'>이미지를 불러올 수 없습니다</p>'">
+                    <p style="font-size:.75rem;color:#aaa;margin:10px 0 0">꾹 눌러서 이미지를 저장할 수 있습니다</p>
+                </div>`;
+        }
+    } catch(e) {
+        body.innerHTML = `<p style="color:#e74c3c;font-size:.85rem;text-align:center">불러오기 실패: ${e.message}</p>`;
+    }
+}
+
+function closeTimetableModal() {
+    const modal = document.getElementById('timetableModal');
+    if (modal) modal.style.display = 'none';
+    document.body.style.overflow = '';
 }

@@ -17,6 +17,7 @@ const cors    = require('cors');
 const helmet  = require('helmet');
 const path    = require('path');
 const fs      = require('fs');
+const { getSupabase } = require('../server/db-supabase');
 
 // ── 라우터 ────────────────────────────────────────────────────────────────────
 const complexesRouter    = require('../server/routes/complexes');
@@ -159,8 +160,74 @@ app.get('/admin', (req, res) => {
 app.get('/admin/*', (req, res) => {
     res.sendFile(path.join(ROOT_DIR, 'admin', 'index.html'));
 });
-app.get('*', (req, res) => {
-    res.sendFile(path.join(ROOT_DIR, 'index.html'));
+
+// ── 루트: OG 태그 동적 삽입 ──────────────────────────────────────────────────
+// 지원 URL 형식:
+//   ① /apt-sclass          (경로 방식 — 네이버 QR 권장)
+//   ② /?complex=apt-sclass (쿼리파라미터 방식 — 기존 호환)
+// 크롤러가 쿼리스트링을 무시하는 경우를 대비해 경로 방식을 우선 처리
+app.get('*', async (req, res) => {
+    const indexPath = path.join(ROOT_DIR, 'index.html');
+    let html;
+    try {
+        html = fs.readFileSync(indexPath, 'utf8');
+    } catch (e) {
+        return res.status(500).send('index.html을 읽을 수 없습니다.');
+    }
+
+    // 기본값 (complex 파라미터 없거나 DB 조회 실패 시)
+    let complexName = '레슨 신청';
+    let pageTitle   = '레슨 신청';
+    let pageDesc    = '수업 신청, 취소, 변경을 간편하게 처리하세요.';
+    const pageUrl   = `https://apt-webapp.vercel.app${req.originalUrl}`;
+
+    // ① 경로 방식 우선: /apt-sclass → complexCode = 'apt-sclass'
+    // ② 쿼리파라미터 방식 폴백: ?complex=apt-sclass
+    const pathMatch = req.path.match(/^\/([a-zA-Z0-9_-]+)\/?$/);
+    const complexCode = (pathMatch && pathMatch[1] !== 'admin')
+        ? pathMatch[1]
+        : req.query.complex;
+
+    if (complexCode) {
+        try {
+            const sb = getSupabase();
+            const { data } = await sb
+                .from('complexes')
+                .select('name')
+                .eq('code', complexCode)
+                .single();
+            if (data?.name) {
+                complexName = data.name;
+                pageTitle   = `레슨 신청 - ${data.name}`;
+                pageDesc    = `${data.name} 수업 신청, 취소, 변경을 간편하게 처리하세요.`;
+            }
+        } catch (_) {
+            // DB 오류 시 기본값 유지
+        }
+    }
+
+    // OG 메타태그 블록 (중복 삽입 방지: </head> 바로 앞에 한 번만 삽입)
+    const ogBlock = `
+    <!-- OG 태그 (서버사이드 동적 생성) -->
+    <meta property="og:type"        content="website">
+    <meta property="og:url"         content="${pageUrl}">
+    <meta property="og:title"       content="${pageTitle}">
+    <meta property="og:description" content="${pageDesc}">
+    <meta property="og:site_name"   content="${complexName}">
+    <meta name="twitter:card"       content="summary">
+    <meta name="twitter:title"      content="${pageTitle}">
+    <meta name="twitter:description" content="${pageDesc}">`;
+
+    // <title> 교체 + OG 블록 삽입
+    html = html
+        .replace(/<title>[^<]*<\/title>/, `<title>${pageTitle}</title>`)
+        .replace('</head>', `${ogBlock}\n</head>`);
+
+    res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+    // 캐시 완전 비활성화 — 크롤러(네이버 QR 등)가 항상 최신 단지명을 가져가도록
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.send(html);
 });
 
 // ── 에러 핸들러 ───────────────────────────────────────────────────────────────

@@ -9,8 +9,6 @@ const State = {
     selectedTime: null,
     formData: {},
     signaturePad: null,
-    adminClickCount: 0,
-    adminClickTimer: null
 };
 
 // ── 초기화 ───────────────────────────────────────────────────────────────────
@@ -232,19 +230,6 @@ function setupEvents() {
     document.getElementById('phoneConfirm').addEventListener('input', e => {
         formatPhone(e);
         checkConfirmMatch('phone', 'phoneConfirm', 'phoneConfirmWrap');
-    });
-
-    // 관리자 트리거 (헤더 5번 클릭)
-    const trigger = document.getElementById('adminTrigger');
-    trigger.addEventListener('click', () => {
-        State.adminClickCount++;
-        clearTimeout(State.adminClickTimer);
-        State.adminClickTimer = setTimeout(() => { State.adminClickCount = 0; }, 2000);
-        if (State.adminClickCount >= 5) {
-            State.adminClickCount = 0;
-            openModal('adminLoginModal');
-            setTimeout(() => document.getElementById('adminPassword')?.focus(), 300);
-        }
     });
 
     // 문의 제출
@@ -775,23 +760,6 @@ async function showCurriculumModal() {
         `;
     } catch (e) {
         content.innerHTML = `<p class="error-hint">커리큘럼을 불러오지 못했습니다</p>`;
-    }
-}
-
-// ── 관리자 비밀번호 확인 ──────────────────────────────────────────────────────
-async function verifyAdminPassword() {
-    const pw  = document.getElementById('adminPassword').value;
-    const err = document.getElementById('adminPasswordError');
-    err.style.display = 'none';
-
-    try {
-        const res = await API.complexes.verifyPassword(State.complex.code, pw);
-        closeModal('adminLoginModal');
-        window.location.href = `/admin/?complex=${State.complex.code}`;
-    } catch (e) {
-        err.textContent = '비밀번호가 올바르지 않습니다';
-        err.style.display = 'block';
-        setTimeout(() => { err.style.display = 'none'; }, 3000);
     }
 }
 

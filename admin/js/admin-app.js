@@ -19,8 +19,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedRole    = sessionStorage.getItem('adminRole');
 
     if (savedComplex && savedRole) {
-        Admin.complex = JSON.parse(savedComplex);
-        Admin.role    = savedRole;
+        Admin.complex      = JSON.parse(savedComplex);
+        Admin.role         = savedRole;
+        Admin.masterSecret = sessionStorage.getItem('adminMasterSecret') || null;
+        Admin.adminSecret  = sessionStorage.getItem('adminSecret') || null;
         startAdminApp();
     } else {
         // 로그인 화면 초기화: 단지 목록 로드
@@ -77,10 +79,6 @@ async function _loadComplexListForLogin() {
     }
 }
 
-// ── 단지 선택 드롭다운 변경 ───────────────────────────────────────────────────
-function onComplexSelectChange(value) {
-    // 필요시 단지 선택에 따른 UI 변경 처리
-}
 
 // ── 로그인 폼 전환 ────────────────────────────────────────────────────────────
 function showMasterLogin() {
@@ -109,10 +107,12 @@ async function doMasterLogin() {
 
     try {
         const res = await API.complexes.verifyPassword('', pw);
-        Admin.complex = res.complex || { code: 'master', name: '마스터 관리자' };
-        Admin.role    = 'master';
-        sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
-        sessionStorage.setItem('adminRole',    'master');
+        Admin.complex      = res.complex || { code: 'master', name: '마스터 관리자' };
+        Admin.role         = 'master';
+        Admin.masterSecret = pw;  // auto-toggle 등 마스터 전용 API 인증용
+        sessionStorage.setItem('adminComplex',      JSON.stringify(Admin.complex));
+        sessionStorage.setItem('adminRole',         'master');
+        sessionStorage.setItem('adminMasterSecret', pw);
         startAdminApp();
     } catch (e) {
         err.textContent = '마스터 비밀번호가 올바르지 않습니다';
@@ -124,18 +124,8 @@ async function doMasterLogin() {
 
 // ── 일반 로그인 ───────────────────────────────────────────────────────────────
 async function doLogin() {
-    // 드롭다운 or 직접 입력에서 단지 코드 읽기
-    const selectEl  = document.getElementById('loginComplexSelect');
     const codeInput = document.getElementById('loginComplexCode');
-    let code = '';
-
-    if (selectEl && selectEl.style.display !== 'none' && selectEl.value) {
-        code = selectEl.value;
-    } else if (codeInput && codeInput.style.display !== 'none') {
-        code = codeInput.value.trim();
-    } else if (selectEl) {
-        code = selectEl.value.trim();
-    }
+    const code = codeInput ? codeInput.value.trim() : '';
 
     const pw  = document.getElementById('loginPassword').value.trim();
     const err = document.getElementById('loginError');
@@ -149,10 +139,12 @@ async function doLogin() {
 
     try {
         const res = await API.complexes.verifyPassword(code, pw);
-        Admin.complex = res.complex || { code };
-        Admin.role    = res.role;
-        sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
-        sessionStorage.setItem('adminRole',    Admin.role);
+        Admin.complex      = res.complex || { code };
+        Admin.role         = res.role;
+        Admin.adminSecret  = pw;  // auto-toggle 단지 인증용
+        sessionStorage.setItem('adminComplex',     JSON.stringify(Admin.complex));
+        sessionStorage.setItem('adminRole',        Admin.role);
+        sessionStorage.setItem('adminSecret',      pw);
         startAdminApp();
     } catch (e) {
         err.textContent = '비밀번호가 올바르지 않습니다';
@@ -167,6 +159,9 @@ function doLogout() {
     sessionStorage.removeItem('adminComplex');
     sessionStorage.removeItem('adminRole');
     Admin.complex = null; Admin.role = null; Admin.selectedComplexId = null;
+    Admin.masterSecret = null; Admin.adminSecret = null;
+    sessionStorage.removeItem('adminMasterSecret');
+    sessionStorage.removeItem('adminSecret');
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('mainLayout').style.display = 'none';
     document.getElementById('loginPassword').value = '';
