@@ -2665,11 +2665,13 @@ ${(() => {
         const min  = document.getElementById(`${prefix}-${key}-min`)?.value || '00';
         if (!day || hour === '' || hour === undefined) return null;
         // 현재 KST 연월 기준으로 조합
-        const nowKst  = new Date(Date.now() + 9*60*60*1000);
-        const year    = nowKst.getUTCFullYear();
-        const month   = nowKst.getUTCMonth() + 1;
-        const kstStr  = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}T${String(hour).padStart(2,'0')}:${min}:00`;
-        return new Date(new Date(kstStr).getTime() - 9*60*60*1000).toISOString();
+        // ※ "+09:00" offset을 명시해야 브라우저가 UTC로 직접 변환 (-9h 이중적용 방지)
+        const nowKst = new Date(Date.now() + 9*60*60*1000);
+        const year   = nowKst.getUTCFullYear();
+        const month  = nowKst.getUTCMonth() + 1;
+        const kstStr = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}T`
+                     + `${String(hour).padStart(2,'0')}:${min}:00+09:00`;
+        return new Date(kstStr).toISOString();
     },
 
     // 전체 저장 (전역 기간 + 신청 종류별 기간)
@@ -3030,8 +3032,11 @@ ${(() => {
             const periodMode  = selectedRadio?.value || 'auto';
             const startEl     = document.getElementById(`atr-start-${key}`);
             const endEl       = document.getElementById(`atr-end-${key}`);
-            // KST → UTC 변환
-            const toUtc = (v) => v ? new Date(new Date(v).getTime() - 9*60*60*1000).toISOString() : null;
+            // datetime-local 값(KST)을 UTC로 변환 — "+09:00" suffix 붙여 이중변환 방지
+            const toUtc = (v) => {
+                if (!v) return null;
+                return new Date(v + ':00+09:00').toISOString();
+            };
             return {
                 apply_type_key: key,
                 is_enabled:     isEnabled,

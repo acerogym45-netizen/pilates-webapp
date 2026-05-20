@@ -132,11 +132,11 @@ app.get('/api/health', (req, res) => {
 });
 
 // ── API 라우터 등록 ───────────────────────────────────────────────────────────
+app.use('/api/upload',       uploadRouter);       // ← 구체적 경로 먼저
 app.use('/api/complexes',    complexesRouter);
 app.use('/api/programs',     programsRouter);
 app.use('/api/applications', applicationsRouter);
-app.use('/api',              miscRouter);
-app.use('/api/upload',       uploadRouter);
+app.use('/api',              miscRouter);          // ← 와일드카드 마지막
 
 // ── 나머지 정적파일 (express.static) ─────────────────────────────────────────
 app.use(express.static(ROOT_DIR, { index: false, dotfiles: 'ignore' }));
