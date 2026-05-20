@@ -87,10 +87,13 @@ const cancellations = {
                 </div>
             </div>
 
-            <!-- 유형 탭: 해지 신청 / 환불 신청 -->
-            <div class="type-tab-bar" style="display:flex;gap:8px;margin-bottom:10px">
+            <!-- 유형 탭: 해지 신청 / 중도해지 / 환불 신청 -->
+            <div class="type-tab-bar" style="display:flex;gap:6px;margin-bottom:10px">
                 <button id="tabCancel" class="type-tab-btn active" onclick="cancellations.switchTab('cancel')">
-                    <i class="fas fa-times-circle"></i> 해지 신청
+                    <i class="fas fa-times-circle"></i> 차월 해지
+                </button>
+                <button id="tabMidCancel" class="type-tab-btn" onclick="cancellations.switchTab('mid_cancel')">
+                    <i class="fas fa-cut"></i> 중도 해지
                 </button>
                 <button id="tabRefund" class="type-tab-btn" onclick="cancellations.switchTab('refund')">
                     <i class="fas fa-file-invoice-dollar"></i> 환불 신청
@@ -136,8 +139,9 @@ const cancellations = {
     switchTab(tab) {
         this.currentTab = tab;
         this.currentStatus = '';
-        document.getElementById('tabCancel')?.classList.toggle('active', tab === 'cancel');
-        document.getElementById('tabRefund')?.classList.toggle('active', tab === 'refund');
+        document.getElementById('tabCancel')?.classList.toggle('active',    tab === 'cancel');
+        document.getElementById('tabMidCancel')?.classList.toggle('active', tab === 'mid_cancel');
+        document.getElementById('tabRefund')?.classList.toggle('active',    tab === 'refund');
         document.querySelectorAll('.filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
         this.load();
     },
@@ -177,10 +181,15 @@ const cancellations = {
 
     renderList(list) {
         const container = document.getElementById('cancelList');
-        const isRefund = this.currentTab === 'refund';
+        const isRefund    = this.currentTab === 'refund';
+        const isMidCancel = this.currentTab === 'mid_cancel';
+        const isCancel    = this.currentTab === 'cancel';
 
+        const emptyMsg = isRefund ? '환불 신청이 없습니다'
+                       : isMidCancel ? '중도 해지 신청이 없습니다'
+                       : '해지 신청이 없습니다';
         if (!list.length) {
-            container.innerHTML = `<p class="empty-hint">${isRefund ? '환불 신청이 없습니다' : '해지 신청이 없습니다'}</p>`;
+            container.innerHTML = `<p class="empty-hint">${emptyMsg}</p>`;
             return;
         }
 
@@ -190,21 +199,30 @@ const cancellations = {
             ? ` &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">미처리 대기 ${pendingCount}건</span>`
             : '';
 
+        // 탭별 배지 색상
+        const typeBadge = isRefund
+            ? '<span class="status-badge badge-refund" style="margin-top:4px;display:block">환불</span>'
+            : isMidCancel
+                ? '<span class="status-badge" style="margin-top:4px;display:block;background:#fef3c7;color:#92400e;border:1px solid #fbbf24">중도해지</span>'
+                : '<span class="status-badge badge-cancel" style="margin-top:4px;display:block">차월해지</span>';
+
         container.innerHTML = `<div class="list-summary">${list.length}건${summaryExtra}</div>`
             + list.map(c => {
-                const applyDate = (!isRefund) ? this.calcApplyMonth(c.created_at) : '';
+                const applyDate = isCancel ? this.calcApplyMonth(c.created_at) : '';
                 return `
                 <div class="list-item" onclick="cancellations.showDetail('${c.id}')">
                     <div class="item-status">
                         <span class="status-badge status-${statusClass(c.status)}">${statusLabel(c.status)}</span>
-                        ${isRefund ? '<span class="status-badge badge-refund" style="margin-top:4px;display:block">환불</span>'
-                                   : '<span class="status-badge badge-cancel" style="margin-top:4px;display:block">해지</span>'}
+                        ${typeBadge}
                     </div>
                     <div class="item-main">
                         <strong>${c.dong} ${c.ho} | ${c.name}</strong>
-                        <p>${c.program_name || (isRefund ? '환불 신청' : '해지 신청')}${!isRefund && c.preferred_time ? ` <span style="color:#6b7280;font-size:.8rem">(${c.preferred_time})</span>` : ''}</p>
-                        ${!isRefund && applyDate
+                        <p>${c.program_name || emptyMsg}${!isRefund && c.preferred_time ? ` <span style="color:#6b7280;font-size:.8rem">(${c.preferred_time})</span>` : ''}</p>
+                        ${isCancel && applyDate
                             ? `<span class="cancel-apply-date"><i class="fas fa-calendar-check"></i> 익월 해지 예정: ${applyDate}</span>`
+                            : ''}
+                        ${isMidCancel && c.termination_date
+                            ? `<span class="cancel-apply-date" style="color:#92400e"><i class="fas fa-scissors"></i> 중도해지일: ${c.termination_date}</span>`
                             : ''}
                         <small>${c.phone} | ${formatDate(c.created_at)}</small>
                     </div>

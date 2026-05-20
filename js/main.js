@@ -39,7 +39,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     await initializeComplexContext();
     console.log('✅ Complex context initialized');
     
-    // 2. 나머지 초기화
+    // 2. URL action 처리 (대기 수락 등)
+    const _urlParams = new URLSearchParams(window.location.search);
+    if (_urlParams.get('action') === 'accept-waiting') {
+        const _waitingId = _urlParams.get('id');
+        if (_waitingId) {
+            // 약간 지연 후 모달 표시 (페이지 렌더 완료 후)
+            setTimeout(() => showAcceptWaitingModal(_waitingId), 600);
+        }
+    }
+    
+    // 3. 나머지 초기화
     setupEventListeners();
     setMinDate();
     setSignatureDate();
@@ -1892,7 +1902,7 @@ async function renderPeriodBanner() {
 }
 
 async function showCancellationForm() {
-    // === 해지 접수 기간 체크 (커스텀 기간 또는 매월 22~26일) ===
+    // === 해지 접수 기간 체크 (complex_apply_settings 우선 → 단지기간 → 22~26일) ===
     const { isOpen: isInCancelPeriod, label: cancelLabel } = await getApplyPeriodStatus();
     const now = new Date();
     const kstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -2908,4 +2918,151 @@ function downloadTimetableImage() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 대기 수락 모달 (문자 링크 → 입주민 페이지 → 수락 버튼)
+// URL: /?complex=CODE&action=accept-waiting&id=APPLICATION_ID
+// ══════════════════════════════════════════════════════════════════════
+async function showAcceptWaitingModal(applicationId) {
+    // 신청 정보 조회
+    let appData = null;
+    try {
+        const res  = await fetch(`/api/applications/${applicationId}`);
+        const json = await res.json();
+        if (json.success) appData = json.data;
+    } catch(e) {}
+
+    // 만료 여부 사전 체크
+    if (appData && appData.waiting_expires_at) {
+        const expiresAt = new Date(appData.waiting_expires_at);
+        const now       = new Date();
+        if (now > expiresAt) {
+            showModal(
+                '대기 시간 초과',
+                `<div style="text-align:center;padding:20px 0">
+                    <i class="fas fa-clock" style="font-size:3rem;color:#dc2626;margin-bottom:16px;display:block"></i>
+                    <p style="font-size:1rem;color:#374151;margin-bottom:8px">대기 응답 시간이 초과되었습니다.</p>
+                    <p style="font-size:.88rem;color:#6b7280">다음 기회에 다시 신청해 주세요.</p>
+                </div>`,
+                null, null, true
+            );
+            return;
+        }
+    }
+
+    // 남은 시간 계산
+    let timeLeftText = '';
+    if (appData?.waiting_expires_at) {
+        const ms   = new Date(appData.waiting_expires_at) - new Date();
+        const mins = Math.max(0, Math.floor(ms / 60000));
+        const hrs  = Math.floor(mins / 60);
+        const rem  = mins % 60;
+        timeLeftText = hrs > 0
+            ? `<span style="color:#dc2626;font-weight:700">${hrs}시간 ${rem}분</span> 남음`
+            : `<span style="color:#dc2626;font-weight:700">${rem}분</span> 남음`;
+    }
+
+    const programName   = appData?.program_name   || '';
+    const preferredTime = appData?.preferred_time  || '';
+    const waitingOrder  = appData?.waiting_order   || '';
+
+    const body = `
+    <div style="text-align:center;padding:8px 0 16px">
+        <i class="fas fa-bell" style="font-size:2.8rem;color:#f59e0b;margin-bottom:14px;display:block"></i>
+        <p style="font-size:1.05rem;font-weight:700;color:#111827;margin-bottom:6px">
+            수강 자리가 났습니다!
+        </p>
+        <p style="font-size:.88rem;color:#6b7280;margin-bottom:18px">
+            아래 내용을 확인하고 수락해 주세요.
+        </p>
+        <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:14px;text-align:left">
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+                <span style="color:#6b7280;font-size:.85rem">프로그램</span>
+                <strong style="font-size:.9rem">${programName}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+                <span style="color:#6b7280;font-size:.85rem">시간대</span>
+                <strong style="font-size:.9rem">${preferredTime}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between">
+                <span style="color:#6b7280;font-size:.85rem">대기 순번</span>
+                <strong style="font-size:.9rem">${waitingOrder}번</strong>
+            </div>
+        </div>
+        ${timeLeftText ? `<p style="font-size:.85rem;color:#6b7280;margin-bottom:14px">응답 기한: ${timeLeftText}</p>` : ''}
+        <div style="margin-bottom:4px">
+            <label style="font-size:.85rem;color:#374151;display:block;text-align:left;margin-bottom:6px">
+                <i class="fas fa-lock" style="font-size:.8rem"></i> 본인 확인: 전화번호 뒷 4자리
+            </label>
+            <input type="number" id="acceptWaitingPhone4"
+                   placeholder="숫자 4자리 입력"
+                   maxlength="4" inputmode="numeric"
+                   style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:1rem;text-align:center;box-sizing:border-box">
+        </div>
+    </div>`;
+
+    const footer = `
+        <button class="btn-secondary" onclick="closeModal()">취소</button>
+        <button class="btn-primary" onclick="confirmAcceptWaiting('${applicationId}')"
+                style="background:#10b981">
+            <i class="fas fa-check-circle"></i> 수락하기
+        </button>`;
+
+    showModal(
+        '<i class="fas fa-bell" style="color:#f59e0b"></i> 대기 수락',
+        body, null, footer, true
+    );
+
+    // 포커스
+    setTimeout(() => {
+        const inp = document.getElementById('acceptWaitingPhone4');
+        if (inp) inp.focus();
+    }, 300);
+}
+
+async function confirmAcceptWaiting(applicationId) {
+    const phone4El = document.getElementById('acceptWaitingPhone4');
+    const phone4   = (phone4El?.value || '').replace(/\D/g, '');
+    if (!/^\d{4}$/.test(phone4)) {
+        alert('전화번호 뒷 4자리를 입력해 주세요.');
+        return;
+    }
+
+    try {
+        const res  = await fetch(`/api/applications/${applicationId}/accept-waiting`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ phone4 }),
+        });
+        const json = await res.json();
+
+        if (json.success) {
+            closeModal();
+            // 성공 모달
+            showModal(
+                '수락 완료!',
+                `<div style="text-align:center;padding:20px 0">
+                    <i class="fas fa-check-circle" style="font-size:3rem;color:#10b981;margin-bottom:16px;display:block"></i>
+                    <p style="font-size:1rem;font-weight:700;color:#111827;margin-bottom:8px">
+                        수강 신청이 확정되었습니다!
+                    </p>
+                    <p style="font-size:.88rem;color:#6b7280">
+                        ${json.data?.program_name || ''} ${json.data?.preferred_time || ''}<br>
+                        수강을 환영합니다 🎉
+                    </p>
+                </div>`,
+                null, `<button class="btn-primary" onclick="closeModal()">확인</button>`, true
+            );
+            // URL 파라미터 정리
+            const url = new URL(window.location.href);
+            url.searchParams.delete('action');
+            url.searchParams.delete('id');
+            window.history.replaceState({}, '', url.toString());
+        } else {
+            alert(json.error || '수락 처리 중 오류가 발생했습니다.');
+        }
+    } catch(e) {
+        alert('수락 처리 중 오류: ' + e.message);
+    }
 }

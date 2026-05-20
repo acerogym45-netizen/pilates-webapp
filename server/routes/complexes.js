@@ -396,4 +396,165 @@ router.delete('/:id/apply-period', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ═══════════════════════════════════════════════════════
+// 신청 종류별 설정 (complex_apply_settings)
+// ─────────────────────────────────────────────────────
+// GET  /api/complexes/:id/apply-settings   → 모든 신청 종류 설정 조회
+// PUT  /api/complexes/:id/apply-settings   → 신청 종류별 설정 일괄 저장
+// ═══════════════════════════════════════════════════════
+
+/**
+ * 기본 신청 종류 목록
+ * apply_type_key: DB/코드에서 사용하는 키값
+ * label: UI에 표시할 한국어 라벨
+ */
+const DEFAULT_APPLY_TYPES = [
+    { key: 'new',        label: '신규 수강 신청' },
+    { key: 'waiting',    label: '대기 신청'      },
+    { key: 'cancel',     label: '해지 신청 (차월)' },
+    { key: 'mid_cancel', label: '중도 해지'       },
+    { key: 'refund',     label: '환불 신청'       },
+];
+
+/**
+ * GET /api/complexes/:id/apply-settings
+ * 모든 신청 종류 설정 + 현재 열림/닫힘 상태 반환
+ * complex_apply_settings 테이블에 없는 항목은 기본값으로 채워서 반환
+ */
+router.get('/:id/apply-settings', async (req, res) => {
+    try {
+        const sb  = getSupabase();
+        const cxId = req.params.id;
+
+        // 단지 기본 기간 설정 조회 (is_open 계산에 필요)
+        const { data: cx, error: cxErr } = await sb
+            .from('complexes')
+            .select('id, name, apply_period_enabled, apply_start, apply_end, waiting_enabled, waiting_timeout_hours, auto_approve')
+            .eq('id', cxId)
+            .single();
+        if (cxErr) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+
+        // 저장된 설정 조회
+        const { data: rows } = await sb
+            .from('complex_apply_settings')
+            .select('*')
+            .eq('complex_id', cxId);
+
+        const rowMap = {};
+        (rows || []).forEach(r => { rowMap[r.apply_type_key] = r; });
+
+        const now = new Date();
+
+        // 단지 기본 기간의 열림 여부 계산 (auto 모드 폴백용)
+        const nowKst  = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const dayKst  = nowKst.getUTCDate();
+        const hourKst = nowKst.getUTCHours();
+        const autoIsOpen =
+            (dayKst === 22 && hourKst >= 9) ||
+            (dayKst > 22 && dayKst < 26)   ||
+            (dayKst === 26 && hourKst < 9);
+
+        // 단지 커스텀 기간 열림 여부
+        let complexCustomOpen = false;
+        if (cx.apply_period_enabled) {
+            if (cx.apply_start && cx.apply_end) {
+                complexCustomOpen = now >= new Date(cx.apply_start) && now <= new Date(cx.apply_end);
+            } else {
+                complexCustomOpen = true; // 상시 개방
+            }
+        }
+
+        // 각 신청 종류별 설정 합성
+        const settings = DEFAULT_APPLY_TYPES.map(type => {
+            const saved = rowMap[type.key] || {};
+            const isEnabled    = saved.is_enabled   !== undefined ? saved.is_enabled   : (type.key !== 'waiting'); // 대기 기본 off
+            const periodMode   = saved.period_mode  || 'auto';
+            const periodStart  = saved.period_start || null;
+            const periodEnd    = saved.period_end   || null;
+
+            // 열림 여부 계산
+            let isOpen = false;
+            if (!isEnabled) {
+                isOpen = false;
+            } else if (periodMode === 'always') {
+                isOpen = true;
+            } else if (periodMode === 'closed') {
+                isOpen = false;
+            } else if (periodMode === 'custom' && periodStart && periodEnd) {
+                isOpen = now >= new Date(periodStart) && now <= new Date(periodEnd);
+            } else {
+                // auto: 단지 커스텀 기간 우선, 없으면 22~26일 자동
+                isOpen = cx.apply_period_enabled ? complexCustomOpen : autoIsOpen;
+            }
+
+            return {
+                apply_type_key: type.key,
+                label:          type.label,
+                is_enabled:     isEnabled,
+                period_mode:    periodMode,
+                period_start:   periodStart,
+                period_end:     periodEnd,
+                is_open:        isOpen,
+            };
+        });
+
+        res.json({
+            success: true,
+            data: settings,
+            complex: {
+                waiting_enabled:       cx.waiting_enabled       || false,
+                waiting_timeout_hours: cx.waiting_timeout_hours || 3,
+                auto_approve:          cx.auto_approve !== false,
+            }
+        });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+/**
+ * PUT /api/complexes/:id/apply-settings
+ * body: {
+ *   settings: [{ apply_type_key, is_enabled, period_mode, period_start, period_end }],
+ *   waiting_enabled, waiting_timeout_hours, auto_approve   ← complexes 테이블 직접 업데이트
+ * }
+ * complex_apply_settings 테이블에 UPSERT
+ */
+router.put('/:id/apply-settings', async (req, res) => {
+    try {
+        const sb   = getSupabase();
+        const cxId = req.params.id;
+        const { settings, waiting_enabled, waiting_timeout_hours, auto_approve } = req.body;
+
+        // complexes 테이블 — 대기/자동승인 설정 업데이트
+        const cxPatch = {};
+        if (waiting_enabled       !== undefined) cxPatch.waiting_enabled       = Boolean(waiting_enabled);
+        if (waiting_timeout_hours !== undefined) cxPatch.waiting_timeout_hours = parseInt(waiting_timeout_hours) || 3;
+        if (auto_approve          !== undefined) cxPatch.auto_approve          = Boolean(auto_approve);
+
+        if (Object.keys(cxPatch).length > 0) {
+            const { error: cxErr } = await sb.from('complexes').update(cxPatch).eq('id', cxId);
+            if (cxErr) throw sbErr(cxErr, 'PUT /apply-settings: complexes update');
+        }
+
+        // complex_apply_settings — 신청 종류별 UPSERT
+        if (Array.isArray(settings) && settings.length > 0) {
+            const upsertRows = settings.map(s => ({
+                complex_id:     cxId,
+                apply_type_key: s.apply_type_key,
+                is_enabled:     Boolean(s.is_enabled),
+                period_mode:    s.period_mode || 'auto',
+                period_start:   s.period_start ? new Date(s.period_start).toISOString() : null,
+                period_end:     s.period_end   ? new Date(s.period_end).toISOString()   : null,
+                updated_at:     new Date().toISOString(),
+            }));
+
+            const { error: upsErr } = await sb
+                .from('complex_apply_settings')
+                .upsert(upsertRows, { onConflict: 'complex_id,apply_type_key' });
+            if (upsErr) throw sbErr(upsErr, 'PUT /apply-settings: upsert');
+        }
+
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 module.exports = router;
