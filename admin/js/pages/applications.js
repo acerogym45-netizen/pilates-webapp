@@ -2419,11 +2419,15 @@ ${(() => {
             if (r2.success) typeData   = r2.data;
         } catch(e) { showToast('설정 조회 실패: ' + e.message, 'error'); return; }
 
-        // UTC → KST datetime-local 포맷
+        // UTC → KST {day, hour, minute} 파싱
         const toKst = (utcStr) => {
-            if (!utcStr) return '';
+            if (!utcStr) return { day: '', hour: '', minute: '00' };
             const d = new Date(new Date(utcStr).getTime() + 9 * 60 * 60 * 1000);
-            return d.toISOString().slice(0, 16);
+            return {
+                day:    String(d.getUTCDate()),
+                hour:   String(d.getUTCHours()),
+                minute: String(d.getUTCMinutes()).padStart(2, '0'),
+            };
         };
 
         // 신청 종류 정의
@@ -2568,21 +2572,35 @@ ${(() => {
         </div>
         <div id="pmcustom-${key}" style="display:${isCustom?'block':'none'};
              background:#f9fafb;border-radius:8px;padding:12px;border:1px solid #e5e7eb">
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <div style="flex:1;min-width:150px">
-                    <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
-                        <i class="fas fa-calendar-check" style="color:${accentColor}"></i> 시작 일시 (KST)
-                    </label>
-                    <input type="datetime-local" id="pmstart-${key}" value="${startVal}"
-                           style="width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;box-sizing:border-box">
-                </div>
-                <div style="flex:1;min-width:150px">
-                    <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
-                        <i class="fas fa-calendar-times" style="color:#e74c3c"></i> 종료 일시 (KST)
-                    </label>
-                    <input type="datetime-local" id="pmend-${key}" value="${endVal}"
-                           style="width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;box-sizing:border-box">
-                </div>
+            ${this._renderDayTimeRow('pmstart', key, accentColor, '시작', startVal)}
+            ${this._renderDayTimeRow('pmend',   key, '#e74c3c',    '종료', endVal)}
+        </div>`;
+    },
+
+    // 일+시+분 select 행 렌더링
+    _renderDayTimeRow(prefix, key, color, label, kstObj) {
+        const d  = kstObj?.day    || '';
+        const h  = kstObj?.hour   || '';
+        const m  = kstObj?.minute || '00';
+
+        const dayOpts  = ['<option value="">일</option>',
+            ...Array.from({length:31}, (_,i) => `<option value="${i+1}" ${String(i+1)===String(d)?'selected':''}>${i+1}일</option>`)].join('');
+        const hourOpts = ['<option value="">시</option>',
+            ...Array.from({length:24}, (_,i) => `<option value="${i}" ${String(i)===String(h)?'selected':''}>${String(i).padStart(2,'0')}시</option>`)].join('');
+        const minOpts  = ['00','10','20','30','40','50'].map(v =>
+            `<option value="${v}" ${v===m?'selected':''}>${v}분</option>`).join('');
+
+        const selStyle = 'padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;background:#fff;cursor:pointer';
+        return `
+        <div style="margin-bottom:8px">
+            <label style="font-size:.78rem;font-weight:600;color:#374151;display:block;margin-bottom:5px">
+                <i class="fas fa-calendar-${label==='시작'?'check':'times'}" style="color:${color}"></i>
+                ${label} 일시 (KST)
+            </label>
+            <div style="display:flex;gap:6px;align-items:center">
+                <select id="${prefix}-${key}-day"  style="${selStyle};flex:1">${dayOpts}</select>
+                <select id="${prefix}-${key}-hour" style="${selStyle};flex:1">${hourOpts}</select>
+                <select id="${prefix}-${key}-min"  style="${selStyle};flex:1">${minOpts}</select>
             </div>
         </div>`;
     },
@@ -2640,10 +2658,22 @@ ${(() => {
         if (lbl) lbl.textContent = next ? 'ON' : 'OFF';
     },
 
+    // 일+시+분 select → UTC ISO 변환
+    _readDayTime(prefix, key) {
+        const day  = document.getElementById(`${prefix}-${key}-day`)?.value;
+        const hour = document.getElementById(`${prefix}-${key}-hour`)?.value;
+        const min  = document.getElementById(`${prefix}-${key}-min`)?.value || '00';
+        if (!day || hour === '' || hour === undefined) return null;
+        // 현재 KST 연월 기준으로 조합
+        const nowKst  = new Date(Date.now() + 9*60*60*1000);
+        const year    = nowKst.getUTCFullYear();
+        const month   = nowKst.getUTCMonth() + 1;
+        const kstStr  = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}T${String(hour).padStart(2,'0')}:${min}:00`;
+        return new Date(new Date(kstStr).getTime() - 9*60*60*1000).toISOString();
+    },
+
     // 전체 저장 (전역 기간 + 신청 종류별 기간)
     async _saveApplyPeriodAll(complexId) {
-        const toUtc = (v) => v ? new Date(new Date(v).getTime() - 9*60*60*1000).toISOString() : null;
-
         // ── [1] 전역 기본 기간 저장 ──────────────────────────────
         const globalMode = document.querySelector('input[name="pm-global"]:checked')?.value;
         let apply_period_enabled = false, apply_start = null, apply_end = null;
@@ -2651,12 +2681,12 @@ ${(() => {
         if (globalMode === 'always') {
             apply_period_enabled = true;
         } else if (globalMode === 'custom') {
-            const sv = document.getElementById('pmstart-global')?.value;
-            const ev = document.getElementById('pmend-global')?.value;
-            if (!sv || !ev) { showToast('전체 기본 기간: 시작일과 종료일을 모두 입력하세요', 'error'); return; }
-            apply_start = toUtc(sv); apply_end = toUtc(ev);
+            const sv = this._readDayTime('pmstart', 'global');
+            const ev = this._readDayTime('pmend',   'global');
+            if (!sv || !ev) { showToast('전체 기본 기간: 시작일·시간을 모두 선택하세요', 'error'); return; }
+            apply_start = sv; apply_end = ev;
             if (new Date(apply_start) >= new Date(apply_end)) {
-                showToast('전체 기본 기간: 종료일은 시작일보다 이후여야 합니다', 'error'); return;
+                showToast('전체 기본 기간: 종료 일시가 시작 일시보다 이후여야 합니다', 'error'); return;
             }
             apply_period_enabled = true;
         }
@@ -2677,14 +2707,14 @@ ${(() => {
             const periodMode = modeRadio?.value || 'auto';
             const track      = document.getElementById(`pet-track-${key}`);
             const isEnabled  = track ? (track.dataset.on === '1' || track.style.background === 'rgb(16, 185, 129)') : true;
-            const sv = document.getElementById(`pmstart-${key}`)?.value;
-            const ev = document.getElementById(`pmend-${key}`)?.value;
+            const sv = periodMode === 'custom' ? this._readDayTime('pmstart', key) : null;
+            const ev = periodMode === 'custom' ? this._readDayTime('pmend',   key) : null;
             return {
                 apply_type_key: key,
                 is_enabled:     isEnabled,
                 period_mode:    periodMode,
-                period_start:   periodMode === 'custom' && sv ? toUtc(sv) : null,
-                period_end:     periodMode === 'custom' && ev ? toUtc(ev) : null,
+                period_start:   sv,
+                period_end:     ev,
             };
         });
 
