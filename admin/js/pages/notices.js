@@ -121,7 +121,7 @@ const notices = {
 
         try {
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('image', file);
 
             const res = await fetch('/api/upload/image', { method: 'POST', body: formData });
             const json = await res.json();
