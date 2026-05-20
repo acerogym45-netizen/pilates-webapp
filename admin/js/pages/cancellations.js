@@ -72,13 +72,13 @@ const cancellations = {
 
             ${periodBannerHtml}
 
-            <!-- 관리 가이드 박스 -->
+            <!-- 관리 가이드 박스 (기간은 설정값으로 동적 업데이트) -->
             <div id="cancelGuideBox" style="background:#f0fdf4;border:1.5px solid #22c55e;border-radius:10px;
                  padding:12px 14px;margin-bottom:14px;font-size:.8rem;color:#166534;line-height:1.75">
                 <div style="font-weight:700;margin-bottom:6px"><i class="fas fa-info-circle"></i> 해지 관리 운영 가이드</div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
-                    <div>📅 <strong>등록 접수:</strong> 매월 22일 09시 ~ 26일 09시</div>
-                    <div>🚫 <strong>해지 신청:</strong> 매월 22일 09시 ~ 26일 09시</div>
+                <div id="cancelGuideGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
+                    <div>📅 <strong>등록 접수:</strong> <span id="guideEnrollPeriod">매월 22일 09시 ~ 26일 09시</span></div>
+                    <div>🚫 <strong>해지 신청:</strong> <span id="guideCancelPeriod">매월 22일 09시 ~ 26일 09시</span></div>
                     <div>🔄 <strong>해지 적용:</strong> 당월 수강 후 익월부터</div>
                     <div>⚡ <strong>미신청 시:</strong> 자동 재등록 (차월 수강료 청구)</div>
                 </div>
@@ -111,6 +111,65 @@ const cancellations = {
 
         this.applyTabStyle();
         await this.load();
+        this._updateGuide(); // 운영 가이드 기간 동적 업데이트 (비동기, UI 블로킹 안 함)
+    },
+
+    // 운영 가이드 기간 표시를 신청기간 설정값으로 동적 업데이트
+    async _updateGuide() {
+        const complexId = getEffectiveComplexId();
+        if (!complexId) return;
+
+        // 일+시 포맷 헬퍼 (UTC → KST "N일 HH시" 문자열)
+        const fmt = (utcStr) => {
+            if (!utcStr) return null;
+            const d = new Date(new Date(utcStr).getTime() + 9 * 60 * 60 * 1000);
+            const day  = d.getUTCDate();
+            const hour = String(d.getUTCHours()).padStart(2, '0');
+            const min  = d.getUTCMinutes();
+            return min > 0
+                ? `${day}일 ${hour}시 ${String(min).padStart(2,'0')}분`
+                : `${day}일 ${hour}시`;
+        };
+
+        // 기간 라벨 생성 헬퍼
+        const periodLabel = (setting, cx) => {
+            const mode = setting?.period_mode || 'auto';
+            if (mode === 'always') return '상시 개방';
+            if (mode === 'closed') return '항상 닫힘';
+            if (mode === 'custom' && setting?.period_start && setting?.period_end) {
+                return `매월 ${fmt(setting.period_start)} ~ ${fmt(setting.period_end)}`;
+            }
+            // auto: 단지 기본 기간 우선
+            if (cx?.apply_period_enabled && cx?.apply_start && cx?.apply_end) {
+                return `매월 ${fmt(cx.apply_start)} ~ ${fmt(cx.apply_end)}`;
+            }
+            return '매월 22일 09시 ~ 26일 09시'; // 기본값
+        };
+
+        try {
+            const [r1, r2] = await Promise.all([
+                fetch(`/api/complexes/${complexId}/apply-period`).then(r => r.json()),
+                fetch(`/api/complexes/${complexId}/apply-settings`).then(r => r.json()),
+            ]);
+
+            const cx       = r1.success ? r1.data : null;
+            const settings = r2.success ? (r2.data || []) : [];
+            const byKey    = {};
+            settings.forEach(s => { byKey[s.apply_type_key] = s; });
+
+            // 등록 접수 = 신규 수강 신청('new') 기간
+            const enrollLabel = periodLabel(byKey['new'], cx);
+            // 해지 신청 = 차월 해지('cancel') 기간
+            const cancelLabel = periodLabel(byKey['cancel'], cx);
+
+            const elEnroll = document.getElementById('guideEnrollPeriod');
+            const elCancel = document.getElementById('guideCancelPeriod');
+            if (elEnroll) elEnroll.textContent = enrollLabel;
+            if (elCancel) elCancel.textContent = cancelLabel;
+        } catch (e) {
+            // 실패해도 기본값(하드코딩)이 표시되므로 조용히 무시
+            console.warn('[_updateGuide] 기간 조회 실패:', e.message);
+        }
     },
 
     applyTabStyle() {
