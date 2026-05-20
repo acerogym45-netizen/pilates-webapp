@@ -2254,7 +2254,7 @@ function displayNotices(notices) {
                     </span>
                 </div>
                 <div class="notice-content">
-                    ${escapeHtml(notice.content || '')}
+                    ${escapeHtml(notice.content || '').replace(/\n/g, '<br>')}
                 </div>
                 ${notice.image_url ? `
                 <div class="notice-image">

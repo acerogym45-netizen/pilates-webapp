@@ -578,6 +578,10 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 .notice-item h4 { font-size: .9rem; font-weight: 700; margin-bottom: 4px; color: var(--text); }
 .notice-item p  { font-size: .82rem; color: var(--text-sub); white-space: pre-line; line-height: 1.6; }
 .notice-item small { font-size: .72rem; color: var(--text-muted); margin-top: 5px; display: block; }
+.notice-content {
+    font-size: .85rem; color: var(--text-sub); line-height: 1.75;
+    margin: 6px 0 4px; word-break: keep-all; overflow-wrap: break-word;
+}
 
 /* ════════════════════════════════════════════════
    공개 문의 목록
