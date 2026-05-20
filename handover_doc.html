@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', '맑은 고딕', sans-serif;
+    font-size: 9.5pt;
+    line-height: 1.65;
+    color: #1a1a2e;
+    background: #fff;
+  }
+
+  /* ── 표지 ── */
+  .cover {
+    width: 100%;
+    height: 297mm;
+    background: linear-gradient(145deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.04);
+    top: -80px; right: -80px;
+  }
+  .cover::after {
+    content: '';
+    position: absolute;
+    width: 300px; height: 300px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.03);
+    bottom: -60px; left: -60px;
+  }
+  .cover-inner { text-align: center; z-index: 1; }
+  .cover-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #a8d8ea;
+    font-size: 8pt;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 6px 20px;
+    border-radius: 20px;
+    margin-bottom: 28px;
+  }
+  .cover-title {
+    font-size: 32pt;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: -1px;
+    line-height: 1.2;
+    margin-bottom: 12px;
+  }
+  .cover-subtitle {
+    font-size: 14pt;
+    font-weight: 400;
+    color: rgba(255,255,255,0.7);
+    margin-bottom: 48px;
+  }
+  .cover-divider {
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(90deg, #4fc3f7, #81d4fa);
+    margin: 0 auto 40px;
+    border-radius: 2px;
+  }
+  .cover-meta {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+  }
+  .cover-meta-item { text-align: center; }
+  .cover-meta-label {
+    font-size: 7.5pt;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .cover-meta-value {
+    font-size: 10pt;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+  }
+
+  /* ── 페이지 공통 ── */
+  @page {
+    size: A4;
+    margin: 18mm 16mm 20mm 18mm;
+    @bottom-right {
+      content: counter(page);
+      font-size: 8pt;
+      color: #999;
+    }
+  }
+  @page :first { margin: 0; }
+
+  /* ── TOC ── */
+  .toc-page {
+    page-break-after: always;
+    padding: 8mm 4mm;
+  }
+  .toc-title {
+    font-size: 16pt;
+    font-weight: 800;
+    color: #0f2027;
+    border-bottom: 3px solid #2c5364;
+    padding-bottom: 10px;
+    margin-bottom: 24px;
+  }
+  .toc-section { margin-bottom: 8px; }
+  .toc-chapter {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 5px 0;
+    border-bottom: 1px dotted #ddd;
+  }
+  .toc-chapter-num {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #2c5364;
+    min-width: 28px;
+  }
+  .toc-chapter-name {
+    font-size: 9.5pt;
+    font-weight: 600;
+    color: #222;
+    flex: 1;
+  }
+  .toc-sub {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 0 3px 20px;
+    border-bottom: 1px dotted #eee;
+  }
+  .toc-sub-name {
+    font-size: 8.5pt;
+    color: #555;
+    flex: 1;
+  }
+
+  /* ── 섹션 헤더 ── */
+  .chapter-header {
+    background: linear-gradient(135deg, #0f2027 0%, #2c5364 100%);
+    color: white;
+    padding: 14px 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    margin-top: 8px;
+    page-break-before: always;
+  }
+  .chapter-header:first-child { page-break-before: avoid; }
+  .chapter-num {
+    font-size: 8pt;
+    opacity: 0.7;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .chapter-title {
+    font-size: 15pt;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .chapter-desc {
+    font-size: 8.5pt;
+    opacity: 0.8;
+    margin-top: 4px;
+  }
+
+  .section-title {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #0f2027;
+    border-left: 4px solid #2c5364;
+    padding-left: 10px;
+    margin: 20px 0 10px;
+  }
+  .sub-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #2c5364;
+    margin: 12px 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .sub-title::before {
+    content: '';
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: #2c5364;
+    border-radius: 50%;
+  }
+
+  /* ── 카드 & 박스 ── */
+  .info-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+  .info-box.warning {
+    background: #fffbeb;
+    border-color: #f59e0b;
+    border-left: 4px solid #f59e0b;
+  }
+  .info-box.danger {
+    background: #fff5f5;
+    border-color: #fc8181;
+    border-left: 4px solid #e53e3e;
+  }
+  .info-box.success {
+    background: #f0fff4;
+    border-color: #68d391;
+    border-left: 4px solid #38a169;
+  }
+  .info-box.info {
+    background: #ebf8ff;
+    border-color: #90cdf4;
+    border-left: 4px solid #3182ce;
+  }
+  .info-box.dark {
+    background: #1a202c;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .info-box.dark * { color: #e2e8f0 !important; }
+  .info-box.dark code { background: #2d3748; color: #a0aec0 !important; }
+
+  /* ── 테이블 ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0;
+    font-size: 8.8pt;
+  }
+  th {
+    background: #2c5364;
+    color: white;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 8.5pt;
+  }
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #e8ecef;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #f8fafc; }
+  tr:hover td { background: #eef2f7; }
+  .td-center { text-align: center; }
+  .td-code { font-family: 'Courier New', monospace; font-size: 8pt; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; }
+
+  /* ── 플로우 다이어그램 ── */
+  .flow-wrap {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 10px 0;
+  }
+  .flow-step {
+    background: #2c5364;
+    color: white;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 8.5pt;
+    font-weight: 600;
+    text-align: center;
+    min-width: 80px;
+  }
+  .flow-step.alt { background: #38a169; }
+  .flow-step.warn { background: #d69e2e; }
+  .flow-step.red { background: #c53030; }
+  .flow-step.gray { background: #718096; }
+  .flow-arrow {
+    font-size: 12pt;
+    color: #718096;
+    font-weight: 300;
+  }
+  .flow-sub {
+    font-size: 7.5pt;
+    color: #718096;
+    display: block;
+    font-weight: 400;
+  }
+
+  /* ── 뱃지 ── */
+  .badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    font-size: 7.5pt;
+    font-weight: 700;
+  }
+  .badge-green { background: #c6f6d5; color: #22543d; }
+  .badge-blue { background: #bee3f8; color: #2a4a8f; }
+  .badge-red { background: #fed7d7; color: #742a2a; }
+  .badge-orange { background: #feebc8; color: #7b341e; }
+  .badge-gray { background: #e2e8f0; color: #4a5568; }
+  .badge-purple { background: #e9d8fd; color: #553c9a; }
+
+  /* ── 코드 블록 ── */
+  .code-block {
+    background: #1a202c;
+    color: #a8ff78;
+    border-radius: 7px;
+    padding: 10px 14px;
+    font-family: 'Courier New', monospace;
+    font-size: 8pt;
+    line-height: 1.7;
+    margin: 8px 0;
+    overflow: hidden;
+  }
+  .code-block .comment { color: #6b7280; }
+  .code-block .keyword { color: #93c5fd; }
+  .code-block .string { color: #86efac; }
+  code {
+    background: #edf2f7;
+    color: #c53030;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 8pt;
+  }
+
+  /* ── 체크리스트 ── */
+  .checklist { list-style: none; padding: 0; margin: 6px 0; }
+  .checklist li {
+    padding: 3px 0 3px 20px;
+    position: relative;
+    font-size: 9pt;
+    color: #2d3748;
+  }
+  .checklist li::before {
+    content: '□';
+    position: absolute;
+    left: 0;
+    color: #2c5364;
+    font-weight: 700;
+  }
+  .checklist li.done::before { content: '✓'; color: #38a169; }
+
+  ul.plain { padding-left: 16px; margin: 6px 0; }
+  ul.plain li { font-size: 9pt; padding: 2px 0; color: #2d3748; }
+  ul.plain li::marker { color: #2c5364; }
+
+  /* ── 2열 그리드 ── */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 8px 0;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .kpi-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .kpi-label { font-size: 7.5pt; color: #718096; margin-bottom: 3px; }
+  .kpi-value { font-size: 12pt; font-weight: 800; color: #2c5364; }
+
+  /* ── 타임라인 ── */
+  .timeline { position: relative; padding-left: 20px; margin: 10px 0; }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 6px; top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, #2c5364, #e2e8f0);
+  }
+  .tl-item { position: relative; margin-bottom: 12px; }
+  .tl-dot {
+    position: absolute;
+    left: -17px; top: 3px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: #2c5364;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px #2c5364;
+  }
+  .tl-dot.red { background: #e53e3e; box-shadow: 0 0 0 2px #e53e3e; }
+  .tl-dot.green { background: #38a169; box-shadow: 0 0 0 2px #38a169; }
+  .tl-time { font-size: 7.5pt; color: #718096; font-weight: 600; }
+  .tl-desc { font-size: 9pt; color: #2d3748; margin-top: 1px; }
+
+  /* ── 구분선 ── */
+  hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
+  .page-break { page-break-before: always; }
+
+  p { font-size: 9.2pt; color: #2d3748; margin-bottom: 6px; line-height: 1.7; }
+
+  .highlight { background: #fef3c7; padding: 1px 4px; border-radius: 2px; font-weight: 600; }
+  .red-text { color: #c53030; font-weight: 600; }
+  .green-text { color: #276749; font-weight: 600; }
+  .blue-text { color: #2b6cb0; font-weight: 600; }
+
+  .tip-box {
+    background: #fffaf0;
+    border: 1px solid #f6ad55;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 8.5pt;
+    color: #744210;
+    margin: 8px 0;
+  }
+  .tip-box::before { content: '💡 '; font-weight: 700; }
+
+  .footer-bar {
+    background: #f1f5f9;
+    border-top: 2px solid #2c5364;
+    padding: 8px 14px;
+    font-size: 8pt;
+    color: #718096;
+    text-align: center;
+    margin-top: 30px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════
+     표지
+══════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="cover-inner">
+    <div class="cover-badge">SYSTEM HANDOVER DOCUMENT</div>
+    <div class="cover-title">아파트 커뮤니티<br>피트니스 관리 시스템</div>
+    <div class="cover-subtitle">업무 인수인계서 — 전 기능 워크플로우 상세 가이드</div>
+    <div class="cover-divider"></div>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">작성일</div>
+        <div class="cover-meta-value">2026. 05. 15</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">시스템 URL</div>
+        <div class="cover-meta-value">apt-webapp.vercel.app</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="cover-meta-label">플랫폼</div>
+        <div class="cover-meta-value">Vercel + Supabase</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     목차
+══════════════════════════════════════════════ -->
+<div class="toc-page">
+  <div class="toc-title">목차 (Table of Contents)</div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">1.</span><span class="toc-chapter-name">시스템 개요 및 기술 스택</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">1-1. 서비스 구조 한눈에 보기</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">1-2. 기술 스택 및 외부 서비스</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">1-3. 환경변수 (Vercel 설정)</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">1-4. 파일 구조 설명</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">2.</span><span class="toc-chapter-name">데이터베이스 구조 (Supabase)</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">2-1. 핵심 테이블 설명</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">2-2. 테이블 간 관계도</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">2-3. 주요 상태값(status) 정의</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">3.</span><span class="toc-chapter-name">관리자 로그인 및 권한 체계</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">3-1. 관리자 종류 (마스터 / 단지 관리자)</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">3-2. 로그인 워크플로우</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">3-3. 비밀번호 변경 방법</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">4.</span><span class="toc-chapter-name">입주민 워크플로우 — 전자계약서 및 수강신청</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">4-1. QR코드 접속 → 전자계약서 작성 흐름</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">4-2. 수강 신청 처리 로직 (자동승인 / 대기)</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">4-3. 내 신청 조회 · 취소 · 변경</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">5.</span><span class="toc-chapter-name">등록 접수 기간 관리 (매월 22일~26일)</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">5-1. 접수 기간 정책 및 시간 체크 로직</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">5-2. 프로그램 자동 활성화/비활성화 (Vercel Cron)</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">5-3. 수동 조작 방법</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">6.</span><span class="toc-chapter-name">해지 신청 워크플로우</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">6-1. 입주민 해지 신청 흐름</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">6-2. 자동 승인 처리 로직</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">6-3. 관리자 해지 신청 등록 (직접 입력)</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">7.</span><span class="toc-chapter-name">관리자 페이지 — 탭별 기능 상세</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">7-1. 대시보드</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">7-2. 신청 관리</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">7-3. 해지 관리</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">7-4. 프로그램 관리</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">7-5. 공지사항 / 문의 / 강사 관리</span></div>
+    <div class="toc-sub"><span class="toc-sub-name">7-6. 월별 정산 리포트 (엑셀 다운로드)</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">8.</span><span class="toc-chapter-name">월별 정기 운영 체크리스트</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">9.</span><span class="toc-chapter-name">장애 대응 및 자주 묻는 오류</span></div>
+  </div>
+
+  <div class="toc-section">
+    <div class="toc-chapter"><span class="toc-chapter-num">10.</span><span class="toc-chapter-name">코드 배포 및 유지보수 방법</span></div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 1. 시스템 개요
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 01</div>
+  <div class="chapter-title">시스템 개요 및 기술 스택</div>
+  <div class="chapter-desc">서비스 전체 구조, 사용 기술, 환경변수 설정 안내</div>
+</div>
+
+<div class="section-title">1-1. 서비스 구조 한눈에 보기</div>
+<p>본 시스템은 아파트 단지 내 <strong>커뮤니티 피트니스센터 무인 운영</strong>을 위한 웹 애플리케이션입니다. 입주민은 QR코드를 스캔해 수강 신청·해지를 온라인으로 진행하고, 관리자는 별도 관리자 페이지에서 전체 운영을 관리합니다.</p>
+
+<div class="grid-3" style="margin:14px 0;">
+  <div class="kpi-card">
+    <div class="kpi-label">입주민 화면</div>
+    <div class="kpi-value" style="font-size:10pt;">전자계약 · 신청</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">관리자 화면</div>
+    <div class="kpi-value" style="font-size:10pt;">운영 · 정산 · 설정</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">자동화</div>
+    <div class="kpi-value" style="font-size:10pt;">Cron · 자동승인</div>
+  </div>
+</div>
+
+<div class="sub-title">전체 흐름 다이어그램</div>
+<div class="flow-wrap">
+  <div class="flow-step">QR코드 스캔<span class="flow-sub">입주민</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">전자계약서 작성<span class="flow-sub">index.html</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step alt">수강신청 접수<span class="flow-sub">API 저장</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">관리자 확인<span class="flow-sub">admin/index.html</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step alt">정산 엑셀<span class="flow-sub">월별 다운로드</span></div>
+</div>
+
+<hr>
+
+<div class="section-title">1-2. 기술 스택 및 외부 서비스</div>
+<table>
+  <tr><th>구분</th><th>기술/서비스</th><th>역할</th><th>비고</th></tr>
+  <tr><td>프론트엔드</td><td>Vanilla HTML/JS/CSS</td><td>입주민 화면, 관리자 화면</td><td>프레임워크 미사용</td></tr>
+  <tr><td>백엔드</td><td>Node.js + Express</td><td>REST API 서버</td><td><code>api/index.js</code> 진입점</td></tr>
+  <tr><td>데이터베이스</td><td>Supabase (PostgreSQL)</td><td>모든 데이터 저장</td><td>RLS 미적용, anon key 사용</td></tr>
+  <tr><td>호스팅</td><td>Vercel</td><td>서버리스 함수 + 정적파일 서빙</td><td>자동 배포 (CLI)</td></tr>
+  <tr><td>자동화</td><td>Vercel Cron Job</td><td>매일 KST 09:00 프로그램 is_active 토글</td><td><code>api/cron.js</code></td></tr>
+  <tr><td>SMS</td><td>Solapi (선택)</td><td>문의 답변 SMS 발송</td><td>미설정 시 비활성화</td></tr>
+  <tr><td>파일서빙</td><td>Express static</td><td>JS/CSS/이미지 파일 제공</td><td>Vercel 정적파일 우선</td></tr>
+</table>
+
+<hr>
+
+<div class="section-title">1-3. 환경변수 (Vercel 대시보드 → Settings → Environment Variables)</div>
+<div class="info-box danger">
+  <strong>⚠ 중요:</strong> 환경변수가 없거나 잘못 설정되면 시스템이 전혀 동작하지 않습니다. 인수인계 시 반드시 아래 항목을 확인하고 전달하세요.
+</div>
+<table>
+  <tr><th>변수명</th><th>설명</th><th>예시</th><th>필수</th></tr>
+  <tr><td><code>SUPABASE_URL</code></td><td>Supabase 프로젝트 URL</td><td>https://xxxx.supabase.co</td><td class="td-center"><span class="badge badge-red">필수</span></td></tr>
+  <tr><td><code>SUPABASE_ANON_KEY</code></td><td>Supabase anon(public) API 키</td><td>eyJhbGci...</td><td class="td-center"><span class="badge badge-red">필수</span></td></tr>
+  <tr><td><code>MASTER_PASSWORD</code></td><td>마스터 관리자 비밀번호</td><td>master2026</td><td class="td-center"><span class="badge badge-red">필수</span></td></tr>
+  <tr><td><code>CRON_SECRET</code></td><td>Vercel Cron Job 인증 토큰</td><td>임의 랜덤 문자열</td><td class="td-center"><span class="badge badge-orange">권장</span></td></tr>
+  <tr><td><code>SOLAPI_API_KEY</code></td><td>Solapi SMS 발송 API 키</td><td>NCSXXXXXX</td><td class="td-center"><span class="badge badge-gray">선택</span></td></tr>
+  <tr><td><code>SOLAPI_API_SECRET</code></td><td>Solapi SMS 시크릿</td><td>-</td><td class="td-center"><span class="badge badge-gray">선택</span></td></tr>
+  <tr><td><code>SOLAPI_SENDER</code></td><td>SMS 발신번호</td><td>010-0000-0000</td><td class="td-center"><span class="badge badge-gray">선택</span></td></tr>
+</table>
+
+<div class="tip-box">Vercel 대시보드 접속 → 프로젝트 선택 → Settings → Environment Variables 메뉴에서 확인/수정 가능합니다. 변경 후 반드시 재배포(Redeploy)해야 적용됩니다.</div>
+
+<hr>
+
+<div class="section-title">1-4. 주요 파일 구조</div>
+<table>
+  <tr><th>경로</th><th>역할</th></tr>
+  <tr><td><code>index.html</code></td><td>입주민 메인 화면 (전자계약서, 수강신청, 공지사항, 문의, 내 신청 관리)</td></tr>
+  <tr><td><code>js/main.js</code></td><td>입주민 화면 전체 JavaScript 로직</td></tr>
+  <tr><td><code>css/style.css</code></td><td>입주민 화면 스타일</td></tr>
+  <tr><td><code>admin/index.html</code></td><td>관리자 SPA (단일 페이지 앱) 진입점</td></tr>
+  <tr><td><code>admin/js/admin.js</code></td><td>관리자 인증, 라우팅, 공통 모달/토스트</td></tr>
+  <tr><td><code>admin/js/pages/*.js</code></td><td>각 탭별 관리자 페이지 (dashboard, applications, cancellations, programs…)</td></tr>
+  <tr><td><code>admin/css/admin.css</code></td><td>관리자 화면 스타일</td></tr>
+  <tr><td><code>api/index.js</code></td><td>Vercel 서버리스 함수 — Express 앱 전체 진입점</td></tr>
+  <tr><td><code>api/cron.js</code></td><td>Vercel Cron Job 핸들러 (매일 KST 09:00 실행)</td></tr>
+  <tr><td><code>server/routes/applications.js</code></td><td>수강신청 CRUD API</td></tr>
+  <tr><td><code>server/routes/programs.js</code></td><td>프로그램 CRUD + auto-toggle + schedule-status API</td></tr>
+  <tr><td><code>server/routes/misc.js</code></td><td>공지/문의/강사/커리큘럼/해지/정산/SMS API</td></tr>
+  <tr><td><code>server/routes/complexes.js</code></td><td>단지 CRUD + 비밀번호 검증 API</td></tr>
+  <tr><td><code>vercel.json</code></td><td>Vercel 빌드·라우트·Cron 스케줄 설정</td></tr>
+</table>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 2. 데이터베이스 구조
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 02</div>
+  <div class="chapter-title">데이터베이스 구조 (Supabase)</div>
+  <div class="chapter-desc">핵심 테이블 스키마, 관계도, 상태값 정의</div>
+</div>
+
+<div class="section-title">2-1. 핵심 테이블 설명</div>
+
+<div class="sub-title">complexes — 단지</div>
+<table>
+  <tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+  <tr><td>id</td><td>uuid</td><td>PK</td></tr>
+  <tr><td>name</td><td>text</td><td>단지명 (예: 필라테스 A동)</td></tr>
+  <tr><td>code</td><td>text</td><td>단지 코드 — QR URL에 사용 (<code>/?complex=코드</code>)</td></tr>
+  <tr><td>admin_password</td><td>text</td><td>단지 관리자 비밀번호</td></tr>
+  <tr><td>address</td><td>text</td><td>주소</td></tr>
+  <tr><td>is_active</td><td>bool</td><td>활성 여부</td></tr>
+</table>
+
+<div class="sub-title">programs — 프로그램</div>
+<table>
+  <tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+  <tr><td>id</td><td>uuid</td><td>PK</td></tr>
+  <tr><td>complex_id</td><td>uuid</td><td>FK → complexes</td></tr>
+  <tr><td>name</td><td>text</td><td>프로그램명</td></tr>
+  <tr><td>type</td><td>text</td><td><code>group</code> / <code>duet</code> / <code>personal</code></td></tr>
+  <tr><td>days</td><td>text</td><td>운영 요일 (예: 월, 수, 금)</td></tr>
+  <tr><td>time_slots</td><td>jsonb</td><td>시간대 배열 (예: ["07:00","08:00"])</td></tr>
+  <tr><td>price</td><td>int</td><td>월 수강료 (원)</td></tr>
+  <tr><td>capacity</td><td>int</td><td>정원 수</td></tr>
+  <tr><td>is_active</td><td>bool</td><td><span class="red-text">true=신규 접수 가능, false=차단</span> — Cron이 자동 토글</td></tr>
+  <tr><td>show_on_inactive</td><td>bool</td><td>비활성 시 입주민 화면 노출 여부</td></tr>
+  <tr><td>display_order</td><td>int</td><td>목록 정렬 순서</td></tr>
+</table>
+
+<div class="sub-title">applications — 수강 신청</div>
+<table>
+  <tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+  <tr><td>id</td><td>uuid</td><td>PK</td></tr>
+  <tr><td>complex_id</td><td>uuid</td><td>FK → complexes</td></tr>
+  <tr><td>program_id</td><td>uuid</td><td>FK → programs</td></tr>
+  <tr><td>dong / ho</td><td>text</td><td>동·호수</td></tr>
+  <tr><td>name / phone</td><td>text</td><td>이름·전화번호</td></tr>
+  <tr><td>program_name</td><td>text</td><td>신청 당시 프로그램명 (denormalized)</td></tr>
+  <tr><td>preferred_time</td><td>text</td><td>희망 시간대</td></tr>
+  <tr><td>status</td><td>text</td><td>상태값 (아래 2-3 참조)</td></tr>
+  <tr><td>waiting_order</td><td>int</td><td>대기 순번 (null이면 정원 내)</td></tr>
+  <tr><td>signature_url</td><td>text</td><td>전자서명 이미지 URL</td></tr>
+  <tr><td>doc_urls</td><td>jsonb</td><td>계약서 문서 URL 목록</td></tr>
+  <tr><td>created_at</td><td>timestamptz</td><td>신청일시</td></tr>
+</table>
+
+<div class="sub-title">cancellations — 해지 신청</div>
+<table>
+  <tr><th>컬럼</th><th>타입</th><th>설명</th></tr>
+  <tr><td>id</td><td>uuid</td><td>PK</td></tr>
+  <tr><td>complex_id</td><td>uuid</td><td>FK → complexes</td></tr>
+  <tr><td>application_id</td><td>uuid</td><td>FK → applications (연결된 수강 건)</td></tr>
+  <tr><td>dong / ho / name / phone</td><td>text</td><td>신청자 정보</td></tr>
+  <tr><td>program_name</td><td>text</td><td>해지 대상 프로그램명</td></tr>
+  <tr><td>status</td><td>text</td><td><code>approved</code> (입주민 신청 시 즉시 자동 승인)</td></tr>
+  <tr><td>processed_at</td><td>timestamptz</td><td>승인 처리 일시 (자동 설정)</td></tr>
+  <tr><td>termination_month</td><td>text</td><td>해지 적용 월 (예: 2026-06)</td></tr>
+  <tr><td>request_type</td><td>text</td><td><code>cancel</code> (해지)</td></tr>
+  <tr><td>source</td><td>text</td><td><code>resident</code> (입주민) / <code>admin</code> (관리자 직접)</td></tr>
+</table>
+
+<div class="sub-title">기타 테이블</div>
+<table>
+  <tr><th>테이블</th><th>역할</th></tr>
+  <tr><td>notices</td><td>공지사항 (단지별, is_pinned=상단 고정)</td></tr>
+  <tr><td>inquiries</td><td>문의사항 (입주민 작성, 관리자 답변)</td></tr>
+  <tr><td>instructors</td><td>강사 정보 (이름, 자격증, 사진)</td></tr>
+  <tr><td>curricula</td><td>커리큘럼/수업 내용 소개</td></tr>
+  <tr><td>attendance_records</td><td>출석 기록 (정산 리포트용 출석횟수)</td></tr>
+</table>
+
+<hr>
+
+<div class="section-title">2-3. 주요 상태값(status) 정의</div>
+<div class="grid-2">
+  <div>
+    <div class="sub-title">applications.status</div>
+    <table>
+      <tr><th>값</th><th>의미</th></tr>
+      <tr><td><span class="badge badge-green">approved</span></td><td>승인 (정원 내 정상 수강)</td></tr>
+      <tr><td><span class="badge badge-orange">waiting</span></td><td>대기 (정원 초과, 대기 순번 부여)</td></tr>
+      <tr><td><span class="badge badge-red">rejected</span></td><td>거부 (관리자 수동 처리)</td></tr>
+      <tr><td><span class="badge badge-gray">cancelled</span></td><td>해지완료 (해지 신청 승인 시 자동 전환)</td></tr>
+      <tr><td><span class="badge badge-purple">transferred</span></td><td>양도 (양도한 측)</td></tr>
+      <tr><td><span class="badge badge-blue">received</span></td><td>양수 (양도받은 측)</td></tr>
+    </table>
+  </div>
+  <div>
+    <div class="sub-title">cancellations.status</div>
+    <table>
+      <tr><th>값</th><th>의미</th></tr>
+      <tr><td><span class="badge badge-green">approved</span></td><td>승인완료 (입주민 신청 즉시 자동 설정)</td></tr>
+      <tr><td><span class="badge badge-orange">pending</span></td><td>대기 (관리자 직접 등록 시 초기값, 현재는 드묾)</td></tr>
+      <tr><td><span class="badge badge-red">rejected</span></td><td>거부 (관리자 수동 처리)</td></tr>
+    </table>
+    <div class="info-box warning" style="margin-top:8px;">
+      <strong>현재 정책:</strong> 입주민이 해지 신청하면 <span class="red-text">즉시 자동 approved</span> 처리되며 번복이 불가합니다.
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 3. 관리자 로그인 및 권한
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 03</div>
+  <div class="chapter-title">관리자 로그인 및 권한 체계</div>
+  <div class="chapter-desc">관리자 접속 주소, 로그인 방법, 권한 구분</div>
+</div>
+
+<div class="section-title">3-1. 관리자 종류</div>
+<div class="grid-2">
+  <div class="info-box danger">
+    <strong>🔴 마스터 관리자</strong><br>
+    <ul class="plain">
+      <li>비밀번호: 환경변수 <code>MASTER_PASSWORD</code></li>
+      <li>모든 단지 데이터 열람·수정 가능</li>
+      <li>단지 추가·삭제 가능</li>
+      <li>단지 선택 후 해당 단지 데이터 관리 가능</li>
+      <li>단지 코드 없이 비밀번호만 입력하면 마스터 로그인</li>
+    </ul>
+  </div>
+  <div class="info-box info">
+    <strong>🔵 단지 관리자</strong><br>
+    <ul class="plain">
+      <li>비밀번호: DB <code>complexes.admin_password</code></li>
+      <li>본인 단지 데이터만 열람·수정 가능</li>
+      <li>로그인 시 단지 코드 + 비밀번호 입력 필요</li>
+      <li>단지 추가·삭제 불가</li>
+    </ul>
+  </div>
+</div>
+
+<div class="section-title">3-2. 로그인 워크플로우</div>
+<div class="flow-wrap">
+  <div class="flow-step gray">https://apt-webapp.vercel.app/admin/<span class="flow-sub">URL 접속</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">단지 코드 입력<span class="flow-sub">(마스터는 생략)</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">비밀번호 입력<span class="flow-sub">POST /api/complexes/verify-password</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step alt">대시보드 진입<span class="flow-sub">세션 유지</span></div>
+</div>
+<div class="info-box warning">
+  <strong>세션 유지:</strong> 로그인 정보는 브라우저 <code>sessionStorage</code>에 저장됩니다. 탭을 닫으면 자동 로그아웃됩니다. 별도 세션 토큰/쿠키 없음.
+</div>
+
+<div class="section-title">3-3. 단지 관리자 비밀번호 변경 방법</div>
+<p>단지 관리자 비밀번호는 Supabase 대시보드에서 직접 변경합니다.</p>
+<div class="code-block">
+<span class="comment">-- Supabase SQL 에디터에서 실행</span>
+UPDATE complexes
+SET admin_password = '새비밀번호'
+WHERE code = '단지코드';
+</div>
+<div class="tip-box">마스터 비밀번호 변경은 Vercel 대시보드 → Settings → Environment Variables → MASTER_PASSWORD 수정 후 재배포해야 합니다.</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 4. 입주민 워크플로우
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 04</div>
+  <div class="chapter-title">입주민 워크플로우 — 전자계약서 및 수강신청</div>
+  <div class="chapter-desc">입주민이 QR 스캔부터 수강신청 완료까지의 전 과정</div>
+</div>
+
+<div class="section-title">4-1. QR코드 접속 → 전자계약서 작성 흐름</div>
+
+<p>각 단지마다 <strong>고유 QR코드</strong>가 부여됩니다. QR코드는 아래 URL 형식입니다:</p>
+<div class="code-block">https://apt-webapp.vercel.app/?complex=<span class="string">[단지코드]</span></div>
+
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 1 — QR 스캔</div>
+    <div class="tl-desc">입주민이 피트니스센터 비치된 QR코드 스캔 → 브라우저에서 시스템 접속. <code>/?complex=코드</code> 파라미터로 단지 자동 인식.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 2 — 프로그램 선택</div>
+    <div class="tl-desc">활성화된 프로그램 목록 표시 (<code>is_active=true</code>인 것만). 접수 기간(매월 22~26일)에만 신규 선택 가능. 프로그램 선택 후 희망 시간대·요일 선택.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 3 — 개인정보 입력</div>
+    <div class="tl-desc">동, 호수, 이름, 전화번호 입력. 전화번호는 중복 신청 방지 및 내 신청 조회에 사용됨.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 4 — 전자계약서 동의</div>
+    <div class="tl-desc">해지 및 환불 규정 필독·동의 체크박스. 이용약관 ①~⑧ 동의 체크박스. 모두 체크해야 다음 단계 진행 가능.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green"></div>
+    <div class="tl-time">Step 5 — 전자서명 및 제출</div>
+    <div class="tl-desc">성명 입력 + 서명 패드에 직접 서명. 제출 시 <code>POST /api/applications</code> 호출 → DB 저장.</div>
+  </div>
+</div>
+
+<hr>
+
+<div class="section-title">4-2. 수강 신청 처리 로직 (자동승인 / 대기)</div>
+<p>신청 제출 후 서버에서 다음 로직으로 자동 처리됩니다:</p>
+<div class="info-box">
+  <strong>정원 확인 로직:</strong><br>
+  해당 프로그램·시간대의 <code>status='approved'</code> 건수 조회 → 정원(<code>capacity</code>) 미만이면 <span class="green-text">즉시 approved</span>, 초과면 <span class="red-text">waiting + 대기순번 자동 부여</span>.
+</div>
+
+<div class="flow-wrap">
+  <div class="flow-step">신청 제출</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">중복 신청 체크<span class="flow-sub">동일 프로그램+시간대</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">정원 확인<span class="flow-sub">approved 카운트</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step alt">정원 미만<br>→ approved</div>
+</div>
+<div class="flow-wrap" style="margin-top:4px;">
+  <div class="flow-step" style="opacity:0;min-width:80px;"></div>
+  <div style="min-width:24px;"></div>
+  <div class="flow-step" style="opacity:0;min-width:80px;"></div>
+  <div style="min-width:24px;"></div>
+  <div class="flow-step" style="opacity:0;min-width:80px;"></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step warn">정원 초과<br>→ waiting + 순번</div>
+</div>
+
+<div class="info-box warning" style="margin-top:10px;">
+  <strong>대기자 처리:</strong> 승인자가 해지하면 <code>waiting</code> 상태의 최우선순위(waiting_order=1) 입주민이 자동으로 <code>approved</code> 전환되지 <span class="red-text">않습니다</span>. 관리자가 수동으로 상태를 변경해야 합니다.
+</div>
+
+<div class="grid-2">
+  <div class="info-box success">
+    <strong>중복 신청 방지</strong><br>
+    동일 단지 + 동일 프로그램 + 동일 시간대에 이미 <code>approved</code> 또는 <code>waiting</code> 신청이 있으면 재신청 차단.
+  </div>
+  <div class="info-box info">
+    <strong>접수 기간 외 차단</strong><br>
+    매월 22일 09:00 ~ 26일 09:00 외 기간에는 프로그램 <code>is_active=false</code>로 자동 설정되어 신청 버튼 자체가 비활성화됨.
+  </div>
+</div>
+
+<hr>
+
+<div class="section-title">4-3. 내 신청 조회 · 취소 · 변경</div>
+<p>입주민은 별도 로그인 없이 <strong>동 + 호수 + 전화번호 뒤 4자리</strong>로 본인 신청 내역을 조회할 수 있습니다.</p>
+<table>
+  <tr><th>기능</th><th>가능 기간</th><th>처리 방식</th></tr>
+  <tr><td>내 신청 조회</td><td>상시</td><td>동·호수·전화번호 4자리로 마스킹된 목록 표시</td></tr>
+  <tr><td>신청 취소</td><td>매월 22일 09시 ~ 26일 09시</td><td>해당 application status → cancelled</td></tr>
+  <tr><td>신청 변경</td><td>매월 22일 09시 ~ 26일 09시</td><td>취소 후 재신청 (직접 재신청 필요)</td></tr>
+</table>
+<div class="info-box warning">
+  접수 기간 외에는 취소·변경 버튼이 잠금 처리됩니다. 부득이한 경우 관리자에게 직접 요청해야 합니다.
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 5. 접수 기간 관리
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 05</div>
+  <div class="chapter-title">등록 접수 기간 관리 (매월 22일~26일)</div>
+  <div class="chapter-desc">접수 기간 정책, 자동화 로직, 수동 조작 방법</div>
+</div>
+
+<div class="section-title">5-1. 접수 기간 정책</div>
+<div class="info-box danger">
+  <strong>핵심 정책 — 반드시 숙지하세요</strong><br>
+  등록 접수 기간과 해지 신청 기간은 <span class="red-text">완전히 동일</span>합니다.<br>
+  <br>
+  📅 <strong>매월 22일 09:00 KST ~ 26일 09:00 KST</strong><br>
+  <br>
+  이 기간에만: ① 신규 수강 신청 가능 &nbsp;② 해지 신청 가능 &nbsp;③ 내 신청 취소·변경 가능
+</div>
+
+<div class="sub-title">월간 달력 기준 사이클</div>
+<table>
+  <tr><th>날짜</th><th>이벤트</th><th>자동화</th></tr>
+  <tr><td>22일 09:00</td><td>접수 기간 시작 — 신규 신청·해지 신청·취소·변경 오픈</td><td>Cron이 is_active=true 설정</td></tr>
+  <tr><td>22일 ~ 25일</td><td>접수 기간 진행 중</td><td>-</td></tr>
+  <tr><td>26일 09:00</td><td>접수 기간 종료 — 모든 신청/변경 차단</td><td>Cron이 is_active=false 설정</td></tr>
+  <tr><td>27일 ~ 다음달 21일</td><td>비접수 기간 — 기존 수강자 수업 진행만</td><td>-</td></tr>
+</table>
+
+<div class="info-box info">
+  <strong>시간 체크 로직 (코드):</strong>
+  <div class="code-block" style="margin-top:6px;">
+<span class="keyword">const</span> nowKst  = <span class="keyword">new</span> Date(<span class="keyword">new</span> Date().getTime() + 9 * 60 * 60 * 1000);
+<span class="keyword">const</span> dayKst  = nowKst.getUTCDate();
+<span class="keyword">const</span> hourKst = nowKst.getUTCHours();
+
+<span class="keyword">const</span> isInPeriod =
+    (dayKst === 22 &amp;&amp; hourKst &gt;= 9) ||   <span class="comment">// 22일 09시 이후</span>
+    (dayKst &gt; 22 &amp;&amp; dayKst &lt; 26)   ||   <span class="comment">// 23·24·25일 전체</span>
+    (dayKst === 26 &amp;&amp; hourKst &lt; 9);     <span class="comment">// 26일 09시 미만</span>
+  </div>
+  이 로직은 서버(misc.js), 클라이언트(main.js), 관리자(cancellations.js), Cron(cron.js) 4곳에 동일하게 적용됩니다.
+</div>
+
+<hr>
+
+<div class="section-title">5-2. 프로그램 자동 활성화/비활성화 (Vercel Cron)</div>
+<p>Vercel Cron Job이 <strong>매일 UTC 00:00 (= KST 09:00)</strong>에 자동 실행됩니다.</p>
+
+<div class="flow-wrap">
+  <div class="flow-step gray">UTC 00:00<span class="flow-sub">매일 실행</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">api/cron.js 호출<span class="flow-sub">GET /api/cron</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">KST 날짜·시간 계산<span class="flow-sub">isInPeriod 판별</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step alt">전 단지 프로그램<span class="flow-sub">is_active 일괄 업데이트</span></div>
+</div>
+
+<table>
+  <tr><th>실행 날짜</th><th>KST 시각</th><th>처리 결과</th></tr>
+  <tr><td>매월 22일</td><td>09:00</td><td>모든 프로그램 <span class="badge badge-green">is_active = true</span> — 접수 오픈</td></tr>
+  <tr><td>매월 26일</td><td>09:00</td><td>모든 프로그램 <span class="badge badge-red">is_active = false</span> — 접수 마감</td></tr>
+  <tr><td>그 외 날짜</td><td>09:00</td><td>현재 기간 판별 후 동일하게 적용 (멱등성 보장)</td></tr>
+</table>
+
+<div class="info-box warning">
+  <strong>Vercel Cron은 Pro 플랜 이상에서 동작합니다.</strong> Hobby 플랜은 Cron을 지원하지 않으므로, 현재 Vercel 플랜을 반드시 확인하세요. Cron이 동작하지 않는 경우 수동 조작이 필요합니다.
+</div>
+
+<hr>
+
+<div class="section-title">5-3. 수동 조작 방법 (관리자 프로그램 관리 탭)</div>
+<p>관리자 페이지 → <strong>프로그램 관리</strong> 탭 진입 시 상단에 <strong>자동 스케줄 상태 패널</strong>이 표시됩니다.</p>
+<div class="info-box">
+  <strong>패널 구성:</strong>
+  <ul class="plain">
+    <li>현재 상태: <span class="badge badge-green">접수 기간 (활성화)</span> 또는 <span class="badge badge-red">비접수 기간 (비활성화)</span></li>
+    <li>다음 전환 시각: "5월 26일 09:00 → 비활성화" 형식으로 표시</li>
+    <li><strong>[즉시 활성화]</strong> 버튼: 마스터 비밀번호 확인 후 전 단지 프로그램 is_active=true</li>
+    <li><strong>[즉시 비활성화]</strong> 버튼: 마스터 비밀번호 확인 후 전 단지 프로그램 is_active=false</li>
+  </ul>
+</div>
+<div class="tip-box">개별 프로그램만 수동으로 활성/비활성하려면 해당 프로그램의 수정(연필) 아이콘을 클릭 → "활성화" 체크박스를 조정하면 됩니다.</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 6. 해지 신청 워크플로우
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 06</div>
+  <div class="chapter-title">해지 신청 워크플로우</div>
+  <div class="chapter-desc">입주민 해지 신청 흐름, 자동 승인 처리, 관리자 직접 등록</div>
+</div>
+
+<div class="section-title">6-1. 입주민 해지 신청 흐름</div>
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 1 — 접수 기간 확인</div>
+    <div class="tl-desc">입주민 화면 하단 "내 신청 관리" 탭 진입. 매월 22일 09:00 ~ 26일 09:00 기간에만 해지 신청 버튼 활성화. 기간 외에는 잠금 아이콘과 다음 기간 안내 표시.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 2 — 수강 프로그램 조회</div>
+    <div class="tl-desc">동 + 호수 + 전화번호 입력 → <code>GET /api/cancellations/lookup-programs</code> 호출 → 현재 approved 상태의 수강 프로그램 목록 표시. 전화번호 불일치 시 끝 4자리 매칭 시도 + 힌트 표시.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 3 — 해지할 프로그램 선택</div>
+    <div class="tl-desc">목록에서 해지를 원하는 수강 건 선택. 이미 해지 신청된 건은 목록에서 제외됨 (중복 해지 방지).</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 4 — 필독 동의 및 제출</div>
+    <div class="tl-desc">번복 불가 안내, 익월 해지 적용 안내 필독 동의 후 제출. <code>POST /api/cancellations</code> 호출.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green"></div>
+    <div class="tl-time">Step 5 — 즉시 자동 승인 완료</div>
+    <div class="tl-desc">서버에서 즉시 <code>status='approved'</code> + <code>processed_at</code> 자동 설정. 연결된 <code>applications</code> 행도 <code>status='cancelled'</code>로 자동 전환. 관리자 개입 없이 완전 자동 처리.</div>
+  </div>
+</div>
+
+<div class="info-box danger">
+  <strong>⚠ 해지는 번복이 절대 불가합니다</strong><br>
+  입주민이 제출한 해지 신청은 즉시 처리되며 취소할 수 없습니다. 이 점을 입주민에게 반드시 고지하세요. 잘못 제출된 경우 관리자가 DB를 직접 수정해야 합니다.
+</div>
+
+<hr>
+
+<div class="section-title">6-2. 해지 자동 승인 처리 — 서버 로직 요약</div>
+<table>
+  <tr><th>처리 항목</th><th>값</th><th>비고</th></tr>
+  <tr><td>cancellations.status</td><td><code>approved</code></td><td>즉시 자동 설정</td></tr>
+  <tr><td>cancellations.processed_at</td><td>현재 UTC 시각</td><td>즉시 자동 설정</td></tr>
+  <tr><td>cancellations.termination_month</td><td>신청월 기준 익월 (YYYY-MM)</td><td>예: 5월 신청 → 2026-06</td></tr>
+  <tr><td>applications.status</td><td><code>cancelled</code></td><td>application_id 연결된 건 자동 업데이트</td></tr>
+</table>
+
+<div class="info-box success">
+  <strong>중복 해지 방지:</strong> 동일 <code>application_id</code>로 이미 <code>pending/approved</code> 해지 신청이 존재하면 409 에러 반환. 같은 수강 건을 이중으로 해지 신청할 수 없습니다.
+</div>
+
+<hr>
+
+<div class="section-title">6-3. 관리자 직접 해지 등록</div>
+<p>관리자는 접수 기간과 무관하게 언제든지 직접 해지를 등록할 수 있습니다.</p>
+<div class="flow-wrap">
+  <div class="flow-step">관리자 페이지<span class="flow-sub">해지 관리 탭</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">[해지신청 등록] 버튼</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">동·호·이름·전화번호<span class="flow-sub">프로그램 선택</span></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step alt">source='admin'으로 저장<span class="flow-sub">기간 체크 없이 처리</span></div>
+</div>
+<div class="info-box info">
+  관리자 직접 등록 시 <code>source='admin'</code> 플래그가 설정되어 기간 제한 체크가 생략됩니다. 긴급한 경우나 오프라인 신청을 대행할 때 사용합니다.
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 7. 관리자 페이지 탭별 기능
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 07</div>
+  <div class="chapter-title">관리자 페이지 — 탭별 기능 상세</div>
+  <div class="chapter-desc">관리자 SPA의 각 탭 기능과 주요 조작 방법</div>
+</div>
+
+<div class="section-title">7-1. 대시보드</div>
+<p><code>/admin/</code> 로그인 후 첫 화면. 현황을 한눈에 파악할 수 있습니다.</p>
+<div class="grid-3">
+  <div class="kpi-card"><div class="kpi-label">총 신청 건수</div><div class="kpi-value">KPI</div></div>
+  <div class="kpi-card"><div class="kpi-label">승인 / 대기 / 거부</div><div class="kpi-value">KPI</div></div>
+  <div class="kpi-card"><div class="kpi-label">해지 대기 / 미답변 문의</div><div class="kpi-value">KPI</div></div>
+</div>
+<table>
+  <tr><th>패널</th><th>내용</th></tr>
+  <tr><td>KPI 카드</td><td>총신청·승인·대기·거부·해지대기·미답변문의 카운트</td></tr>
+  <tr><td>최근 신청</td><td>최근 5건 신청 목록 (이름·프로그램·상태)</td></tr>
+  <tr><td>미답변 문의</td><td>status='대기중' 문의 목록</td></tr>
+  <tr><td>해지 대기</td><td>status='pending' 해지 건 (현재 정책상 거의 없음)</td></tr>
+  <tr><td>입주민 바로가기</td><td>각 단지 입주민 URL + QR 이미지 생성 링크</td></tr>
+</table>
+
+<hr>
+
+<div class="section-title">7-2. 신청 관리</div>
+<div class="sub-title">주요 기능</div>
+<table>
+  <tr><th>기능</th><th>위치</th><th>설명</th></tr>
+  <tr><td>상태 필터</td><td>필터 탭 바</td><td>전체·승인·대기·거부·해지·양도·양수 필터링</td></tr>
+  <tr><td>검색</td><td>검색창</td><td>이름, 동호수, 전화번호, 프로그램명 텍스트 검색</td></tr>
+  <tr><td>상세 필터</td><td>필터 바 하단</td><td>프로그램·시간대·동 드롭다운 필터</td></tr>
+  <tr><td>신청 추가</td><td>[신청 추가] 버튼</td><td>관리자가 오프라인 신청 대행 등록</td></tr>
+  <tr><td>상태 변경</td><td>각 행 우측 드롭다운</td><td>approved↔waiting↔rejected↔cancelled 변경</td></tr>
+  <tr><td>상세 보기</td><td>행 클릭</td><td>신청자 정보·서명 이미지·계약서 URL 확인</td></tr>
+  <tr><td>관리비 계산기</td><td>[관리비 계산기] 버튼</td><td>출석 횟수 기반 관리비 산정</td></tr>
+  <tr><td>출석부</td><td>[출석부] 버튼</td><td>시간대·프로그램별 출석 현황 PDF 출력</td></tr>
+  <tr><td>시간표</td><td>[시간표] 버튼</td><td>주간 시간표 캘린더 형식 조회</td></tr>
+  <tr><td>CSV 내보내기</td><td>[내보내기] 버튼</td><td>현재 필터된 목록 CSV 다운로드</td></tr>
+  <tr><td>CSV 가져오기</td><td>[가져오기] 버튼</td><td>CSV 파일로 신청 데이터 일괄 등록</td></tr>
+</table>
+
+<div class="sub-title">프로그램 현황 패널</div>
+<p>신청 관리 탭 상단의 접이식 패널. 프로그램별·시간대별 정원 현황(승인/대기/정원) 표시. 클릭으로 펼치기/접기 가능.</p>
+
+<hr>
+
+<div class="section-title">7-3. 해지 관리</div>
+<table>
+  <tr><th>기능</th><th>설명</th></tr>
+  <tr><td>기간 배너</td><td>현재 접수 기간 여부를 색상 배너로 상단 표시</td></tr>
+  <tr><td>운영 가이드 박스</td><td>등록 접수·해지 신청 기간, 자동승인 정책 안내</td></tr>
+  <tr><td>해지 목록</td><td>전체 해지 신청 목록 (상태·신청일·해지 적용월)</td></tr>
+  <tr><td>해지 신청 등록</td><td>관리자 직접 해지 등록 (기간 무관, source='admin')</td></tr>
+  <tr><td>상태 변경</td><td>pending→approved/rejected 수동 처리 (드물게 사용)</td></tr>
+  <tr><td>관리비 내보내기</td><td>해지자 관리비 부과 현황 CSV 다운로드</td></tr>
+</table>
+
+<div class="info-box info">
+  <strong>해지 신청 등록 시 유의사항:</strong> 관리자가 직접 등록할 때 <code>application_id</code> 연결이 가능합니다. 연결하면 해당 applications 행도 자동으로 <code>cancelled</code> 처리됩니다.
+</div>
+
+<hr>
+
+<div class="section-title">7-4. 프로그램 관리</div>
+<table>
+  <tr><th>기능</th><th>설명</th></tr>
+  <tr><td>자동 스케줄 패널</td><td>현재 활성화 상태 + 다음 전환 시각 표시 + 수동 즉시 활성화/비활성화 버튼</td></tr>
+  <tr><td>프로그램 목록</td><td>단지별 프로그램 목록 (타입·요일·수강료·정원·활성상태)</td></tr>
+  <tr><td>프로그램 추가</td><td>단지 선택 → 프로그램명·유형·요일·시간대·수강료·정원 입력</td></tr>
+  <tr><td>프로그램 수정</td><td>연필 아이콘 → 활성화 여부·show_on_inactive 포함 전체 수정</td></tr>
+  <tr><td>정원 현황</td><td>막대 아이콘 → 시간대별 승인/대기/정원 현황 조회</td></tr>
+  <tr><td>프로그램 삭제</td><td>삭제 아이콘 → 관련 신청 데이터는 유지됨</td></tr>
+</table>
+
+<div class="grid-2" style="margin-top:8px;">
+  <div class="info-box">
+    <strong>프로그램 유형</strong><br>
+    <ul class="plain">
+      <li><code>group</code> — 그룹 수업 (시간대 선택 필요)</li>
+      <li><code>duet</code> — 듀엣 (2인 개인)</li>
+      <li><code>personal</code> — 개인 PT (시간대 자유 입력)</li>
+    </ul>
+  </div>
+  <div class="info-box">
+    <strong>is_active vs show_on_inactive</strong><br>
+    <ul class="plain">
+      <li><code>is_active=false</code>: 신규 접수 완전 차단</li>
+      <li><code>show_on_inactive=true</code>: 비활성이어도 입주민 화면에 프로그램 표시 (접수 차단 안내와 함께)</li>
+      <li><code>show_on_inactive=false</code>: 비활성 시 입주민 화면에서 완전 숨김</li>
+    </ul>
+  </div>
+</div>
+
+<hr>
+
+<div class="section-title">7-5. 공지사항 / 문의 / 강사 관리</div>
+<div class="grid-2">
+  <div>
+    <div class="sub-title">공지사항</div>
+    <table>
+      <tr><th>기능</th><th>설명</th></tr>
+      <tr><td>목록</td><td>단지별 공지사항 (상단 고정 포함)</td></tr>
+      <tr><td>작성</td><td>제목·내용·상단고정 여부 설정</td></tr>
+      <tr><td>수정/삭제</td><td>is_active 토글로 비공개 처리 가능</td></tr>
+    </table>
+  </div>
+  <div>
+    <div class="sub-title">문의</div>
+    <table>
+      <tr><th>기능</th><th>설명</th></tr>
+      <tr><td>목록</td><td>상태(대기중·처리중·완료)별 조회</td></tr>
+      <tr><td>답변</td><td>관리자 답변 입력 → SMS 발송 (Solapi 설정 시)</td></tr>
+      <tr><td>숨김</td><td>is_hidden=true로 비공개 처리</td></tr>
+    </table>
+  </div>
+</div>
+<div class="sub-title" style="margin-top:10px;">강사 / 커리큘럼</div>
+<p>강사 프로필(이름·자격증·소개·사진 URL)과 수업 커리큘럼을 등록·수정·삭제합니다. 입주민 화면 하단 섹션에 자동 표시됩니다.</p>
+
+<hr>
+
+<div class="section-title">7-6. 월별 정산 리포트 (엑셀 3시트 다운로드)</div>
+<p>관리자 페이지 → <strong>정산</strong> 탭에서 조회월 선택 후 [조회] → [엑셀 다운로드] 순으로 진행합니다.</p>
+
+<div class="sub-title">엑셀 3시트 구성</div>
+<table>
+  <tr><th>시트</th><th>내용</th><th>활용</th></tr>
+  <tr><td>시트 1 — 정산 내역</td><td>당월 수강생 전체 + 해지자 + 신규 섹션별 분류</td><td>월별 수강료 부과 대장</td></tr>
+  <tr><td>시트 2 — 동호수계</td><td>세대별 최종 부과액 합산</td><td>아파트 관리사무소 제출용</td></tr>
+  <tr><td>시트 3 — 수강신청 내역</td><td>다음달 수강 예정자 전체 목록</td><td>차월 수강생 명단</td></tr>
+</table>
+
+<div class="sub-title">정산 분류 기준</div>
+<table>
+  <tr><th>분류</th><th>조건</th><th>처리</th></tr>
+  <tr><td>현재수강자</td><td>applications.status='approved' 전체</td><td>시트1 포함, 동호수계 집계</td></tr>
+  <tr><td>기존수강자</td><td>현재수강자 중 조회월 이전 approved</td><td>정상 부과</td></tr>
+  <tr><td>차월신규접수</td><td>현재수강자 중 조회월 내 신규 approved</td><td>다음달부터 부과</td></tr>
+  <tr><td>차월해지</td><td>termination_month = 조회월</td><td>다음달 미부과</td></tr>
+</table>
+
+<div class="sub-title">출석 횟수 입력 및 정산</div>
+<p>단가: <strong>15,000원/회</strong>. 수강자 테이블에서 각 행별 출석횟수를 직접 입력하면 최종부과액(출석횟수 × 15,000)이 자동 계산됩니다. [저장] 버튼으로 <code>attendance_records</code> 테이블에 반영됩니다.</p>
+<div class="tip-box">출석 횟수는 강사에게 확인 후 입력하세요. 미입력 시 프로그램별 기본 월 수업횟수가 적용됩니다.</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 8. 월별 정기 체크리스트
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 08</div>
+  <div class="chapter-title">월별 정기 운영 체크리스트</div>
+  <div class="chapter-desc">매월 반복되는 운영 업무 순서</div>
+</div>
+
+<div class="section-title">월별 업무 타임라인</div>
+
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-dot green"></div>
+    <div class="tl-time">22일 09:00 — 접수 기간 자동 시작</div>
+    <div class="tl-desc">Cron이 모든 프로그램 is_active=true 자동 설정. 입주민 신규 신청·해지 신청 오픈. 관리자 페이지 스케줄 패널에서 확인.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">22일 ~ 25일 — 접수 기간 모니터링</div>
+    <div class="tl-desc">대시보드에서 신규 신청 현황 수시 확인. 문의 접수 시 답변 처리. 비정상적인 중복·오류 신청 수동 처리.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot red"></div>
+    <div class="tl-time">26일 09:00 — 접수 기간 자동 종료</div>
+    <div class="tl-desc">Cron이 모든 프로그램 is_active=false 자동 설정. 접수 완전 차단 확인.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">26일 이후 — 해지자 명단 최종 확인</div>
+    <div class="tl-desc">해지 관리 탭에서 해지 신청 목록 확인. 다음달 해지 적용 대상자 명단 정리.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">말일 이전 — 출석 횟수 입력</div>
+    <div class="tl-desc">강사에게 당월 출석 횟수 확인. 정산 탭에서 출석횟수 입력 → [저장].</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green"></div>
+    <div class="tl-time">말일 or 다음달 초 — 정산 엑셀 다운로드</div>
+    <div class="tl-desc">정산 탭 → 조회월 선택 → [조회] → [엑셀 다운로드 (3시트)]. 시트2(동호수계)를 관리사무소에 제출.</div>
+  </div>
+</div>
+
+<hr>
+
+<div class="section-title">월별 업무 체크리스트</div>
+
+<div class="grid-2">
+  <div>
+    <div class="sub-title">접수 기간 중 (22~26일)</div>
+    <ul class="checklist">
+      <li>Cron 자동 실행 확인 (스케줄 패널 상태 조회)</li>
+      <li>신규 신청 현황 모니터링</li>
+      <li>대기자 발생 시 현황 파악</li>
+      <li>해지 신청 접수 확인 (자동승인 처리됨)</li>
+      <li>문의 답변 처리</li>
+      <li>비정상 신청 (중복·오류) 수동 처리</li>
+    </ul>
+  </div>
+  <div>
+    <div class="sub-title">접수 종료 후 (27일~)</div>
+    <ul class="checklist">
+      <li>전체 신청 현황 최종 확인</li>
+      <li>해지자 명단 확인 및 정리</li>
+      <li>강사별 출석 횟수 취합</li>
+      <li>정산 탭에서 출석횟수 입력</li>
+      <li>엑셀 3시트 다운로드</li>
+      <li>동호수계 시트 관리사무소 제출</li>
+      <li>다음 달 프로그램 변경사항 반영 (필요시)</li>
+    </ul>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 9. 장애 대응
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 09</div>
+  <div class="chapter-title">장애 대응 및 자주 묻는 오류</div>
+  <div class="chapter-desc">문제 발생 시 원인 파악 및 해결 방법</div>
+</div>
+
+<div class="section-title">9-1. 자주 발생하는 오류 및 해결 방법</div>
+<table>
+  <tr><th>증상</th><th>원인</th><th>해결 방법</th></tr>
+  <tr>
+    <td>API 전체 500 에러</td>
+    <td>Supabase 연결 실패 (환경변수 오류)</td>
+    <td>Vercel 대시보드 → Environment Variables 확인. SUPABASE_URL, SUPABASE_ANON_KEY 재확인 후 재배포.</td>
+  </tr>
+  <tr>
+    <td>접수 기간인데 신청 불가</td>
+    <td>Cron 미실행 → is_active=false 유지</td>
+    <td>관리자 프로그램 탭 → [즉시 활성화] 버튼으로 수동 처리. Vercel 플랜 확인 (Cron은 Pro 이상).</td>
+  </tr>
+  <tr>
+    <td>해지 신청 기간 외라고 에러</td>
+    <td>서버 KST 기간 체크 통과 실패</td>
+    <td>현재 날짜/시간 확인. 22일 09:00 ~ 26일 09:00 범위 재확인. 관리자 직접 등록으로 대응.</td>
+  </tr>
+  <tr>
+    <td>정산 엑셀 다운로드 안 됨</td>
+    <td>데이터 없거나 조회 오류</td>
+    <td>조회월이 올바른지 확인. F12 개발자도구 → 콘솔 에러 확인. 새로고침 후 재시도.</td>
+  </tr>
+  <tr>
+    <td>관리자 로그인 불가</td>
+    <td>비밀번호 오류 또는 단지 코드 오류</td>
+    <td>마스터: MASTER_PASSWORD 환경변수 확인. 단지 관리자: Supabase DB complexes.admin_password 확인.</td>
+  </tr>
+  <tr>
+    <td>SMS 발송 안 됨</td>
+    <td>Solapi 설정 미완료</td>
+    <td>SOLAPI_API_KEY, SOLAPI_API_SECRET, SOLAPI_SENDER 환경변수 설정. 관리자 설정 탭에서 테스트 발송.</td>
+  </tr>
+  <tr>
+    <td>입주민 화면 흰 화면</td>
+    <td>JS 오류 또는 단지코드 없는 접속</td>
+    <td>URL에 <code>?complex=코드</code> 파라미터 있는지 확인. F12 콘솔 에러 확인.</td>
+  </tr>
+  <tr>
+    <td>서명 저장 실패</td>
+    <td>파일 업로드 서버 오류</td>
+    <td>Vercel 서버리스 /tmp 용량 한계. 서명 이미지 압축 후 재시도.</td>
+  </tr>
+</table>
+
+<hr>
+
+<div class="section-title">9-2. 긴급 상황 대응 절차</div>
+<div class="info-box danger">
+  <strong>DB 데이터 직접 수정이 필요한 경우</strong><br>
+  Supabase 대시보드 → 프로젝트 → Table Editor 또는 SQL Editor에서 직접 조회/수정 가능합니다.<br>
+  <span class="red-text">반드시 WHERE 조건을 정확히 확인한 후 UPDATE/DELETE 실행하세요. 잘못된 쿼리는 전체 데이터에 영향을 줄 수 있습니다.</span>
+</div>
+
+<div class="code-block">
+<span class="comment">-- 해지 신청 취소 (긴급 시 DB 직접 수정)</span>
+UPDATE cancellations SET status = 'rejected' WHERE id = '<span class="string">해지신청-UUID</span>';
+UPDATE applications SET status = 'approved' WHERE id = '<span class="string">수강신청-UUID</span>';
+
+<span class="comment">-- 특정 신청 상태 변경</span>
+UPDATE applications SET status = 'approved' WHERE id = '<span class="string">UUID</span>';
+
+<span class="comment">-- 프로그램 수동 활성화</span>
+UPDATE programs SET is_active = true WHERE complex_id = '<span class="string">단지-UUID</span>';
+</div>
+
+<div class="section-title">9-3. Vercel 배포 로그 확인</div>
+<p>Vercel 대시보드 → 프로젝트 → Deployments → 최신 배포 선택 → <strong>Functions</strong> 탭에서 서버리스 함수 실행 로그 확인 가능합니다. Cron Job 실행 결과도 여기서 확인합니다.</p>
+<div class="tip-box">Cron 실행 로그는 Vercel 대시보드 → Logs 탭에서 <code>/api/cron</code>으로 필터링하면 확인할 수 있습니다.</div>
+
+
+<!-- ══════════════════════════════════════════════
+     CHAPTER 10. 배포 및 유지보수
+══════════════════════════════════════════════ -->
+<div class="chapter-header">
+  <div class="chapter-num">CHAPTER 10</div>
+  <div class="chapter-title">코드 배포 및 유지보수 방법</div>
+  <div class="chapter-desc">코드 수정, 배포, Git 관리 방법</div>
+</div>
+
+<div class="section-title">10-1. 배포 환경</div>
+<table>
+  <tr><th>항목</th><th>내용</th></tr>
+  <tr><td>Git 저장소</td><td>GitHub (aceros-projects/apt-webapp 또는 유사)</td></tr>
+  <tr><td>배포 플랫폼</td><td>Vercel (CLI 또는 GitHub 연동)</td></tr>
+  <tr><td>배포 명령</td><td><code>npx vercel --prod --yes</code></td></tr>
+  <tr><td>Git 브랜치</td><td>main (직접 배포)</td></tr>
+  <tr><td>빌드 설정</td><td>vercel.json 참조 (builds, routes, crons 정의)</td></tr>
+</table>
+
+<div class="section-title">10-2. 코드 수정 → 배포 절차</div>
+<div class="code-block">
+<span class="comment"># 1. 코드 수정 후 변경 확인</span>
+git status
+
+<span class="comment"># 2. 스테이징</span>
+git add .
+
+<span class="comment"># 3. 커밋</span>
+git commit -m <span class="string">"fix: 수정 내용 설명"</span>
+
+<span class="comment"># 4. Vercel 프로덕션 배포</span>
+npx vercel --prod --yes
+
+<span class="comment"># 5. 배포 완료 후 URL 확인</span>
+<span class="comment"># https://apt-webapp.vercel.app 에서 동작 검증</span>
+</div>
+
+<div class="info-box warning">
+  <strong>배포 전 반드시 확인:</strong>
+  <ul class="plain">
+    <li>JS 문법 오류: <code>node --check [파일명]</code>으로 사전 검증</li>
+    <li>API 라우트 순서: 구체적 경로(<code>/schedule-status</code>)가 동적 경로(<code>/:id</code>)보다 앞에 위치해야 함</li>
+    <li>환경변수: 새 환경변수 추가 시 Vercel 대시보드에서 먼저 등록 후 배포</li>
+  </ul>
+</div>
+
+<div class="section-title">10-3. 새 단지 추가 방법</div>
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 1 — 마스터 관리자 로그인</div>
+    <div class="tl-desc">단지 코드 없이 MASTER_PASSWORD만 입력하여 로그인.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 2 — 단지 관리 탭 → [단지 추가]</div>
+    <div class="tl-desc">단지명, 코드(영문 소문자), 주소, 관리자 비밀번호 입력. 코드는 QR URL에 사용되므로 간결하게 설정.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot"></div>
+    <div class="tl-time">Step 3 — 프로그램 추가</div>
+    <div class="tl-desc">프로그램 관리 탭에서 새 단지 선택 후 프로그램 추가.</div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green"></div>
+    <div class="tl-time">Step 4 — QR코드 생성 및 배포</div>
+    <div class="tl-desc">대시보드 → 입주민 바로가기 패널에서 QR 이미지 생성. 출력하여 센터에 비치.</div>
+  </div>
+</div>
+
+<div class="section-title">10-4. 접수 기간 변경이 필요한 경우</div>
+<p>현재 매월 <strong>22일 09:00 ~ 26일 09:00</strong>로 고정된 기간을 변경해야 할 경우 아래 파일 4곳을 모두 수정해야 합니다:</p>
+<table>
+  <tr><th>파일</th><th>수정 위치</th></tr>
+  <tr><td><code>server/routes/misc.js</code></td><td>POST /cancellations 내 기간 체크 로직 (dayKst 비교값)</td></tr>
+  <tr><td><code>js/main.js</code></td><td>isInCancelPeriod, isEnrollPeriod 계산 로직</td></tr>
+  <tr><td><code>admin/js/pages/cancellations.js</code></td><td>isCancelPeriod, isEnrollPeriod 계산 로직</td></tr>
+  <tr><td><code>api/cron.js</code></td><td>isInPeriod 계산 로직</td></tr>
+  <tr><td><code>server/routes/programs.js</code></td><td>auto-toggle, schedule-status 내 isInPeriod 로직</td></tr>
+  <tr><td><code>vercel.json</code></td><td>cron schedule (0 0 * * * = UTC 00:00 = KST 09:00 고정)</td></tr>
+  <tr><td><code>index.html</code></td><td>전자계약서 내 기간 안내 문구</td></tr>
+</table>
+<div class="info-box danger">기간 변경 시 7개 파일을 모두 동일하게 수정해야 합니다. 하나라도 누락되면 화면 표시와 실제 처리가 불일치하게 됩니다.</div>
+
+<hr>
+
+<div class="section-title">10-5. 인수인계 필수 전달 항목</div>
+<div class="info-box warning">
+  <strong>아래 정보를 반드시 안전하게 전달하세요:</strong>
+</div>
+<ul class="checklist">
+  <li>Vercel 계정 이메일 및 비밀번호 (또는 팀 초대)</li>
+  <li>Supabase 프로젝트 URL 및 anon key</li>
+  <li>Supabase 대시보드 접속 계정</li>
+  <li>MASTER_PASSWORD (마스터 관리자 비밀번호)</li>
+  <li>CRON_SECRET (Cron Job 인증 토큰)</li>
+  <li>각 단지별 단지코드 + 관리자 비밀번호 목록</li>
+  <li>GitHub 저장소 접근 권한</li>
+  <li>Solapi 계정 정보 (SMS 사용 시)</li>
+</ul>
+
+<div class="footer-bar">
+  아파트 커뮤니티 피트니스 관리 시스템 인수인계서 | 작성일: 2026-05-15 | apt-webapp.vercel.app
+</div>
+
+</body>
+</html>

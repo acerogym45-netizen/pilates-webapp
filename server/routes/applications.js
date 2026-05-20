@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const { getSupabase, sbErr } = require('../db-supabase');
+const { triggerWaitingQueue, checkApplyTypeSetting } = require('../utils/waiting');
 
 // ── 목록 조회 ────────────────────────────────────────────────
 router.get('/', async (req, res) => {
@@ -507,9 +508,32 @@ router.post('/', async (req, res) => {
             }
         }
 
-        // 정원 확인 (대기 시스템 폐기: 마감 시 차단)
-        let status = 'approved';
+        // ── 신청 종류 설정 체크 (complex_apply_settings) ─────────────────────
+        if (!admin_bypass && complex_id) {
+            const applyCheck = await checkApplyTypeSetting(complex_id, 'new');
+            if (!applyCheck.isEnabled) {
+                return res.status(400).json({ success: false, period_closed: true, error: applyCheck.message });
+            }
+            if (!applyCheck.isOpen) {
+                return res.status(400).json({ success: false, period_closed: true, error: '현재 신규 수강 신청 기간이 아닙니다.' });
+            }
+        }
+
+        // ── 단지 설정 조회 (auto_approve, waiting_enabled) ───────────────────
+        let complexSettings = { auto_approve: true, waiting_enabled: false };
+        if (complex_id) {
+            const { data: cxData } = await sb
+                .from('complexes')
+                .select('auto_approve, waiting_enabled')
+                .eq('id', complex_id)
+                .single();
+            if (cxData) complexSettings = cxData;
+        }
+
+        // 정원 확인 + 대기 처리
+        let status = complexSettings.auto_approve !== false ? 'approved' : 'received';
         let waitingOrder = null;
+        let applyType = 'new';
 
         if (preferred_time && (program_id || program_name)) {
             // program_id 우선, 없으면 program_name으로 프로그램 조회
@@ -545,13 +569,35 @@ router.post('/', async (req, res) => {
                     : await countQuery.ilike('program_name', program_name);
 
                 if ((approvedCnt || 0) >= program.capacity) {
-                    // ── 대기 시스템 폐기: 정원 마감 시 신규 대기 등록 불가 ──
-                    // 4월에 접수된 기존 대기자는 DB에 유지되나 신규 접수는 차단
-                    return res.status(400).json({
-                        success: false,
-                        is_full: true,
-                        error: `선택한 시간대(${preferred_time})는 정원이 마감되었습니다. 다른 시간대를 선택해 주세요.`
-                    });
+                    // 대기 시스템 활성 여부에 따라 대기 등록 or 차단
+                    if (complexSettings.waiting_enabled) {
+                        // 대기 신청 종류 설정도 확인
+                        const waitingCheck = await checkApplyTypeSetting(complex_id, 'waiting');
+                        if (!waitingCheck.isEnabled) {
+                            return res.status(400).json({
+                                success: false, is_full: true,
+                                error: `선택한 시간대(${preferred_time})는 정원이 마감되었습니다. 대기 신청도 현재 받지 않습니다.`
+                            });
+                        }
+                        // 대기 순번 계산
+                        const { count: waitingCnt } = await sb
+                            .from('applications')
+                            .select('*', { count: 'exact', head: true })
+                            .eq('complex_id', program.complex_id)
+                            .eq('preferred_time', preferred_time)
+                            .eq('status', 'waiting')
+                            .eq('apply_type', 'waiting');
+                        waitingOrder = (waitingCnt || 0) + 1;
+                        status    = 'waiting';
+                        applyType = 'waiting';
+                    } else {
+                        // 대기 시스템 미활성 → 차단
+                        return res.status(400).json({
+                            success: false,
+                            is_full: true,
+                            error: `선택한 시간대(${preferred_time})는 정원이 마감되었습니다. 다른 시간대를 선택해 주세요.`
+                        });
+                    }
                 }
             }
         }
@@ -563,6 +609,7 @@ router.post('/', async (req, res) => {
                 program_id: program_id || null, program_name,
                 preferred_time: preferred_time || null,
                 status, waiting_order: waitingOrder,
+                apply_type: applyType,
                 signature_name: signature_name || '',
                 signature_data: signature_data || '',
                 signature_date: signature_date || '',
@@ -912,7 +959,15 @@ router.post('/:id/cancel-approved', async (req, res) => {
             .eq('id', id);
         if (delErr) throw sbErr(delErr, 'cancel-approved UPDATE→cancelled');
 
-        // 대기자 자동 승급 (해당 슬롯에 대기자 있으면 승인으로 올림)
+        // 대기 SMS 큐 트리거 (단지 대기 시스템 활성 시 다음 대기자에게 자동 문자)
+        triggerWaitingQueue({
+            complexId:     app.complex_id,
+            programId:     app.program_id,
+            programName:   app.program_name,
+            preferredTime: app.preferred_time,
+        }).catch(e => console.error('[cancel-approved] 대기 트리거 실패:', e.message));
+
+        // 구형 폴백: 대기 시스템 비활성 단지는 즉시 승급 처리 유지
         await promoteWaitingApplicant(sb, app.program_id, app.preferred_time);
 
         res.json({ success: true, message: '신청이 취소되었습니다. 다음 달 수강은 종료됩니다.' });
@@ -1407,5 +1462,105 @@ function maskPhone(str) {
     if (!str) return str;
     return str.replace(/(\d{3})-(\d{4})-(\d{4})/, '$1-****-$2x');
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// POST /api/applications/:id/accept-waiting
+// 입주민이 대기 수락 링크를 통해 자리를 확정
+// body: { phone4 }   ← 본인 인증용
+// ══════════════════════════════════════════════════════════════════════
+router.post('/:id/accept-waiting', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { phone4 } = req.body;
+
+        if (!phone4 || !/^\d{4}$/.test(phone4)) {
+            return res.status(400).json({ success: false, error: '전화번호 뒷 4자리를 입력하세요' });
+        }
+
+        const sb = getSupabase();
+        const { data: app, error: fetchErr } = await sb
+            .from('applications')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+        if (fetchErr || !app) {
+            return res.status(404).json({ success: false, error: '신청 내역을 찾을 수 없습니다' });
+        }
+
+        // 전화번호 뒷 4자리 검증
+        const storedPhone = (app.phone || '').replace(/\D/g, '');
+        if (!storedPhone.endsWith(phone4)) {
+            return res.status(403).json({ success: false, error: '전화번호가 일치하지 않습니다' });
+        }
+
+        // 대기 상태인지 확인
+        if (app.status !== 'waiting') {
+            if (app.status === 'approved') {
+                return res.json({ success: true, already_approved: true, message: '이미 승인 완료된 신청입니다' });
+            }
+            if (app.status === 'waiting_expired') {
+                return res.status(400).json({ success: false, error: '대기 응답 시간이 초과되었습니다. 다음 기회에 다시 신청해 주세요.' });
+            }
+            return res.status(400).json({ success: false, error: '현재 수락 가능한 상태가 아닙니다' });
+        }
+
+        // 만료 여부 확인
+        if (app.waiting_expires_at && new Date() > new Date(app.waiting_expires_at)) {
+            // 만료 처리
+            await sb.from('applications').update({ status: 'waiting_expired' }).eq('id', id);
+            return res.status(400).json({ success: false, error: '대기 응답 시간이 초과되었습니다. 다음 기회에 다시 신청해 주세요.' });
+        }
+
+        // 정원 재확인 (다른 사람이 먼저 수락했을 경우 대비)
+        if (app.preferred_time && (app.program_id || app.program_name)) {
+            const countQuery = sb
+                .from('applications')
+                .select('*', { count: 'exact', head: true })
+                .eq('complex_id', app.complex_id)
+                .eq('preferred_time', app.preferred_time)
+                .eq('status', 'approved');
+
+            const { count: approvedCnt } = app.program_id
+                ? await (countQuery.eq('program_id', app.program_id))
+                : await (countQuery.ilike('program_name', app.program_name));
+
+            // 단지의 프로그램 정원 확인
+            let capacity = 6;
+            if (app.program_id) {
+                const { data: prog } = await sb.from('programs').select('capacity').eq('id', app.program_id).single();
+                if (prog) capacity = prog.capacity || 6;
+            }
+
+            if ((approvedCnt || 0) >= capacity) {
+                return res.status(400).json({
+                    success: false,
+                    error: '죄송합니다. 방금 정원이 마감되었습니다. 다음 기회를 기다려 주세요.'
+                });
+            }
+        }
+
+        // 승인 처리
+        const { data: updated, error: updErr } = await sb
+            .from('applications')
+            .update({
+                status:             'approved',
+                waiting_order:      null,
+                waiting_sms_sent_at: null,
+                waiting_expires_at:  null,
+                updated_at:          new Date().toISOString(),
+            })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (updErr) throw sbErr(updErr, 'accept-waiting UPDATE→approved');
+
+        console.log(`[accept-waiting] 수락 완료: ${app.name} / ${app.program_name} / ${app.preferred_time}`);
+        res.json({ success: true, data: updated, message: '수강 신청이 확정되었습니다!' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
 
 module.exports = router;

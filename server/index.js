@@ -21,6 +21,7 @@ const programsRouter      = require('./routes/programs');
 const applicationsRouter  = require('./routes/applications');
 const miscRouter          = require('./routes/misc');
 const uploadRouter        = require('./routes/upload');
+const { startCron }       = require('./cron');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -153,6 +154,8 @@ async function startServer() {
         console.log(`📡 API: http://localhost:${PORT}/api/`);
         console.log('🏢 ============================================');
         console.log('');
+        // ── 대기 만료 처리 Cron 시작 ──────────────────────────────────
+        startCron();
     });
 }
 

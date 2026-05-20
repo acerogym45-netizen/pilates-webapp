@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.25 출석부PDF슬라이드분할개선+관리비출석통합 */
+/** 신청 관리 페이지 - v3.26 신청종류별설정+대기시스템 */
 const applications = {
     data: [],
     filtered: [],
@@ -24,6 +24,9 @@ const applications = {
                     </button>
                     <button class="btn-sm" id="applyPeriodBtn" onclick="applications.showApplyPeriodModal()" style="background:#8e44ad;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
                         <i class="fas fa-clock"></i> 신청기간 설정
+                    </button>
+                    <button class="btn-sm" id="applySettingsBtn" onclick="applications.showApplySettingsModal()" style="background:#e67e22;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
+                        <i class="fas fa-sliders-h"></i> 신청 종류 설정
                     </button>
                     <button class="btn-secondary btn-sm" onclick="applications.showImportModal()">
                         <i class="fas fa-upload"></i> 가져오기
@@ -103,6 +106,7 @@ const applications = {
         // 신청기간 버튼 배지 비동기 갱신
         const _cid = getEffectiveComplexId();
         if (_cid) this._refreshApplyPeriodBadge(_cid);
+        if (_cid) this._refreshApplySettingsBadge(_cid);
     },
 
     async load() {
@@ -2398,171 +2402,324 @@ ${(() => {
     },
 
     // ════════════════════════════════════════════════════════════
-    // 신청기간 설정 모달
+    // 신청기간 설정 모달 — 신청 종류별 개별 기간 설정 통합
     // ════════════════════════════════════════════════════════════
     async showApplyPeriodModal() {
         const complexId = getEffectiveComplexId();
         if (!complexId) { showToast('단지를 먼저 선택하세요', 'error'); return; }
 
-        // 현재 설정 조회
-        let current = null;
+        // 신청기간 전역 설정 + 신청 종류별 설정 동시 조회
+        let globalData = null, typeData = null;
         try {
-            const res = await fetch(`/api/complexes/${complexId}/apply-period`);
-            const json = await res.json();
-            if (json.success) current = json.data;
+            const [r1, r2] = await Promise.all([
+                fetch(`/api/complexes/${complexId}/apply-period`).then(r => r.json()),
+                fetch(`/api/complexes/${complexId}/apply-settings`).then(r => r.json()),
+            ]);
+            if (r1.success) globalData = r1.data;
+            if (r2.success) typeData   = r2.data;
         } catch(e) { showToast('설정 조회 실패: ' + e.message, 'error'); return; }
 
-        // KST datetime-local 포맷 변환 (UTC → KST +9h → "YYYY-MM-DDTHH:mm")
-        const toKstInput = (utcStr) => {
+        // UTC → KST datetime-local 포맷
+        const toKst = (utcStr) => {
             if (!utcStr) return '';
             const d = new Date(new Date(utcStr).getTime() + 9 * 60 * 60 * 1000);
             return d.toISOString().slice(0, 16);
         };
 
-        // 현재 열림/닫힘 배지
-        const isOpen = current?.is_open;
-        const modeBadge = isOpen
-            ? '<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:#e8f5e9;color:#2e7d32;font-size:.82rem;font-weight:600"><i class="fas fa-circle" style="font-size:.6rem;margin-right:4px"></i>현재 신청 열림</span>'
-            : '<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:#fce4ec;color:#c62828;font-size:.82rem;font-weight:600"><i class="fas fa-circle" style="font-size:.6rem;margin-right:4px"></i>현재 신청 닫힘</span>';
+        // 신청 종류 정의
+        const APPLY_TYPES = [
+            { key: 'global',     label: '전체 기본 기간',    icon: 'fa-globe',               color: '#8e44ad' },
+            { key: 'new',        label: '신규 수강 신청',    icon: 'fa-user-plus',            color: '#2980b9' },
+            { key: 'waiting',    label: '대기 신청',         icon: 'fa-clock',                color: '#16a085' },
+            { key: 'cancel',     label: '차월 해지',         icon: 'fa-times-circle',         color: '#c0392b' },
+            { key: 'mid_cancel', label: '중도 해지',         icon: 'fa-cut',                  color: '#e67e22' },
+            { key: 'refund',     label: '환불 신청',         icon: 'fa-file-invoice-dollar',  color: '#7f8c8d' },
+        ];
+
+        // 각 타입의 현재 설정 매핑
+        const typeMap = {};
+        (typeData || []).forEach(t => { typeMap[t.apply_type_key] = t; });
+
+        // 탭 버튼 렌더링
+        const tabBtns = APPLY_TYPES.map((t, i) => {
+            // 열림 상태
+            let isOpen = false;
+            if (t.key === 'global') {
+                isOpen = globalData?.is_open || false;
+            } else {
+                isOpen = typeMap[t.key]?.is_open || false;
+            }
+            const dot = isOpen
+                ? `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981;margin-left:4px;vertical-align:middle"></span>`
+                : `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#d1d5db;margin-left:4px;vertical-align:middle"></span>`;
+            return `<button id="aptab-${t.key}"
+                onclick="applications._switchPeriodTab('${t.key}')"
+                style="white-space:nowrap;padding:7px 12px;border:1.5px solid ${i===0?t.color:'#d1d5db'};border-radius:20px;
+                       background:${i===0?t.color:'#fff'};color:${i===0?'#fff':'#6b7280'};
+                       font-size:.78rem;font-weight:600;cursor:pointer;transition:.15s;flex-shrink:0">
+                <i class="fas ${t.icon}" style="font-size:.72rem"></i> ${t.label}${dot}
+            </button>`;
+        }).join('');
+
+        // 각 탭 패널 렌더링
+        const tabPanels = APPLY_TYPES.map((t, i) => {
+            if (t.key === 'global') {
+                // 전체 기본 기간 패널 (기존 UI)
+                const cur = globalData;
+                const curMode = !cur?.apply_period_enabled ? 'auto'
+                              : (cur.apply_start || cur.apply_end) ? 'custom' : 'always';
+                return `<div id="appanel-global" style="display:${i===0?'block':'none'}">
+                    <div style="font-size:.82rem;color:#6b7280;margin-bottom:12px;padding:8px 12px;background:#f5f3ff;border-radius:8px">
+                        <i class="fas fa-info-circle" style="color:#8e44ad"></i>
+                        각 신청 종류의 기간 모드가 <strong>"단지 기본기간 따름"</strong>으로 설정된 경우 이 기간이 적용됩니다.
+                    </div>
+                    ${this._renderPeriodModeCards('global', curMode, toKst(cur?.apply_start), toKst(cur?.apply_end), '#8e44ad')}
+                </div>`;
+            } else {
+                const s = typeMap[t.key] || {};
+                const pm = s.period_mode || 'auto';
+                return `<div id="appanel-${t.key}" style="display:none">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                        <span style="font-size:.82rem;color:#6b7280">
+                            이 신청 종류만 별도 기간을 지정하거나, 단지 기본기간을 따를 수 있습니다.
+                        </span>
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex-shrink:0;margin-left:10px">
+                            <span style="font-size:.78rem;color:#6b7280">${s.is_enabled!==false?'ON':'OFF'}</span>
+                            <div style="position:relative;width:38px;height:21px" onclick="applications._togglePeriodTypeEnabled('${t.key}')">
+                                <div id="pet-track-${t.key}" style="width:38px;height:21px;border-radius:11px;background:${s.is_enabled!==false?'#10b981':'#d1d5db'};transition:.2s"></div>
+                                <div id="pet-thumb-${t.key}" style="position:absolute;top:2px;left:${s.is_enabled!==false?'19px':'2px'};width:17px;height:17px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:.2s"></div>
+                            </div>
+                        </label>
+                    </div>
+                    ${this._renderPeriodModeCards(t.key, pm, toKst(s.period_start), toKst(s.period_end), t.color)}
+                </div>`;
+            }
+        }).join('');
 
         const body = `
-            <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px">
-                ${modeBadge}
-                <span style="font-size:.82rem;color:#888">
-                    ${current?.mode === 'custom' ? `설정기간: ${toKstInput(current.apply_start).replace('T',' ')} ~ ${toKstInput(current.apply_end).replace('T',' ')}` :
-                      current?.mode === 'always_open' ? '상시 개방 중' : '기본값 (매월 22일 09시 ~ 26일 09시)'}
-                </span>
+        <div style="margin-bottom:14px;overflow-x:auto;padding-bottom:4px">
+            <div style="display:flex;gap:6px;min-width:max-content">
+                ${tabBtns}
             </div>
-
-            <!-- 모드 선택 -->
-            <div class="form-group" style="margin-bottom:16px">
-                <label style="font-weight:600;margin-bottom:8px;display:block">신청기간 모드</label>
-                <div style="display:flex;flex-direction:column;gap:8px">
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:2px solid #e0e0e0;border-radius:8px;transition:.2s" id="modeAutoLabel">
-                        <input type="radio" name="applyMode" value="auto" ${!current?.apply_period_enabled ? 'checked' : ''} onchange="applications._onApplyModeChange(this.value)" style="margin:0">
-                        <span>
-                            <strong>자동 (기본값)</strong><br>
-                            <small style="color:#888">매월 22일 09:00 ~ 26일 09:00 KST 자동 개방</small>
-                        </span>
-                    </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:2px solid #e0e0e0;border-radius:8px;transition:.2s" id="modeCustomLabel">
-                        <input type="radio" name="applyMode" value="custom" ${current?.apply_period_enabled && (current.apply_start || current.apply_end) ? 'checked' : ''} onchange="applications._onApplyModeChange(this.value)" style="margin:0">
-                        <span>
-                            <strong>직접 설정</strong><br>
-                            <small style="color:#888">시작일~종료일을 직접 지정</small>
-                        </span>
-                    </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:2px solid #e0e0e0;border-radius:8px;transition:.2s" id="modeAlwaysLabel">
-                        <input type="radio" name="applyMode" value="always" ${current?.apply_period_enabled && !current.apply_start && !current.apply_end ? 'checked' : ''} onchange="applications._onApplyModeChange(this.value)" style="margin:0">
-                        <span>
-                            <strong>상시 개방</strong><br>
-                            <small style="color:#888">기간 제한 없이 항상 신청 가능</small>
-                        </span>
-                    </label>
-                </div>
-            </div>
-
-            <!-- 직접 설정: 날짜 입력 -->
-            <div id="applyCustomRange" style="display:${current?.apply_period_enabled && (current.apply_start || current.apply_end) ? 'block' : 'none'};background:#f8f9fa;border-radius:8px;padding:14px;margin-bottom:8px">
-                <div class="form-group" style="margin-bottom:10px">
-                    <label style="font-size:.88rem;font-weight:600;margin-bottom:4px;display:block">
-                        <i class="fas fa-calendar-check" style="color:#8e44ad"></i> 신청 시작 일시 (KST)
-                    </label>
-                    <input type="datetime-local" id="applyStartInput"
-                           value="${toKstInput(current?.apply_start)}"
-                           style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:.9rem">
-                </div>
-                <div class="form-group" style="margin-bottom:0">
-                    <label style="font-size:.88rem;font-weight:600;margin-bottom:4px;display:block">
-                        <i class="fas fa-calendar-times" style="color:#e74c3c"></i> 신청 종료 일시 (KST)
-                    </label>
-                    <input type="datetime-local" id="applyEndInput"
-                           value="${toKstInput(current?.apply_end)}"
-                           style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:.9rem">
-                </div>
-            </div>
-
-            <p style="font-size:.8rem;color:#999;margin:0">
-                <i class="fas fa-info-circle"></i>
-                입주민 페이지의 신청 가능 여부 표시 및 해지 신청 가능 시간에 즉시 반영됩니다.
-            </p>`;
+        </div>
+        <div id="applyPeriodPanels" style="min-height:200px">
+            ${tabPanels}
+        </div>
+        <p style="font-size:.78rem;color:#9ca3af;margin-top:10px">
+            <i class="fas fa-info-circle"></i> 저장 후 입주민 페이지에 즉시 반영됩니다.
+        </p>`;
 
         const footer = `
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
-            <button class="btn-ghost" style="color:#e53935;border-color:#e53935" onclick="applications._resetApplyPeriod('${complexId}')">
-                <i class="fas fa-undo"></i> 기본값 복귀
+            <button class="btn-ghost" style="color:#e53935;border-color:#e53935"
+                    onclick="applications._resetApplyPeriod('${complexId}')">
+                <i class="fas fa-undo"></i> 전체 기본값 복귀
             </button>
-            <button class="btn-primary" style="background:#8e44ad" onclick="applications._saveApplyPeriod('${complexId}')">
+            <button class="btn-primary" style="background:#8e44ad"
+                    onclick="applications._saveApplyPeriodAll('${complexId}')">
                 <i class="fas fa-save"></i> 저장
             </button>`;
 
         openGlobalModal('<i class="fas fa-clock"></i> 신청기간 설정', body, footer);
 
-        // 초기 라디오 스타일 반영
-        const currentMode = !current?.apply_period_enabled ? 'auto' :
-                            (current.apply_start || current.apply_end) ? 'custom' : 'always';
-        applications._onApplyModeChange(currentMode);
-    },
-
-    _onApplyModeChange(value) {
-        // 라디오 카드 테두리 강조
-        ['auto','custom','always'].forEach(m => {
-            const label = document.getElementById(`mode${m.charAt(0).toUpperCase()+m.slice(1)}Label`);
-            if (label) label.style.borderColor = (m === value) ? '#8e44ad' : '#e0e0e0';
+        // 초기 탭 활성화
+        this._switchPeriodTab('global');
+        // 초기 모드 카드 스타일 적용
+        APPLY_TYPES.forEach(t => {
+            const initMode = t.key === 'global'
+                ? (!globalData?.apply_period_enabled ? 'auto' : (globalData.apply_start||globalData.apply_end) ? 'custom' : 'always')
+                : (typeMap[t.key]?.period_mode || 'auto');
+            this._onPeriodModeChange(t.key, initMode);
         });
-        const range = document.getElementById('applyCustomRange');
-        if (range) range.style.display = (value === 'custom') ? 'block' : 'none';
+
+        // APPLY_TYPES를 모달 컨텍스트에 저장 (저장 시 참조)
+        this._applyPeriodTypes = APPLY_TYPES;
     },
 
-    async _saveApplyPeriod(complexId) {
-        const modeEl = document.querySelector('input[name="applyMode"]:checked');
-        if (!modeEl) return;
-        const mode = modeEl.value;
+    // 기간 모드 라디오 카드 렌더링 (재사용)
+    _renderPeriodModeCards(key, currentMode, startVal, endVal, accentColor) {
+        const modes = [
+            { value: 'auto',   label: '단지 기본기간 따름',  desc: '전체 기본 기간 탭 설정 적용',           show: key !== 'global' },
+            { value: 'auto',   label: '자동 (기본값)',        desc: '매월 22일 09:00 ~ 26일 09:00 KST',      show: key === 'global' },
+            { value: 'always', label: '상시 개방',            desc: '기간 제한 없이 항상 신청 가능',          show: true },
+            { value: 'closed', label: '항상 닫힘',            desc: '이 신청 종류는 현재 접수 중단',          show: key !== 'global' },
+            { value: 'custom', label: '직접 설정',            desc: '시작일~종료일을 직접 지정',              show: true },
+        ].filter(m => m.show);
 
-        let enabled = false, apply_start = null, apply_end = null;
+        const cards = modes.map(m => `
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 12px;
+                          border:2px solid ${currentMode===m.value?accentColor:'#e5e7eb'};border-radius:8px;
+                          background:${currentMode===m.value?'rgba(0,0,0,.03)':'#fff'};transition:.15s"
+                   id="pmc-${key}-${m.value}">
+                <input type="radio" name="pm-${key}" value="${m.value}"
+                       ${currentMode===m.value?'checked':''}
+                       onchange="applications._onPeriodModeChange('${key}','${m.value}')"
+                       style="margin:0;accent-color:${accentColor}">
+                <span>
+                    <strong style="font-size:.87rem">${m.label}</strong><br>
+                    <small style="color:#9ca3af">${m.desc}</small>
+                </span>
+            </label>`).join('');
 
-        if (mode === 'auto') {
-            enabled = false;
-        } else if (mode === 'always') {
-            enabled = true;
-        } else {
-            // custom
-            const startVal = document.getElementById('applyStartInput')?.value;
-            const endVal   = document.getElementById('applyEndInput')?.value;
-            if (!startVal || !endVal) { showToast('시작일과 종료일을 모두 입력하세요', 'error'); return; }
-            // KST → UTC 변환 (입력값은 local KST, -9h)
-            apply_start = new Date(new Date(startVal).getTime() - 9 * 60 * 60 * 1000).toISOString();
-            apply_end   = new Date(new Date(endVal).getTime()   - 9 * 60 * 60 * 1000).toISOString();
-            if (new Date(apply_start) >= new Date(apply_end)) {
-                showToast('종료일은 시작일보다 이후여야 합니다', 'error'); return;
+        const isCustom = currentMode === 'custom';
+        return `
+        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:12px">
+            ${cards}
+        </div>
+        <div id="pmcustom-${key}" style="display:${isCustom?'block':'none'};
+             background:#f9fafb;border-radius:8px;padding:12px;border:1px solid #e5e7eb">
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <div style="flex:1;min-width:150px">
+                    <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
+                        <i class="fas fa-calendar-check" style="color:${accentColor}"></i> 시작 일시 (KST)
+                    </label>
+                    <input type="datetime-local" id="pmstart-${key}" value="${startVal}"
+                           style="width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;box-sizing:border-box">
+                </div>
+                <div style="flex:1;min-width:150px">
+                    <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px">
+                        <i class="fas fa-calendar-times" style="color:#e74c3c"></i> 종료 일시 (KST)
+                    </label>
+                    <input type="datetime-local" id="pmend-${key}" value="${endVal}"
+                           style="width:100%;padding:7px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem;box-sizing:border-box">
+                </div>
+            </div>
+        </div>`;
+    },
+
+    // 탭 전환
+    _switchPeriodTab(key) {
+        const COLORS = {
+            global:'#8e44ad', new:'#2980b9', waiting:'#16a085',
+            cancel:'#c0392b', mid_cancel:'#e67e22', refund:'#7f8c8d'
+        };
+        const TYPES = ['global','new','waiting','cancel','mid_cancel','refund'];
+        TYPES.forEach(k => {
+            const btn = document.getElementById(`aptab-${k}`);
+            const panel = document.getElementById(`appanel-${k}`);
+            const isActive = k === key;
+            if (btn) {
+                btn.style.background  = isActive ? (COLORS[k]||'#8e44ad') : '#fff';
+                btn.style.color       = isActive ? '#fff' : '#6b7280';
+                btn.style.borderColor = isActive ? (COLORS[k]||'#8e44ad') : '#d1d5db';
             }
-            enabled = true;
+            if (panel) panel.style.display = isActive ? 'block' : 'none';
+        });
+    },
+
+    // 기간 모드 변경 시 카드 스타일 + custom 입력 표시
+    _onPeriodModeChange(key, mode) {
+        const COLORS = {
+            global:'#8e44ad', new:'#2980b9', waiting:'#16a085',
+            cancel:'#c0392b', mid_cancel:'#e67e22', refund:'#7f8c8d'
+        };
+        const accent = COLORS[key] || '#8e44ad';
+        ['auto','always','closed','custom'].forEach(m => {
+            const lbl = document.getElementById(`pmc-${key}-${m}`);
+            if (!lbl) return;
+            const sel = m === mode;
+            lbl.style.borderColor = sel ? accent : '#e5e7eb';
+            lbl.style.background  = sel ? 'rgba(0,0,0,.03)' : '#fff';
+        });
+        const customDiv = document.getElementById(`pmcustom-${key}`);
+        if (customDiv) customDiv.style.display = mode === 'custom' ? 'block' : 'none';
+    },
+
+    // 신청 종류별 ON/OFF 토글
+    _togglePeriodTypeEnabled(key) {
+        const track = document.getElementById(`pet-track-${key}`);
+        const thumb = document.getElementById(`pet-thumb-${key}`);
+        if (!track) return;
+        const cur = track.style.background === 'rgb(16, 185, 129)';
+        const next = !cur;
+        track.style.background = next ? '#10b981' : '#d1d5db';
+        thumb.style.left = next ? '19px' : '2px';
+        track.dataset.on = next ? '1' : '0';
+        // ON/OFF 텍스트 업데이트
+        const lbl = track.parentElement?.previousElementSibling;
+        if (lbl) lbl.textContent = next ? 'ON' : 'OFF';
+    },
+
+    // 전체 저장 (전역 기간 + 신청 종류별 기간)
+    async _saveApplyPeriodAll(complexId) {
+        const toUtc = (v) => v ? new Date(new Date(v).getTime() - 9*60*60*1000).toISOString() : null;
+
+        // ── [1] 전역 기본 기간 저장 ──────────────────────────────
+        const globalMode = document.querySelector('input[name="pm-global"]:checked')?.value;
+        let apply_period_enabled = false, apply_start = null, apply_end = null;
+
+        if (globalMode === 'always') {
+            apply_period_enabled = true;
+        } else if (globalMode === 'custom') {
+            const sv = document.getElementById('pmstart-global')?.value;
+            const ev = document.getElementById('pmend-global')?.value;
+            if (!sv || !ev) { showToast('전체 기본 기간: 시작일과 종료일을 모두 입력하세요', 'error'); return; }
+            apply_start = toUtc(sv); apply_end = toUtc(ev);
+            if (new Date(apply_start) >= new Date(apply_end)) {
+                showToast('전체 기본 기간: 종료일은 시작일보다 이후여야 합니다', 'error'); return;
+            }
+            apply_period_enabled = true;
         }
 
         try {
-            const res = await fetch(`/api/complexes/${complexId}/apply-period`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ apply_period_enabled: enabled, apply_start, apply_end })
+            const r1 = await fetch(`/api/complexes/${complexId}/apply-period`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apply_period_enabled, apply_start, apply_end })
             });
-            const json = await res.json();
-            if (!json.success) throw new Error(json.error || '저장 실패');
-            closeGlobalModal();
-            showToast('신청기간 설정이 저장되었습니다', 'success');
-            // 버튼 배지 갱신
-            applications._refreshApplyPeriodBadge(complexId);
-        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+            if (!(await r1.json()).success) throw new Error('전역 기간 저장 실패');
+        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); return; }
+
+        // ── [2] 신청 종류별 기간 저장 ───────────────────────────
+        const TYPE_KEYS = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund'];
+        const settings = TYPE_KEYS.map(key => {
+            const modeRadio  = document.querySelector(`input[name="pm-${key}"]:checked`);
+            const periodMode = modeRadio?.value || 'auto';
+            const track      = document.getElementById(`pet-track-${key}`);
+            const isEnabled  = track ? (track.dataset.on === '1' || track.style.background === 'rgb(16, 185, 129)') : true;
+            const sv = document.getElementById(`pmstart-${key}`)?.value;
+            const ev = document.getElementById(`pmend-${key}`)?.value;
+            return {
+                apply_type_key: key,
+                is_enabled:     isEnabled,
+                period_mode:    periodMode,
+                period_start:   periodMode === 'custom' && sv ? toUtc(sv) : null,
+                period_end:     periodMode === 'custom' && ev ? toUtc(ev) : null,
+            };
+        });
+
+        try {
+            const r2 = await fetch(`/api/complexes/${complexId}/apply-settings`, {
+                method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings })
+            });
+            if (!(await r2.json()).success) throw new Error('신청 종류 기간 저장 실패');
+        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); return; }
+
+        closeGlobalModal();
+        showToast('신청기간 설정이 저장되었습니다', 'success');
+        this._refreshApplyPeriodBadge(complexId);
+        this._refreshApplySettingsBadge(complexId);
+    },
+
+    _onApplyModeChange(value) {
+        // 하위 호환 (구버전 참조 방어)
+        this._onPeriodModeChange('global', value);
+    },
+
+    async _saveApplyPeriod(complexId) {
+        // 하위 호환 — 전체 저장으로 위임
+        await this._saveApplyPeriodAll(complexId);
     },
 
     async _resetApplyPeriod(complexId) {
-        showConfirm('기본값 복귀', '신청기간을 기본값(매월 22~26일)으로 초기화하시겠습니까?', async () => {
+        showConfirm('기본값 복귀', '모든 신청기간 설정을 기본값(매월 22~26일)으로 초기화하시겠습니까?', async () => {
             try {
                 const res = await fetch(`/api/complexes/${complexId}/apply-period`, { method: 'DELETE' });
                 const json = await res.json();
                 if (!json.success) throw new Error(json.error);
                 closeGlobalModal();
                 showToast('기본값으로 초기화되었습니다');
-                applications._refreshApplyPeriodBadge(complexId);
+                this._refreshApplyPeriodBadge(complexId);
             } catch(e) { showToast('초기화 실패: ' + e.message, 'error'); }
         });
     },
@@ -2582,6 +2739,312 @@ ${(() => {
                 btn.style.background = '#8e44ad';
                 btn.innerHTML = '<i class="fas fa-clock"></i> 신청기간 설정';
             }
+        } catch(_) {}
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // 신청 종류 설정 모달
+    // ════════════════════════════════════════════════════════════
+    async showApplySettingsModal() {
+        const complexId = getEffectiveComplexId();
+        if (!complexId) { showToast('단지를 먼저 선택하세요', 'error'); return; }
+
+        let current = null;
+        try {
+            const res = await fetch(`/api/complexes/${complexId}/apply-settings`);
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error);
+            current = json;
+        } catch(e) { showToast('설정 조회 실패: ' + e.message, 'error'); return; }
+
+        const toKstInput = (utcStr) => {
+            if (!utcStr) return '';
+            const d = new Date(new Date(utcStr).getTime() + 9 * 60 * 60 * 1000);
+            return d.toISOString().slice(0, 16);
+        };
+
+        const PERIOD_MODE_LABEL = { auto: '단지 기본기간 따름', always: '상시 개방', closed: '항상 닫힘', custom: '직접 설정' };
+
+        // 개별 신청 종류 행 렌더링
+        const renderTypeRow = (s) => {
+            const isCustom = s.period_mode === 'custom';
+            const openBadge = s.is_open
+                ? `<span style="font-size:.7rem;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:8px;font-weight:600">열림</span>`
+                : `<span style="font-size:.7rem;background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:8px;font-weight:600">닫힘</span>`;
+            return `
+            <div class="apply-type-row" id="atr-${s.apply_type_key}"
+                 style="border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:10px;background:${s.is_enabled ? '#fff' : '#f9fafb'}">
+                <!-- 헤더 행: 이름 + 열림상태 + ON/OFF 토글 -->
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${s.is_enabled ? '12px' : '0'}">
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <span style="font-weight:600;font-size:.92rem">${s.label}</span>
+                        ${s.is_enabled ? openBadge : ''}
+                    </div>
+                    <!-- ON/OFF 토글 스위치 -->
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                        <span style="font-size:.8rem;color:#6b7280">${s.is_enabled ? 'ON' : 'OFF'}</span>
+                        <div style="position:relative;width:44px;height:24px" onclick="applications._toggleApplyType('${s.apply_type_key}')">
+                            <div style="width:44px;height:24px;border-radius:12px;background:${s.is_enabled ? '#10b981' : '#d1d5db'};transition:background .2s"></div>
+                            <div style="position:absolute;top:2px;left:${s.is_enabled ? '22px' : '2px'};width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s"></div>
+                        </div>
+                    </label>
+                </div>
+                <!-- 기간 설정 (is_enabled=true일 때만 표시) -->
+                <div id="atr-detail-${s.apply_type_key}" style="${s.is_enabled ? '' : 'display:none'}">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                        ${['auto','always','closed','custom'].map(m => `
+                        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:.82rem;
+                                      padding:4px 10px;border-radius:16px;border:1px solid ${s.period_mode===m ? '#e67e22' : '#d1d5db'};
+                                      background:${s.period_mode===m ? '#fff3e0' : '#f9fafb'};color:${s.period_mode===m ? '#c05c0a' : '#6b7280'};font-weight:${s.period_mode===m ? '600' : '400'};">
+                            <input type="radio" name="pm-${s.apply_type_key}" value="${m}" ${s.period_mode===m?'checked':''}
+                                   onchange="applications._onApplyTypeModeChange('${s.apply_type_key}','${m}')"
+                                   style="margin:0;accent-color:#e67e22">
+                            ${PERIOD_MODE_LABEL[m]}
+                        </label>`).join('')}
+                    </div>
+                    <!-- 직접 설정: 날짜 입력 -->
+                    <div id="atr-custom-${s.apply_type_key}" style="${isCustom ? '' : 'display:none'};display:${isCustom?'flex':'none'};gap:8px;align-items:center;flex-wrap:wrap">
+                        <div style="flex:1;min-width:160px">
+                            <label style="font-size:.78rem;color:#6b7280;display:block;margin-bottom:2px">시작</label>
+                            <input type="datetime-local" id="atr-start-${s.apply_type_key}"
+                                   value="${toKstInput(s.period_start)}"
+                                   style="width:100%;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:.82rem">
+                        </div>
+                        <div style="flex:1;min-width:160px">
+                            <label style="font-size:.78rem;color:#6b7280;display:block;margin-bottom:2px">종료</label>
+                            <input type="datetime-local" id="atr-end-${s.apply_type_key}"
+                                   value="${toKstInput(s.period_end)}"
+                                   style="width:100%;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:.82rem">
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        };
+
+        // 단지 전체 설정 (대기 시스템, 자동승인)
+        const cx = current.complex || {};
+        const globalSection = `
+        <div style="border:1px solid #dbeafe;border-radius:10px;padding:14px 16px;background:#eff6ff;margin-bottom:16px">
+            <div style="font-weight:700;font-size:.9rem;color:#1d4ed8;margin-bottom:12px">
+                <i class="fas fa-cog"></i> 단지 전체 설정
+            </div>
+            <!-- 일괄 ON/OFF -->
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+                <button onclick="applications._bulkToggleApplyTypes(true)"
+                        style="flex:1;padding:6px;background:#10b981;color:#fff;border:none;border-radius:7px;font-size:.82rem;cursor:pointer;font-weight:600">
+                    <i class="fas fa-check-circle"></i> 전체 ON
+                </button>
+                <button onclick="applications._bulkToggleApplyTypes(false)"
+                        style="flex:1;padding:6px;background:#ef4444;color:#fff;border:none;border-radius:7px;font-size:.82rem;cursor:pointer;font-weight:600">
+                    <i class="fas fa-times-circle"></i> 전체 OFF
+                </button>
+            </div>
+            <!-- 대기 시스템 -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <div>
+                    <span style="font-weight:600;font-size:.88rem">대기 시스템</span>
+                    <div style="font-size:.78rem;color:#6b7280">정원 마감 시 대기 접수 허용 + 자동 SMS 플로우</div>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <span id="waitingEnabledLbl" style="font-size:.8rem;color:#6b7280">${cx.waiting_enabled ? 'ON' : 'OFF'}</span>
+                    <div style="position:relative;width:44px;height:24px" onclick="applications._toggleWaitingEnabled()">
+                        <div id="waitingEnabledTrack" style="width:44px;height:24px;border-radius:12px;background:${cx.waiting_enabled ? '#10b981' : '#d1d5db'};transition:background .2s"></div>
+                        <div id="waitingEnabledThumb" style="position:absolute;top:2px;left:${cx.waiting_enabled ? '22px' : '2px'};width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s"></div>
+                    </div>
+                </label>
+            </div>
+            <!-- 대기 응답 제한시간 -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <span style="font-size:.88rem;font-weight:600;white-space:nowrap">대기 응답 제한</span>
+                <select id="waitingTimeoutSel" style="padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:.85rem">
+                    ${[1,2,3,6,12,24].map(h => `<option value="${h}" ${cx.waiting_timeout_hours==h?'selected':''}>${h}시간</option>`).join('')}
+                </select>
+                <span style="font-size:.8rem;color:#6b7280">이내 미응답 시 다음 순번으로 이동</span>
+            </div>
+            <!-- 자동 승인 -->
+            <div style="display:flex;align-items:center;justify-content:space-between">
+                <div>
+                    <span style="font-weight:600;font-size:.88rem">신규 신청 자동 승인</span>
+                    <div style="font-size:.78rem;color:#6b7280">OFF 시 관리자 수동 승인 필요 (received 상태로 접수)</div>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <span id="autoApproveLbl" style="font-size:.8rem;color:#6b7280">${cx.auto_approve !== false ? 'ON' : 'OFF'}</span>
+                    <div style="position:relative;width:44px;height:24px" onclick="applications._toggleAutoApprove()">
+                        <div id="autoApproveTrack" style="width:44px;height:24px;border-radius:12px;background:${cx.auto_approve !== false ? '#10b981' : '#d1d5db'};transition:background .2s"></div>
+                        <div id="autoApproveThumb" style="position:absolute;top:2px;left:${cx.auto_approve !== false ? '22px' : '2px'};width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s"></div>
+                    </div>
+                </label>
+            </div>
+        </div>`;
+
+        const body = `
+        <div id="applySettingsForm" style="max-height:65vh;overflow-y:auto;padding-right:4px">
+            ${globalSection}
+            <div style="font-weight:700;font-size:.9rem;color:#374151;margin-bottom:10px">
+                <i class="fas fa-list-ul"></i> 신청 종류별 설정
+            </div>
+            ${(current.data || []).map(renderTypeRow).join('')}
+        </div>`;
+
+        const footer = `
+            <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
+            <button class="btn-primary" onclick="applications._saveApplySettings('${complexId}')">
+                <i class="fas fa-save"></i> 저장
+            </button>`;
+
+        openGlobalModal('<i class="fas fa-sliders-h"></i> 신청 종류 설정', body, footer);
+    },
+
+    // 개별 신청 종류 ON/OFF 토글 (DOM 즉시 업데이트)
+    _toggleApplyType(key) {
+        const row  = document.getElementById(`atr-${key}`);
+        const detail = document.getElementById(`atr-detail-${key}`);
+        const track  = row?.querySelector('.at-track-' + key);
+        if (!row) return;
+
+        // 현재 상태 파악: 토글 thumb 위치로 판단
+        const thumb = row.querySelector('[id]');
+        // data attribute로 상태 추적
+        const cur = row.dataset.enabled !== 'false';
+        const next = !cur;
+        row.dataset.enabled = next ? 'true' : 'false';
+        row.style.background = next ? '#fff' : '#f9fafb';
+
+        // thumb/track 갱신 — 직접 querySelector로 찾기
+        const allDivs = row.querySelectorAll('div[style*="border-radius:12px"]');
+        const allThumbs = row.querySelectorAll('div[style*="border-radius:50%"]');
+        const toggleTrack = allDivs[0];
+        const toggleThumb = allThumbs[0];
+        if (toggleTrack) toggleTrack.style.background = next ? '#10b981' : '#d1d5db';
+        if (toggleThumb) toggleThumb.style.left = next ? '22px' : '2px';
+
+        // ON/OFF 텍스트
+        const lbl = row.querySelector('span[style*="font-size:.8rem"]');
+        if (lbl) lbl.textContent = next ? 'ON' : 'OFF';
+
+        // detail 표시/숨김
+        if (detail) detail.style.display = next ? '' : 'none';
+
+        // 헤더 행 margin-bottom
+        const header = row.querySelector('div[style*="margin-bottom"]');
+        if (header) header.style.marginBottom = next ? '12px' : '0';
+    },
+
+    // 기간 모드 변경 (custom 입력 표시/숨김)
+    _onApplyTypeModeChange(key, mode) {
+        const customDiv = document.getElementById(`atr-custom-${key}`);
+        if (customDiv) customDiv.style.display = mode === 'custom' ? 'flex' : 'none';
+        // 라디오 버튼 스타일 갱신
+        const row = document.getElementById(`atr-${key}`);
+        if (!row) return;
+        row.querySelectorAll(`input[name="pm-${key}"]`).forEach(radio => {
+            const lbl = radio.parentElement;
+            const sel = radio.value === mode;
+            lbl.style.borderColor = sel ? '#e67e22' : '#d1d5db';
+            lbl.style.background  = sel ? '#fff3e0' : '#f9fafb';
+            lbl.style.color       = sel ? '#c05c0a' : '#6b7280';
+            lbl.style.fontWeight  = sel ? '600' : '400';
+        });
+    },
+
+    // 일괄 ON/OFF
+    _bulkToggleApplyTypes(enable) {
+        const keys = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund'];
+        keys.forEach(key => {
+            const row = document.getElementById(`atr-${key}`);
+            if (!row) return;
+            const cur = row.dataset.enabled !== 'false';
+            if (cur !== enable) this._toggleApplyType(key);
+        });
+    },
+
+    // 대기 시스템 토글
+    _toggleWaitingEnabled() {
+        const track = document.getElementById('waitingEnabledTrack');
+        const thumb = document.getElementById('waitingEnabledThumb');
+        const lbl   = document.getElementById('waitingEnabledLbl');
+        if (!track) return;
+        const cur  = track.style.background === 'rgb(16, 185, 129)';
+        const next = !cur;
+        track.style.background = next ? '#10b981' : '#d1d5db';
+        thumb.style.left = next ? '22px' : '2px';
+        lbl.textContent  = next ? 'ON' : 'OFF';
+        track.dataset.on = next ? '1' : '0';
+    },
+
+    // 자동 승인 토글
+    _toggleAutoApprove() {
+        const track = document.getElementById('autoApproveTrack');
+        const thumb = document.getElementById('autoApproveThumb');
+        const lbl   = document.getElementById('autoApproveLbl');
+        if (!track) return;
+        const cur  = track.style.background === 'rgb(16, 185, 129)';
+        const next = !cur;
+        track.style.background = next ? '#10b981' : '#d1d5db';
+        thumb.style.left = next ? '22px' : '2px';
+        lbl.textContent  = next ? 'ON' : 'OFF';
+        track.dataset.on = next ? '1' : '0';
+    },
+
+    // 저장
+    async _saveApplySettings(complexId) {
+        const keys = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund'];
+
+        // 각 신청 종류 설정 수집
+        const settings = keys.map(key => {
+            const row = document.getElementById(`atr-${key}`);
+            const isEnabled   = !row || row.dataset.enabled !== 'false';
+            const selectedRadio = row?.querySelector(`input[name="pm-${key}"]:checked`);
+            const periodMode  = selectedRadio?.value || 'auto';
+            const startEl     = document.getElementById(`atr-start-${key}`);
+            const endEl       = document.getElementById(`atr-end-${key}`);
+            // KST → UTC 변환
+            const toUtc = (v) => v ? new Date(new Date(v).getTime() - 9*60*60*1000).toISOString() : null;
+            return {
+                apply_type_key: key,
+                is_enabled:     isEnabled,
+                period_mode:    periodMode,
+                period_start:   periodMode === 'custom' && startEl?.value ? toUtc(startEl.value) : null,
+                period_end:     periodMode === 'custom' && endEl?.value   ? toUtc(endEl.value)   : null,
+            };
+        });
+
+        // 단지 전체 설정
+        const waitingTrack = document.getElementById('waitingEnabledTrack');
+        const autoTrack    = document.getElementById('autoApproveTrack');
+        const timeoutSel   = document.getElementById('waitingTimeoutSel');
+        const waiting_enabled       = waitingTrack ? (waitingTrack.dataset.on === '1' || waitingTrack.style.background === 'rgb(16, 185, 129)') : false;
+        const auto_approve          = autoTrack    ? (autoTrack.dataset.on    === '1' || autoTrack.style.background    === 'rgb(16, 185, 129)') : true;
+        const waiting_timeout_hours = timeoutSel   ? parseInt(timeoutSel.value) : 3;
+
+        try {
+            const res = await fetch(`/api/complexes/${complexId}/apply-settings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings, waiting_enabled, auto_approve, waiting_timeout_hours }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error);
+            closeGlobalModal();
+            showToast('신청 종류 설정이 저장되었습니다', 'success');
+            this._refreshApplySettingsBadge(complexId);
+        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+    },
+
+    // 신청 종류 설정 버튼 배지 갱신
+    async _refreshApplySettingsBadge(complexId) {
+        try {
+            const res  = await fetch(`/api/complexes/${complexId}/apply-settings`);
+            const json = await res.json();
+            if (!json.success) return;
+            const btn = document.getElementById('applySettingsBtn');
+            if (!btn) return;
+            const openCount = (json.data || []).filter(s => s.is_open && s.is_enabled).length;
+            const total     = (json.data || []).length;
+            const cx        = json.complex || {};
+            const waitingOn = cx.waiting_enabled ? ' · 대기ON' : '';
+            btn.innerHTML = `<i class="fas fa-sliders-h"></i> 신청 종류 설정 <span style="font-size:.7rem;background:rgba(255,255,255,.25);padding:1px 6px;border-radius:10px">${openCount}/${total} 열림${waitingOn}</span>`;
+            btn.style.background = openCount > 0 ? '#27ae60' : '#e67e22';
         } catch(_) {}
     },
 };

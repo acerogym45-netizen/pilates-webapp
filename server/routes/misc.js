@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { getSupabase, sbErr } = require('../db-supabase');
 const { sendInquiryAnswerSms, getSmsStatus, isSmsConfigured } = require('../utils/sms');
+const { triggerWaitingQueue, checkApplyTypeSetting } = require('../utils/waiting');
 
 // ── 로컬 doc_urls 스토어 (DB에 doc_urls 컬럼이 없을 때 파일 기반 대체 저장소) ──
 const DOC_META_FILE = path.join(__dirname, '../../data/refund_doc_meta.json');
@@ -658,54 +659,19 @@ router.post('/cancellations', async (req, res) => {
         // ── 입주민 해지신청 기간 체크 ─────────────────────────────────────
         // source='admin' 이 아닌 입주민 직접 신청 건에만 적용
         const isResident = source === 'resident' || ((request_type === 'cancel' || !request_type) && source !== 'admin');
-        if (isResident && request_type !== 'refund') {
-            const sb0 = getSupabase();
-            const now = new Date();
-
-            // 단지별 커스텀 기간 설정 조회
-            let periodOpen = false;
-            let periodLabel = '매월 22일 09시 ~ 26일 09시';
-            try {
-                const { data: cx } = await sb0
-                    .from('complexes')
-                    .select('apply_period_enabled, apply_start, apply_end')
-                    .eq('id', complex_id)
-                    .single();
-
-                if (cx && cx.apply_period_enabled) {
-                    if (cx.apply_start && cx.apply_end) {
-                        // 커스텀 기간
-                        periodOpen = now >= new Date(cx.apply_start) && now <= new Date(cx.apply_end);
-                        const toKst = (d) => {
-                            const kd = new Date(new Date(d).getTime() + 9*60*60*1000);
-                            const mm = String(kd.getUTCMonth()+1).padStart(2,'0');
-                            const dd = String(kd.getUTCDate()).padStart(2,'0');
-                            const hh = String(kd.getUTCHours()).padStart(2,'0');
-                            const mi = String(kd.getUTCMinutes()).padStart(2,'0');
-                            return `${kd.getUTCFullYear()}년 ${mm}월 ${dd}일 ${hh}:${mi}`;
-                        };
-                        periodLabel = `${toKst(cx.apply_start)} ~ ${toKst(cx.apply_end)}`;
-                    } else {
-                        // 기간 미설정 + enabled = 상시 개방
-                        periodOpen = true;
-                    }
-                } else {
-                    // 기본값: 매월 22일 09:00 ~ 26일 09:00 KST
-                    const kst = new Date(now.getTime() + 9*60*60*1000);
-                    const d = kst.getUTCDate(), h = kst.getUTCHours();
-                    periodOpen = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
-                }
-            } catch (_) {
-                // DB 조회 실패 시 기본 22~26일 로직
-                const kst = new Date(now.getTime() + 9*60*60*1000);
-                const d = kst.getUTCDate(), h = kst.getUTCHours();
-                periodOpen = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
+        if (isResident && complex_id) {
+            // 신청 종류별 설정으로 기간 체크 (complex_apply_settings 우선)
+            const typeKey = request_type === 'refund' ? 'refund'
+                          : request_type === 'mid_cancel' ? 'mid_cancel'
+                          : 'cancel';
+            const applyCheck = await checkApplyTypeSetting(complex_id, typeKey);
+            if (!applyCheck.isEnabled) {
+                return res.status(400).json({ success: false, error: applyCheck.message });
             }
-
-            if (!periodOpen) {
+            if (!applyCheck.isOpen) {
                 return res.status(400).json({
                     success: false,
-                    error: `해지 신청 기간이 아닙니다.\n신청 가능 기간: ${periodLabel}`
+                    error: `현재 ${typeKey === 'cancel' ? '해지' : typeKey === 'mid_cancel' ? '중도해지' : '환불'} 신청 기간이 아닙니다.`
                 });
             }
         }
@@ -1047,6 +1013,30 @@ router.put('/cancellations/:id', async (req, res) => {
                 // applications 자동 처리 실패는 cancellation 승인 자체를 막지 않음
                 appCancelResult = { success: false, error: appEx.message };
                 console.warn(`[cancellations PUT] applications 자동 해지 처리 예외: ${appEx.message}`);
+            }
+
+            // ── 해지 승인 완료 → 대기 SMS 큐 트리거 ──────────────────────────
+            // 자리가 생겼으므로 해당 프로그램+시간대 대기자에게 자동 문자 발송
+            try {
+                const cancelledAppId = data.application_id;
+                if (cancelledAppId) {
+                    const sb2 = getSupabase();
+                    const { data: cancelledApp } = await sb2
+                        .from('applications')
+                        .select('complex_id, program_id, program_name, preferred_time')
+                        .eq('id', cancelledAppId)
+                        .single();
+                    if (cancelledApp) {
+                        triggerWaitingQueue({
+                            complexId:     cancelledApp.complex_id,
+                            programId:     cancelledApp.program_id,
+                            programName:   cancelledApp.program_name,
+                            preferredTime: cancelledApp.preferred_time,
+                        }).catch(e => console.error('[cancellations PUT] 대기 트리거 실패:', e.message));
+                    }
+                }
+            } catch (trigErr) {
+                console.warn('[cancellations PUT] 대기 트리거 예외:', trigErr.message);
             }
         }
 
