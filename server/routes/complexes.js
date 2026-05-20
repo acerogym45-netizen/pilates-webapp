@@ -87,6 +87,30 @@ router.post('/verify-password', async (req, res) => {
     }
 });
 
+// ── 시간표 조회 (입주민용) ─────────────────────────────────────────────
+// GET /api/complexes/timetable?code=<complex_code>
+// GET /api/complexes/timetable?id=<complex_id>
+// ※ /:id 핸들러보다 반드시 앞에 위치해야 함
+router.get('/timetable', async (req, res) => {
+    try {
+        const { code, id } = req.query;
+        if (!code && !id) return res.status(400).json({ success: false, error: 'code 또는 id 필수' });
+        const sb = getSupabase();
+        let query = sb.from('complexes').select('id, code, name, timetable_url');
+        if (id)   query = query.eq('id', id);
+        else      query = query.eq('code', code);
+        const { data, error } = await query.single();
+        if (error || !data) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+        res.json({
+            success: true,
+            timetable_url: data.timetable_url || null,
+            complex_name: data.name
+        });
+    } catch(e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // ── 단지 ID로 조회 ────────────────────────────────────────────
 router.get('/:id', async (req, res) => {
     try {
@@ -264,29 +288,6 @@ router.post('/schedule-mode', async (req, res) => {
 
         res.json({ success: true, mode, is_active: syncActive });
     } catch (e) {
-        res.status(500).json({ success: false, error: e.message });
-    }
-});
-
-// ── 시간표 조회 (입주민용) ─────────────────────────────────────────────
-// GET /api/complexes/timetable?code=<complex_code>
-// GET /api/complexes/timetable?id=<complex_id>
-router.get('/timetable', async (req, res) => {
-    try {
-        const { code, id } = req.query;
-        if (!code && !id) return res.status(400).json({ success: false, error: 'code 또는 id 필수' });
-        const sb = getSupabase();
-        let query = sb.from('complexes').select('id, code, name, timetable_url');
-        if (id)   query = query.eq('id', id);
-        else      query = query.eq('code', code);
-        const { data, error } = await query.single();
-        if (error || !data) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
-        res.json({
-            success: true,
-            timetable_url: data.timetable_url || null,
-            complex_name: data.name
-        });
-    } catch(e) {
         res.status(500).json({ success: false, error: e.message });
     }
 });
