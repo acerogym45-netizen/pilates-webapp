@@ -655,34 +655,65 @@ router.post('/cancellations', async (req, res) => {
         } = req.body;
         if (!complex_id || !dong || !ho || !name || !phone) return res.status(400).json({ success: false, error: '필수 항목 누락' });
 
-        // ── 입주민 해지신청 기간 체크 (매월 22일 09:00 ~ 26일 09:00 KST만 허용) ──
+        // ── 입주민 해지신청 기간 체크 ─────────────────────────────────────
         // source='admin' 이 아닌 입주민 직접 신청 건에만 적용
         const isResident = source === 'resident' || ((request_type === 'cancel' || !request_type) && source !== 'admin');
         if (isResident && request_type !== 'refund') {
-            const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-            const dayKst  = nowKst.getUTCDate();
-            const hourKst = nowKst.getUTCHours();
-            // 22일 09:00 이상 AND 26일 09:00 미만 → 허용
-            const afterOpen  = dayKst > 22 || (dayKst === 22 && hourKst >= 9);
-            const beforeClose = dayKst < 26 || (dayKst === 26 && hourKst < 9);
-            if (!(afterOpen && beforeClose)) {
-                // 다음 접수 시작일 계산 (26일 이후면 다음달 22일)
-                const monKst = nowKst.getUTCMonth() + 1;
-                const yearKst = nowKst.getUTCFullYear();
-                const isAfterClose = dayKst > 26 || (dayKst === 26 && hourKst >= 9);
-                const nextMon = isAfterClose ? (monKst === 12 ? 1 : monKst + 1) : monKst;
-                const nextYear = (isAfterClose && monKst === 12) ? yearKst + 1 : yearKst;
+            const sb0 = getSupabase();
+            const now = new Date();
+
+            // 단지별 커스텀 기간 설정 조회
+            let periodOpen = false;
+            let periodLabel = '매월 22일 09시 ~ 26일 09시';
+            try {
+                const { data: cx } = await sb0
+                    .from('complexes')
+                    .select('apply_period_enabled, apply_start, apply_end')
+                    .eq('id', complex_id)
+                    .single();
+
+                if (cx && cx.apply_period_enabled) {
+                    if (cx.apply_start && cx.apply_end) {
+                        // 커스텀 기간
+                        periodOpen = now >= new Date(cx.apply_start) && now <= new Date(cx.apply_end);
+                        const toKst = (d) => {
+                            const kd = new Date(new Date(d).getTime() + 9*60*60*1000);
+                            const mm = String(kd.getUTCMonth()+1).padStart(2,'0');
+                            const dd = String(kd.getUTCDate()).padStart(2,'0');
+                            const hh = String(kd.getUTCHours()).padStart(2,'0');
+                            const mi = String(kd.getUTCMinutes()).padStart(2,'0');
+                            return `${kd.getUTCFullYear()}년 ${mm}월 ${dd}일 ${hh}:${mi}`;
+                        };
+                        periodLabel = `${toKst(cx.apply_start)} ~ ${toKst(cx.apply_end)}`;
+                    } else {
+                        // 기간 미설정 + enabled = 상시 개방
+                        periodOpen = true;
+                    }
+                } else {
+                    // 기본값: 매월 22일 09:00 ~ 26일 09:00 KST
+                    const kst = new Date(now.getTime() + 9*60*60*1000);
+                    const d = kst.getUTCDate(), h = kst.getUTCHours();
+                    periodOpen = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
+                }
+            } catch (_) {
+                // DB 조회 실패 시 기본 22~26일 로직
+                const kst = new Date(now.getTime() + 9*60*60*1000);
+                const d = kst.getUTCDate(), h = kst.getUTCHours();
+                periodOpen = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
+            }
+
+            if (!periodOpen) {
                 return res.status(400).json({
                     success: false,
-                    error: `해지 신청은 매월 22일 09시 ~ 26일 09시에만 가능합니다.\n다음 접수 기간: ${nextYear}년 ${nextMon}월 22일 09:00 ~ ${nextMon}월 26일 09:00`
+                    error: `해지 신청 기간이 아닙니다.\n신청 가능 기간: ${periodLabel}`
                 });
             }
         }
 
-        const sb = getSupabase();
 
         // ── 중복 해지 신청 방지 ───────────────────────────────────────
         // 동일 application_id로 이미 pending/approved 해지 신청이 있으면 차단
+        const sb = getSupabase();
         if (application_id) {
             const { data: dupCheck } = await sb
                 .from('cancellations')

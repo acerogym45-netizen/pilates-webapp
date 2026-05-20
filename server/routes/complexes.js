@@ -292,4 +292,108 @@ router.post('/schedule-mode', async (req, res) => {
     }
 });
 
+// ═══════════════════════════════════════════════════════
+// 신청기간 설정 (단지별 커스텀)
+// ─────────────────────────────────────────────────────
+// GET  /api/complexes/:id/apply-period   → 현재 설정 조회
+// PUT  /api/complexes/:id/apply-period   → 설정 저장
+// DELETE /api/complexes/:id/apply-period → 커스텀 기간 초기화 (22~26일 기본값 복귀)
+// ═══════════════════════════════════════════════════════
+
+/**
+ * GET /api/complexes/:id/apply-period
+ * 단지의 신청기간 설정 + 현재 열림/닫힘 상태 반환
+ */
+router.get('/:id/apply-period', async (req, res) => {
+    try {
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('complexes')
+            .select('id, name, apply_period_enabled, apply_start, apply_end')
+            .eq('id', req.params.id)
+            .single();
+        if (error) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+
+        // 현재 열림 여부 계산
+        const now = new Date();
+        let isOpen = false;
+        let mode = 'auto'; // auto | custom | always_open | always_closed
+
+        if (data.apply_period_enabled && data.apply_start && data.apply_end) {
+            // 커스텀 기간 적용
+            const start = new Date(data.apply_start);
+            const end   = new Date(data.apply_end);
+            isOpen = now >= start && now <= end;
+            mode = 'custom';
+        } else if (data.apply_period_enabled && !data.apply_start && !data.apply_end) {
+            // 기간 없이 enabled = 항상 열림
+            isOpen = true;
+            mode = 'always_open';
+        } else {
+            // 기본값: 매월 22일 09:00 ~ 26일 09:00 KST
+            const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+            const d = kst.getUTCDate(), h = kst.getUTCHours();
+            isOpen = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
+            mode = 'auto';
+        }
+
+        res.json({
+            success: true,
+            data: {
+                ...data,
+                is_open: isOpen,
+                mode,
+            }
+        });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+/**
+ * PUT /api/complexes/:id/apply-period
+ * body: { apply_period_enabled, apply_start, apply_end }
+ * - apply_period_enabled=true + apply_start/end 있음 → 지정 기간만 개방
+ * - apply_period_enabled=true + start/end 없음         → 상시 개방
+ * - apply_period_enabled=false                         → 22~26일 자동 로직
+ */
+router.put('/:id/apply-period', async (req, res) => {
+    try {
+        const { apply_period_enabled, apply_start, apply_end } = req.body;
+        const sb = getSupabase();
+
+        const updateData = {
+            apply_period_enabled: Boolean(apply_period_enabled),
+            apply_start: apply_start ? new Date(apply_start).toISOString() : null,
+            apply_end:   apply_end   ? new Date(apply_end).toISOString()   : null,
+        };
+
+        const { data, error } = await sb
+            .from('complexes')
+            .update(updateData)
+            .eq('id', req.params.id)
+            .select('id, name, apply_period_enabled, apply_start, apply_end')
+            .single();
+        if (error) throw sbErr(error, 'PUT /complexes/:id/apply-period');
+
+        res.json({ success: true, data });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+/**
+ * DELETE /api/complexes/:id/apply-period
+ * 커스텀 기간 초기화 → 22~26일 자동 로직으로 복귀
+ */
+router.delete('/:id/apply-period', async (req, res) => {
+    try {
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('complexes')
+            .update({ apply_period_enabled: false, apply_start: null, apply_end: null })
+            .eq('id', req.params.id)
+            .select('id, name, apply_period_enabled, apply_start, apply_end')
+            .single();
+        if (error) throw sbErr(error, 'DELETE /complexes/:id/apply-period');
+        res.json({ success: true, data });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 module.exports = router;
