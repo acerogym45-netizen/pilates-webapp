@@ -2393,6 +2393,49 @@ function formatPrice(price) {
 // ===== 🆕 CURRICULUM FUNCTIONS =====
 
 // Show curriculum modal
+// ===== TIMETABLE MODAL =====
+
+async function showTimetableModal() {
+    const modal   = document.getElementById('timetableModal');
+    const content = document.getElementById('timetableContent');
+    if (!modal || !content) return;
+
+    modal.classList.add('active');
+    content.innerHTML = '<span style="color:#9ca3af;font-size:.9rem">불러오는 중...</span>';
+
+    try {
+        const complexCode = complexContext.getComplexCode();
+        if (!complexCode) throw new Error('단지 정보를 찾을 수 없습니다');
+
+        const res  = await fetch(`/api/complexes/timetable?code=${encodeURIComponent(complexCode)}`);
+        const json = await res.json();
+
+        if (!json.success) throw new Error(json.error || '조회 실패');
+
+        if (json.timetable_url) {
+            content.innerHTML = `
+                <img src="${json.timetable_url}" alt="시간표"
+                     style="max-width:100%;border-radius:8px;cursor:pointer"
+                     onclick="notices_openImageModal('${json.timetable_url}')">`;
+        } else {
+            content.innerHTML = `
+                <div style="color:#9ca3af;font-size:.88rem;padding:24px 0">
+                    <i class="fas fa-calendar-times" style="font-size:2rem;display:block;margin-bottom:10px"></i>
+                    등록된 시간표가 없습니다.<br>관리자에게 문의해 주세요.
+                </div>`;
+        }
+    } catch (e) {
+        content.innerHTML = `<span style="color:#ef4444;font-size:.88rem">오류: ${escapeHtml(e.message)}</span>`;
+    }
+}
+
+function closeTimetableModal() {
+    const modal = document.getElementById('timetableModal');
+    if (modal) modal.classList.remove('active');
+}
+
+// ===== CURRICULUM MODAL =====
+
 async function showCurriculumModal() {
     const modal = document.getElementById('curriculumModal');
     modal.classList.add('active');

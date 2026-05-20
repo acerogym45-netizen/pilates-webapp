@@ -661,6 +661,23 @@
         </div>
     </div>
 
+    <!-- 시간표 모달 -->
+    <div id="timetableModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-table"></i> 시간표</h2>
+                <button class="modal-close" onclick="closeTimetableModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" style="padding:12px">
+                <div id="timetableContent" style="text-align:center;min-height:120px;display:flex;align-items:center;justify-content:center">
+                    <span style="color:#9ca3af;font-size:.9rem">불러오는 중...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 커리큘럼 모달 (bottom-sheet) -->
     <div id="curriculumModal" class="modal">
         <div class="modal-content">
@@ -1131,6 +1148,7 @@
         if (e.key === 'Escape') {
             closeImageModal();
             closeInstructorsModal();
+            closeTimetableModal();
         }
     });
 
