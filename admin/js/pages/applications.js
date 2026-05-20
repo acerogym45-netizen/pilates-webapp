@@ -22,6 +22,9 @@ const applications = {
                     <button class="btn-sm" onclick="applications.showTimetableModal()" style="background:#3498db;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
                         <i class="fas fa-calendar-alt"></i> 시간표
                     </button>
+                    <button class="btn-sm" id="applyPeriodBtn" onclick="applications.showApplyPeriodModal()" style="background:#8e44ad;color:#fff;border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">
+                        <i class="fas fa-clock"></i> 신청기간 설정
+                    </button>
                     <button class="btn-secondary btn-sm" onclick="applications.showImportModal()">
                         <i class="fas fa-upload"></i> 가져오기
                     </button>
@@ -97,6 +100,9 @@ const applications = {
 
         await this.load();
         this.loadProgramStatus(); // 프로그램 현황 패널 비동기 로드
+        // 신청기간 버튼 배지 비동기 갱신
+        const _cid = getEffectiveComplexId();
+        if (_cid) this._refreshApplyPeriodBadge(_cid);
     },
 
     async load() {
@@ -2389,5 +2395,193 @@ ${(() => {
             '<div id="printArea">' + content + '</div></body></html>');
         win.document.close();
         win.focus();
+    },
+
+    // ════════════════════════════════════════════════════════════
+    // 신청기간 설정 모달
+    // ════════════════════════════════════════════════════════════
+    async showApplyPeriodModal() {
+        const complexId = getEffectiveComplexId();
+        if (!complexId) { showToast('단지를 먼저 선택하세요', 'error'); return; }
+
+        // 현재 설정 조회
+        let current = null;
+        try {
+            const res = await fetch(`/api/complexes/${complexId}/apply-period`);
+            const json = await res.json();
+            if (json.success) current = json.data;
+        } catch(e) { showToast('설정 조회 실패: ' + e.message, 'error'); return; }
+
+        // KST datetime-local 포맷 변환 (UTC → KST +9h → "YYYY-MM-DDTHH:mm")
+        const toKstInput = (utcStr) => {
+            if (!utcStr) return '';
+            const d = new Date(new Date(utcStr).getTime() + 9 * 60 * 60 * 1000);
+            return d.toISOString().slice(0, 16);
+        };
+
+        // 현재 열림/닫힘 배지
+        const isOpen = current?.is_open;
+        const modeBadge = isOpen
+            ? '<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:#e8f5e9;color:#2e7d32;font-size:.82rem;font-weight:600"><i class="fas fa-circle" style="font-size:.6rem;margin-right:4px"></i>현재 신청 열림</span>'
+            : '<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:#fce4ec;color:#c62828;font-size:.82rem;font-weight:600"><i class="fas fa-circle" style="font-size:.6rem;margin-right:4px"></i>현재 신청 닫힘</span>';
+
+        const body = `
+            <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px">
+                ${modeBadge}
+                <span style="font-size:.82rem;color:#888">
+                    ${current?.mode === 'custom' ? `설정기간: ${toKstInput(current.apply_start).replace('T',' ')} ~ ${toKstInput(current.apply_end).replace('T',' ')}` :
+                      current?.mode === 'always_open' ? '상시 개방 중' : '기본값 (매월 22일 09시 ~ 26일 09시)'}
+                </span>
+            </div>
+
+            <!-- 모드 선택 -->
+            <div class="form-group" style="margin-bottom:16px">
+                <label style="font-weight:600;margin-bottom:8px;display:block">신청기간 모드</label>
+                <div style="display:flex;flex-direction:column;gap:8px">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:2px solid #e0e0e0;border-radius:8px;transition:.2s" id="modeAutoLabel">
+                        <input type="radio" name="applyMode" value="auto" ${!current?.apply_period_enabled ? 'checked' : ''} onchange="applications._onApplyModeChange(this.value)" style="margin:0">
+                        <span>
+                            <strong>자동 (기본값)</strong><br>
+                            <small style="color:#888">매월 22일 09:00 ~ 26일 09:00 KST 자동 개방</small>
+                        </span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:2px solid #e0e0e0;border-radius:8px;transition:.2s" id="modeCustomLabel">
+                        <input type="radio" name="applyMode" value="custom" ${current?.apply_period_enabled && (current.apply_start || current.apply_end) ? 'checked' : ''} onchange="applications._onApplyModeChange(this.value)" style="margin:0">
+                        <span>
+                            <strong>직접 설정</strong><br>
+                            <small style="color:#888">시작일~종료일을 직접 지정</small>
+                        </span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;border:2px solid #e0e0e0;border-radius:8px;transition:.2s" id="modeAlwaysLabel">
+                        <input type="radio" name="applyMode" value="always" ${current?.apply_period_enabled && !current.apply_start && !current.apply_end ? 'checked' : ''} onchange="applications._onApplyModeChange(this.value)" style="margin:0">
+                        <span>
+                            <strong>상시 개방</strong><br>
+                            <small style="color:#888">기간 제한 없이 항상 신청 가능</small>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 직접 설정: 날짜 입력 -->
+            <div id="applyCustomRange" style="display:${current?.apply_period_enabled && (current.apply_start || current.apply_end) ? 'block' : 'none'};background:#f8f9fa;border-radius:8px;padding:14px;margin-bottom:8px">
+                <div class="form-group" style="margin-bottom:10px">
+                    <label style="font-size:.88rem;font-weight:600;margin-bottom:4px;display:block">
+                        <i class="fas fa-calendar-check" style="color:#8e44ad"></i> 신청 시작 일시 (KST)
+                    </label>
+                    <input type="datetime-local" id="applyStartInput"
+                           value="${toKstInput(current?.apply_start)}"
+                           style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:.9rem">
+                </div>
+                <div class="form-group" style="margin-bottom:0">
+                    <label style="font-size:.88rem;font-weight:600;margin-bottom:4px;display:block">
+                        <i class="fas fa-calendar-times" style="color:#e74c3c"></i> 신청 종료 일시 (KST)
+                    </label>
+                    <input type="datetime-local" id="applyEndInput"
+                           value="${toKstInput(current?.apply_end)}"
+                           style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:.9rem">
+                </div>
+            </div>
+
+            <p style="font-size:.8rem;color:#999;margin:0">
+                <i class="fas fa-info-circle"></i>
+                입주민 페이지의 신청 가능 여부 표시 및 해지 신청 가능 시간에 즉시 반영됩니다.
+            </p>`;
+
+        const footer = `
+            <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
+            <button class="btn-ghost" style="color:#e53935;border-color:#e53935" onclick="applications._resetApplyPeriod('${complexId}')">
+                <i class="fas fa-undo"></i> 기본값 복귀
+            </button>
+            <button class="btn-primary" style="background:#8e44ad" onclick="applications._saveApplyPeriod('${complexId}')">
+                <i class="fas fa-save"></i> 저장
+            </button>`;
+
+        openGlobalModal('<i class="fas fa-clock"></i> 신청기간 설정', body, footer);
+
+        // 초기 라디오 스타일 반영
+        const currentMode = !current?.apply_period_enabled ? 'auto' :
+                            (current.apply_start || current.apply_end) ? 'custom' : 'always';
+        applications._onApplyModeChange(currentMode);
+    },
+
+    _onApplyModeChange(value) {
+        // 라디오 카드 테두리 강조
+        ['auto','custom','always'].forEach(m => {
+            const label = document.getElementById(`mode${m.charAt(0).toUpperCase()+m.slice(1)}Label`);
+            if (label) label.style.borderColor = (m === value) ? '#8e44ad' : '#e0e0e0';
+        });
+        const range = document.getElementById('applyCustomRange');
+        if (range) range.style.display = (value === 'custom') ? 'block' : 'none';
+    },
+
+    async _saveApplyPeriod(complexId) {
+        const modeEl = document.querySelector('input[name="applyMode"]:checked');
+        if (!modeEl) return;
+        const mode = modeEl.value;
+
+        let enabled = false, apply_start = null, apply_end = null;
+
+        if (mode === 'auto') {
+            enabled = false;
+        } else if (mode === 'always') {
+            enabled = true;
+        } else {
+            // custom
+            const startVal = document.getElementById('applyStartInput')?.value;
+            const endVal   = document.getElementById('applyEndInput')?.value;
+            if (!startVal || !endVal) { showToast('시작일과 종료일을 모두 입력하세요', 'error'); return; }
+            // KST → UTC 변환 (입력값은 local KST, -9h)
+            apply_start = new Date(new Date(startVal).getTime() - 9 * 60 * 60 * 1000).toISOString();
+            apply_end   = new Date(new Date(endVal).getTime()   - 9 * 60 * 60 * 1000).toISOString();
+            if (new Date(apply_start) >= new Date(apply_end)) {
+                showToast('종료일은 시작일보다 이후여야 합니다', 'error'); return;
+            }
+            enabled = true;
+        }
+
+        try {
+            const res = await fetch(`/api/complexes/${complexId}/apply-period`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apply_period_enabled: enabled, apply_start, apply_end })
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || '저장 실패');
+            closeGlobalModal();
+            showToast('신청기간 설정이 저장되었습니다', 'success');
+            // 버튼 배지 갱신
+            applications._refreshApplyPeriodBadge(complexId);
+        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+    },
+
+    async _resetApplyPeriod(complexId) {
+        showConfirm('기본값 복귀', '신청기간을 기본값(매월 22~26일)으로 초기화하시겠습니까?', async () => {
+            try {
+                const res = await fetch(`/api/complexes/${complexId}/apply-period`, { method: 'DELETE' });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.error);
+                closeGlobalModal();
+                showToast('기본값으로 초기화되었습니다');
+                applications._refreshApplyPeriodBadge(complexId);
+            } catch(e) { showToast('초기화 실패: ' + e.message, 'error'); }
+        });
+    },
+
+    // 상단 버튼 배지(열림/닫힘 표시) 갱신
+    async _refreshApplyPeriodBadge(complexId) {
+        try {
+            const res  = await fetch(`/api/complexes/${complexId}/apply-period`);
+            const json = await res.json();
+            if (!json.success) return;
+            const btn = document.getElementById('applyPeriodBtn');
+            if (!btn) return;
+            if (json.data.is_open) {
+                btn.style.background = '#27ae60';
+                btn.innerHTML = '<i class="fas fa-lock-open"></i> 신청기간 설정 <span style="font-size:.72rem;vertical-align:middle;background:rgba(255,255,255,.25);padding:1px 6px;border-radius:10px">열림</span>';
+            } else {
+                btn.style.background = '#8e44ad';
+                btn.innerHTML = '<i class="fas fa-clock"></i> 신청기간 설정';
+            }
+        } catch(_) {}
     },
 };
