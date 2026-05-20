@@ -2743,30 +2743,39 @@ async function showTimetableModal() {
         modal = document.createElement('div');
         modal.id = 'timetableModal';
         modal.className = 'modal-overlay';
-        modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1000;overflow-y:auto;padding:16px;box-sizing:border-box';
+        modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;overflow-y:auto;padding:12px;box-sizing:border-box';
         modal.innerHTML = `
-            <div style="background:#fff;border-radius:16px;max-width:680px;margin:auto;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+            <div style="background:#fff;border-radius:16px;max-width:720px;width:100%;margin:auto;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.3)">
                 <!-- 헤더 -->
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:linear-gradient(135deg,#1b5e20,#388e3c);color:#fff">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff">
                     <span style="font-size:1rem;font-weight:800;display:flex;align-items:center;gap:8px">
                         <i class="fas fa-table"></i> 시간표
                     </span>
-                    <button onclick="closeTimetableModal()" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1">
-                        <i class="fas fa-times"></i>
-                    </button>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <button id="timetableDownloadBtn" onclick="downloadTimetableImage()" style="display:none;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;padding:5px 12px;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer">
+                            <i class="fas fa-download"></i> 이미지 저장
+                        </button>
+                        <button onclick="closeTimetableModal()" style="background:none;border:none;color:#fff;font-size:1.3rem;cursor:pointer;line-height:1;padding:2px 4px">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
                 </div>
                 <!-- 본문 -->
-                <div id="timetableModalBody" style="padding:20px;min-height:120px;display:flex;align-items:center;justify-content:center">
+                <div id="timetableModalBody" style="padding:16px;min-height:140px;display:flex;align-items:center;justify-content:center">
                     <span style="color:#999;font-size:.9rem"><i class="fas fa-spinner fa-spin"></i> 불러오는 중…</span>
                 </div>
             </div>`;
-        // 배경 클릭 닫기
         modal.addEventListener('click', (e) => { if (e.target === modal) closeTimetableModal(); });
         document.body.appendChild(modal);
     }
 
     modal.style.display = 'block';
     document.body.style.overflow = 'hidden';
+
+    // 다운로드 버튼 초기 숨김
+    const dlBtn = document.getElementById('timetableDownloadBtn');
+    if (dlBtn) dlBtn.style.display = 'none';
+    window._timetableUrl = null;
 
     const body = document.getElementById('timetableModalBody');
     try {
@@ -2780,7 +2789,7 @@ async function showTimetableModal() {
 
         if (!json.success || !json.timetable_url) {
             body.innerHTML = `
-                <div style="text-align:center;padding:20px 0;color:#666">
+                <div style="text-align:center;padding:24px 0;color:#666">
                     <i class="fas fa-table" style="font-size:2.5rem;color:#ccc;display:block;margin-bottom:12px"></i>
                     <p style="font-size:.95rem;font-weight:600;margin:0 0 6px">등록된 시간표가 없습니다</p>
                     <p style="font-size:.82rem;color:#999;margin:0">관리자에게 문의해주세요</p>
@@ -2788,27 +2797,47 @@ async function showTimetableModal() {
             return;
         }
 
-        const url    = json.timetable_url;
-        const isPdf  = url.startsWith('data:application/pdf') || url.toLowerCase().includes('.pdf');
+        const url   = json.timetable_url;
+        const isPdf = url.startsWith('data:application/pdf') || url.toLowerCase().includes('.pdf');
+
+        window._timetableUrl = url;
 
         if (isPdf) {
+            // PDF → iframe으로 브라우저 내 바로 보기
+            // data URL이면 blob으로 변환해 iframe에 주입
+            let iframeSrc = url;
+            if (url.startsWith('data:application/pdf')) {
+                const byteStr = atob(url.split(',')[1]);
+                const arr = new Uint8Array(byteStr.length);
+                for (let i = 0; i < byteStr.length; i++) arr[i] = byteStr.charCodeAt(i);
+                const blob = new Blob([arr], { type: 'application/pdf' });
+                iframeSrc  = URL.createObjectURL(blob);
+                window._timetableBlobUrl = iframeSrc;
+            }
+            body.style.padding = '0';
+            body.style.display = 'block';
             body.innerHTML = `
-                <div style="text-align:center;padding:16px 0">
-                    <i class="fas fa-file-pdf" style="font-size:3rem;color:#e74c3c;display:block;margin-bottom:14px"></i>
-                    <p style="font-size:.95rem;font-weight:700;margin:0 0 14px;color:#333">PDF 시간표</p>
-                    <a href="${url}" target="_blank" download
-                       style="display:inline-flex;align-items:center;gap:8px;padding:10px 24px;background:#e74c3c;color:#fff;border-radius:8px;text-decoration:none;font-size:.9rem;font-weight:700">
-                        <i class="fas fa-download"></i> PDF 열기 / 다운로드
+                <iframe src="${iframeSrc}" style="width:100%;height:75vh;border:none;display:block;border-radius:0 0 16px 16px"
+                        title="시간표 PDF"></iframe>
+                <div style="padding:8px 16px 12px;text-align:center;background:#f9f9f9;border-top:1px solid #eee">
+                    <a href="${iframeSrc}" download="시간표.pdf"
+                       style="display:inline-flex;align-items:center;gap:6px;padding:7px 20px;background:#e74c3c;color:#fff;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:700">
+                        <i class="fas fa-file-pdf"></i> PDF 다운로드
                     </a>
                 </div>`;
         } else {
+            // 이미지 → 전체 표시 + 헤더 다운로드 버튼 활성화
+            body.style.padding = '12px';
+            body.style.display = 'block';
             body.innerHTML = `
-                <div style="text-align:center;width:100%">
-                    <img src="${url}" alt="시간표"
+                <div style="text-align:center">
+                    <img id="timetableImg" src="${url}" alt="시간표"
                          style="max-width:100%;border-radius:10px;border:1px solid #eee;display:block;margin:0 auto"
-                         onerror="this.parentElement.innerHTML='<p style=\\'color:#e74c3c;font-size:.85rem\\'>이미지를 불러올 수 없습니다</p>'">
-                    <p style="font-size:.75rem;color:#aaa;margin:10px 0 0">꾹 눌러서 이미지를 저장할 수 있습니다</p>
+                         onerror="this.style.display='none';document.getElementById('timetableImgErr').style.display='block'">
+                    <div id="timetableImgErr" style="display:none;color:#e74c3c;font-size:.85rem;padding:20px">이미지를 불러올 수 없습니다</div>
+                    <p style="font-size:.75rem;color:#bbb;margin:8px 0 0">상단 <b>이미지 저장</b> 버튼 또는 이미지를 꾹 눌러서 저장할 수 있습니다</p>
                 </div>`;
+            if (dlBtn) dlBtn.style.display = '';
         }
     } catch(e) {
         body.innerHTML = `<p style="color:#e74c3c;font-size:.85rem;text-align:center">불러오기 실패: ${e.message}</p>`;
@@ -2819,4 +2848,21 @@ function closeTimetableModal() {
     const modal = document.getElementById('timetableModal');
     if (modal) modal.style.display = 'none';
     document.body.style.overflow = '';
+    // blob URL 해제
+    if (window._timetableBlobUrl) {
+        URL.revokeObjectURL(window._timetableBlobUrl);
+        window._timetableBlobUrl = null;
+    }
+}
+
+// 이미지 다운로드 (헤더 버튼)
+function downloadTimetableImage() {
+    const url = window._timetableUrl;
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '시간표.jpg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
 }

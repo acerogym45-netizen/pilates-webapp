@@ -2349,22 +2349,42 @@ ${(() => {
             '<style>*{box-sizing:border-box}' +
             'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:8mm 12mm;color:#111}' +
             'table{border-collapse:collapse}' +
+            '.dl-btn{padding:7px 18px;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:6px}' +
             '</style>' +
-            '<script>function downloadPDF(){' +
-            'var btn=document.getElementById(\'dlBtn\');btn.disabled=true;btn.textContent=\'생성 중...\';' +
-            'var el=document.getElementById(\'printArea\');' +
-            'html2canvas(el,{scale:2,useCORS:true,logging:false}).then(function(canvas){' +
-            'var pdf=new window.jspdf.jsPDF({orientation:\'landscape\',unit:\'mm\',format:\'a4\'});' +
-            'var pw=pdf.internal.pageSize.getWidth();var ph=pdf.internal.pageSize.getHeight();' +
-            'var iw=canvas.width;var ih=canvas.height;' +
-            'var ratio=Math.min(pw/iw,ph/ih);' +
-            'var cx=(pw-iw*ratio)/2;var cy=(ph-ih*ratio)/2;' +
-            'pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.95),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
-            'pdf.save(\'시간표_' + monthLabel + '.pdf\');' +
-            'btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';});}<\/script>' +
+            '<script>' +
+            'function captureCanvas(cb){' +
+            '  var el=document.getElementById(\'printArea\');' +
+            '  html2canvas(el,{scale:2,useCORS:true,logging:false}).then(cb);' +
+            '}' +
+            'function downloadPDF(){' +
+            '  var btn=document.getElementById(\'dlBtnPdf\');btn.disabled=true;btn.textContent=\'생성 중...\';' +
+            '  captureCanvas(function(canvas){' +
+            '    var pdf=new window.jspdf.jsPDF({orientation:\'landscape\',unit:\'mm\',format:\'a4\'});' +
+            '    var pw=pdf.internal.pageSize.getWidth();var ph=pdf.internal.pageSize.getHeight();' +
+            '    var iw=canvas.width;var ih=canvas.height;' +
+            '    var ratio=Math.min(pw/iw,ph/ih);' +
+            '    var cx=(pw-iw*ratio)/2;var cy=(ph-ih*ratio)/2;' +
+            '    pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.95),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
+            '    pdf.save(\'시간표_' + monthLabel + '.pdf\');' +
+            '    btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';' +
+            '  });' +
+            '}' +
+            'function downloadIMG(){' +
+            '  var btn=document.getElementById(\'dlBtnImg\');btn.disabled=true;btn.textContent=\'생성 중...\';' +
+            '  captureCanvas(function(canvas){' +
+            '    var a=document.createElement(\'a\');' +
+            '    a.href=canvas.toDataURL(\'image/png\');' +
+            '    a.download=\'시간표_' + monthLabel + '.png\';' +
+            '    document.body.appendChild(a);a.click();document.body.removeChild(a);' +
+            '    btn.disabled=false;btn.textContent=\'🖼 이미지 다운로드\';' +
+            '  });' +
+            '}' +
+            '<\/script>' +
             '</head><body>' +
             '<div style="text-align:right;margin-bottom:8px">' +
-            '<button id="dlBtn" onclick="downloadPDF()" style="padding:7px 18px;background:#3498db;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">📥 PDF 다운로드</button>' +
+            '<button id="dlBtnPdf" class="dl-btn" onclick="downloadPDF()" style="background:#3498db">📥 PDF 다운로드</button>' +
+            '<button id="dlBtnImg" class="dl-btn" onclick="downloadIMG()" style="background:#27ae60">🖼 이미지 다운로드</button>' +
+            '<button class="dl-btn" onclick="window.print()" style="background:#8e44ad">🖨 인쇄</button>' +
             '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
             '<div id="printArea">' + content + '</div></body></html>');
         win.document.close();
