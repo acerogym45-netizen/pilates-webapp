@@ -412,7 +412,7 @@ const mycomplex = {
                 </div>
             </div>
 
-            <!-- SMS 알림 설정 카드 (비동기로 상태 로드) -->
+            <!-- SMS 알림 설정 카드 -->
             <div class="settings-card" id="smsSettingsCard">
                 <div class="settings-card-header">
                     <i class="fas fa-sms"></i> SMS 자동 알림 설정
@@ -424,7 +424,8 @@ const mycomplex = {
                     <p style="font-size:.875rem;color:#666;margin-bottom:16px;line-height:1.6">
                         <i class="fas fa-info-circle" style="color:#3498db"></i>
                         문의 답변이 등록되면 입주민 전화번호로 <strong>자동 SMS</strong>를 발송합니다.<br>
-                        <a href="https://console.solapi.com" target="_blank" style="color:#3498db">솔라피 콘솔</a>에서 발급받은 API Key를 입력하세요.
+                        발신번호는 <strong>이 단지 전용</strong>으로 설정됩니다.
+                        솔라피 API Key/Secret은 Vercel 환경변수에서 공통 관리됩니다.
                     </p>
 
                     <!-- 현재 설정 상태 -->
@@ -432,25 +433,18 @@ const mycomplex = {
                         <i class="fas fa-spinner fa-spin"></i> 설정 상태 로딩 중...
                     </div>
 
-                    <!-- 설정 폼 -->
+                    <!-- 단지별 발신번호 설정 -->
                     <div class="form-group">
-                        <label>솔라피 API Key <span class="req">*</span></label>
-                        <input type="text" id="smsApiKey" placeholder="예: NCSA1ABCDEF01234" autocomplete="off">
-                        <small style="color:#999">솔라피 콘솔 > 개발 > API Key 관리에서 확인</small>
-                    </div>
-                    <div class="form-group">
-                        <label>솔라피 API Secret <span class="req">*</span></label>
-                        <input type="password" id="smsApiSecret" placeholder="API Secret 입력" autocomplete="new-password">
-                    </div>
-                    <div class="form-group">
-                        <label>발신 전화번호 <span class="req">*</span></label>
-                        <input type="text" id="smsSender" placeholder="예: 0212345678 또는 01012345678">
-                        <small style="color:#999">솔라피에 등록된 발신번호를 입력하세요 (하이픈 제외)</small>
+                        <label>발신 전화번호 <span class="req">*</span>
+                            <span style="font-size:.75rem;font-weight:400;color:#3498db;margin-left:6px">이 단지 전용</span>
+                        </label>
+                        <input type="text" id="smsSender" placeholder="예: 01012345678 또는 0212345678">
+                        <small style="color:#999">솔라피에 등록된 발신번호 (하이픈 제외). 미입력 시 공통 발신번호 사용</small>
                     </div>
                     <div class="form-group" style="display:flex;align-items:center;gap:10px">
                         <label style="margin:0;display:flex;align-items:center;gap:8px;cursor:pointer">
                             <input type="checkbox" id="smsEnabled" style="width:18px;height:18px;cursor:pointer">
-                            SMS 발송 활성화
+                            이 단지 SMS 발송 활성화
                         </label>
                     </div>
 
@@ -463,10 +457,10 @@ const mycomplex = {
                         </button>
                     </div>
 
-                    <div style="margin-top:14px;padding:10px 14px;background:#fff8e1;border-radius:8px;font-size:.8rem;color:#7d6608;line-height:1.6">
-                        <i class="fas fa-exclamation-triangle"></i> <strong>Vercel 배포 환경</strong>에서는 Vercel 대시보드 > Settings > Environment Variables에서
-                        <code>SOLAPI_API_KEY</code>, <code>SOLAPI_API_SECRET</code>, <code>SOLAPI_SENDER</code>를 설정하세요.
-                        이 폼은 현재 실행 중인 서버에 즉시 적용되며 서버 재시작 시 초기화됩니다.
+                    <div style="margin-top:14px;padding:10px 14px;background:#e8f4fd;border-radius:8px;font-size:.8rem;color:#1a5276;line-height:1.6">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>솔라피 API Key/Secret</strong>은 Vercel 환경변수(<code>SOLAPI_API_KEY</code>, <code>SOLAPI_API_SECRET</code>)에서 총괄관리자가 공통 설정합니다.<br>
+                        각 단지는 <strong>발신번호만</strong> 별도로 설정하면 됩니다.
                     </div>
                 </div>
             </div>`;
@@ -561,45 +555,54 @@ const mycomplex = {
 
     /* ─── SMS 설정 ─────────────────────────────────────────── */
 
-    /** SMS 설정 상태 로드 후 폼에 반영 */
+    /** SMS 설정 상태 로드 후 폼에 반영 (단지별) */
     async _loadSmsStatus() {
-        const area = document.getElementById('smsStatusArea');
+        const area  = document.getElementById('smsStatusArea');
         const badge = document.getElementById('smsBadge');
         if (!area) return;
         try {
-            const res = await fetch('/api/sms/status');
+            const complexId = Admin.complex?.id || '';
+            const res = await fetch(`/api/sms/status${complexId ? '?complexId=' + complexId : ''}`);
             const d = await res.json();
-            if (d.configured) {
+
+            const apiOk          = d.configured; // 공통 API Key/Secret 설정 여부
+            const complexSender  = d.complexSender  || null;
+            const complexEnabled = d.complexEnabled != null ? d.complexEnabled : true;
+            const effectiveSender = complexSender || d.sender || null;
+
+            if (apiOk) {
                 area.innerHTML = `
                     <span style="color:#27ae60"><i class="fas fa-check-circle"></i> 솔라피 API Key 설정됨</span>
-                    &nbsp;·&nbsp; 발신번호: <strong>${d.sender || '-'}</strong>
-                    &nbsp;·&nbsp; 상태: <strong>${d.enabled ? '✅ 발송 활성화' : '⛔ 발송 비활성화'}</strong>`;
-                if (d.sender) document.getElementById('smsSender').placeholder = d.sender;
-                if (d.apiKeyPreview) document.getElementById('smsApiKey').placeholder = d.apiKeyPreview + ' (변경 시 입력)';
-                if (badge) { badge.style.display = d.enabled ? 'inline' : 'none'; }
-                document.getElementById('smsEnabled').checked = d.enabled;
+                    &nbsp;·&nbsp; 발신번호: <strong>${effectiveSender || '⚠️ 미설정'}</strong>
+                    ${!complexSender && d.sender ? '<span style="color:#999;font-size:.8rem">(공통 폴백)</span>' : ''}
+                    &nbsp;·&nbsp; 상태: <strong>${complexEnabled && d.enabled ? '✅ 발송 활성화' : '⛔ 발송 비활성화'}</strong>`;
             } else {
-                area.innerHTML = `<span style="color:#e67e22"><i class="fas fa-exclamation-circle"></i> SMS 미설정 — API Key를 입력하여 활성화하세요</span>`;
-                if (badge) badge.style.display = 'none';
+                area.innerHTML = `<span style="color:#e67e22"><i class="fas fa-exclamation-circle"></i> 솔라피 API Key 미설정 — 총괄관리자에게 문의하세요</span>`;
             }
+
+            // 폼 값 반영
+            const senderEl  = document.getElementById('smsSender');
+            const enabledEl = document.getElementById('smsEnabled');
+            if (senderEl  && complexSender)  senderEl.value   = complexSender;
+            if (enabledEl) enabledEl.checked = complexEnabled;
+            if (badge) badge.style.display = (apiOk && complexEnabled && d.enabled) ? 'inline' : 'none';
         } catch(e) {
             area.innerHTML = `<span style="color:#e74c3c"><i class="fas fa-times-circle"></i> 상태 조회 실패: ${e.message}</span>`;
         }
     },
 
-    /** SMS 설정 저장 */
+    /** SMS 설정 저장 (단지별 발신번호 + 활성화 여부만 DB에 저장) */
     async _saveSmsSettings() {
-        const apiKey    = document.getElementById('smsApiKey').value.trim();
-        const apiSecret = document.getElementById('smsApiSecret').value.trim();
-        const sender    = document.getElementById('smsSender').value.trim().replace(/\D/g, '');
-        const enabled   = document.getElementById('smsEnabled').checked;
+        const sender  = document.getElementById('smsSender').value.trim().replace(/\D/g, '');
+        const enabled = document.getElementById('smsEnabled').checked;
+        const complexId = Admin.complex?.id || '';
 
-        if (!sender && !apiKey) {
-            showToast('발신번호 또는 API Key를 입력하세요', 'error');
+        if (sender && !/^0\d{9,10}$/.test(sender)) {
+            showToast('발신번호 형식이 올바르지 않습니다 (숫자만, 예: 01012345678)', 'error');
             return;
         }
-        if (sender && !/^0\d{9,10}$/.test(sender)) {
-            showToast('발신번호 형식이 올바르지 않습니다 (숫자만, 예: 0212345678)', 'error');
+        if (!complexId) {
+            showToast('단지 정보를 불러올 수 없습니다', 'error');
             return;
         }
 
@@ -607,14 +610,11 @@ const mycomplex = {
             const res = await fetch('/api/sms/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ apiKey, apiSecret, sender, enabled }),
+                body: JSON.stringify({ sender, enabled, complexId }),
             });
             const d = await res.json();
             if (d.success) {
                 showToast('SMS 설정이 저장되었습니다');
-                // 입력 필드 초기화 (보안)
-                document.getElementById('smsApiKey').value    = '';
-                document.getElementById('smsApiSecret').value = '';
                 await mycomplex._loadSmsStatus();
             } else {
                 showToast('저장 실패: ' + d.error, 'error');
@@ -646,10 +646,11 @@ const mycomplex = {
         openGlobalModal('<i class="fas fa-sms"></i> SMS 테스트 발송', body, footer);
     },
 
-    /** 테스트 SMS 실제 발송 */
+    /** 테스트 SMS 실제 발송 (단지별 발신번호 사용) */
     async _sendTestSms() {
-        const phone = document.getElementById('testSmsPhone').value.trim().replace(/\D/g, '');
-        const name  = document.getElementById('testSmsName').value.trim() || '테스트';
+        const phone     = document.getElementById('testSmsPhone').value.trim().replace(/\D/g, '');
+        const name      = document.getElementById('testSmsName').value.trim() || '테스트';
+        const complexId = Admin.complex?.id || '';
         if (!phone || !/^01\d{8,9}$/.test(phone)) {
             showToast('올바른 휴대폰 번호를 입력하세요 (예: 01012345678)', 'error');
             return;
@@ -660,7 +661,7 @@ const mycomplex = {
             const res = await fetch('/api/sms/test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone, name }),
+                body: JSON.stringify({ phone, name, complexId }),
             });
             const d = await res.json();
             closeGlobalModal();

@@ -356,6 +356,114 @@ router.get('/refund-docs/list', async (req, res) => {
 
 /* ── END 환불 서류 업로드 ─────────────────────────────────────────────── */
 
+/* ── 시간표 업로드 ─────────────────────────────────────────────────────── */
+const TIMETABLE_ALLOWED = /jpe?g|jpg|png|gif|webp|pdf/;
+
+const timetableFilter = (req, file, cb) => {
+    const origName = (() => { try { return Buffer.from(file.originalname, 'latin1').toString('utf8'); } catch(e) { return file.originalname; } })();
+    const ext  = path.extname(origName).toLowerCase().replace('.', '');
+    const ext2 = path.extname(file.originalname).toLowerCase().replace('.', '');
+    const mimeOk = /^image\//.test(file.mimetype) || file.mimetype === 'application/pdf';
+    const extOk  = TIMETABLE_ALLOWED.test(ext) || TIMETABLE_ALLOWED.test(ext2);
+    (mimeOk || extOk)
+        ? cb(null, true)
+        : cb(new Error('이미지(JPG/PNG/GIF/WEBP) 또는 PDF만 업로드 가능합니다'));
+};
+
+// 로컬 저장 디렉토리
+const TIMETABLE_DIR = process.env.TIMETABLE_DIR
+    || path.join(__dirname, '../../public/uploads/timetables');
+try {
+    if (!isVercelEnv() && !fs.existsSync(TIMETABLE_DIR)) fs.mkdirSync(TIMETABLE_DIR, { recursive: true });
+} catch(e) { console.warn('timetables dir 생성 실패:', e.message); }
+
+const timetableDiskStorage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, TIMETABLE_DIR),
+    filename: (req, file, cb) => {
+        let origName = file.originalname;
+        try { const d = Buffer.from(file.originalname, 'latin1').toString('utf8'); if (!d.includes('\uFFFD')) origName = d; } catch(e) { /* 무시 */ }
+        const ext  = path.extname(origName).toLowerCase() || '.jpg';
+        const slug = (req.body?.complex_code || 'timetable').replace(/[^a-zA-Z0-9_-]/g, '_');
+        cb(null, `${slug}_${Date.now()}${ext}`);
+    }
+});
+const timetableMemUpload  = multer({ storage: multer.memoryStorage(), fileFilter: timetableFilter, limits: { fileSize: 15 * 1024 * 1024 } });
+const timetableDiskUpload = multer({ storage: timetableDiskStorage,   fileFilter: timetableFilter, limits: { fileSize: 15 * 1024 * 1024 } });
+
+/**
+ * POST /api/upload/timetable
+ * Body (multipart): file=<image|pdf>, complex_code=<string>, complex_id=<uuid>
+ * - Vercel: Base64 data URL 반환 → DB(complexes.timetable_url)에 직접 저장
+ * - 로컬:   디스크에 저장 후 /uploads/timetables/<filename> 반환
+ */
+router.post('/timetable', (req, res, next) => {
+    const uploader = isVercelEnv() ? timetableMemUpload : timetableDiskUpload;
+    uploader.single('file')(req, res, next);
+}, async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ success: false, error: '파일이 없습니다' });
+        const { complex_id, complex_code } = req.body;
+        if (!complex_id && !complex_code) return res.status(400).json({ success: false, error: 'complex_id 또는 complex_code 필수' });
+
+        let url, storage_type, original_name;
+        let origName = req.file.originalname;
+        try { const d = Buffer.from(req.file.originalname, 'latin1').toString('utf8'); if (!d.includes('\uFFFD')) origName = d; } catch(e) { /* 무시 */ }
+        original_name = origName;
+
+        if (isVercelEnv()) {
+            // Vercel: Base64 data URL
+            const mime = req.file.mimetype || 'image/jpeg';
+            url = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
+            storage_type = 'base64';
+            console.log(`[upload/timetable] Vercel base64: ${origName} (${req.file.size} bytes)`);
+        } else {
+            // 로컬: 디스크
+            url = `/uploads/timetables/${req.file.filename}`;
+            storage_type = 'local';
+            console.log(`[upload/timetable] 저장: ${req.file.path} → ${url}`);
+        }
+
+        // complexes 테이블 timetable_url 업데이트
+        if (complex_id || complex_code) {
+            try {
+                const sb = getSupabase();
+                let query = sb.from('complexes').update({ timetable_url: url, updated_at: new Date().toISOString() });
+                if (complex_id)   query = query.eq('id', complex_id);
+                else              query = query.eq('code', complex_code);
+                const { error: upErr } = await query;
+                if (upErr) console.warn('[upload/timetable] DB 업데이트 실패:', upErr.message);
+            } catch(dbE) { console.warn('[upload/timetable] DB 오류 (무시):', dbE.message); }
+        }
+
+        res.json({ success: true, url, original_name, storage_type });
+    } catch(e) {
+        console.error('[upload/timetable] error:', e);
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+/**
+ * DELETE /api/upload/timetable
+ * Body: { complex_id } or { complex_code }
+ * complexes.timetable_url = null 로 초기화
+ */
+router.delete('/timetable', async (req, res) => {
+    try {
+        const { complex_id, complex_code } = req.body;
+        if (!complex_id && !complex_code) return res.status(400).json({ success: false, error: 'complex_id 또는 complex_code 필수' });
+        const sb = getSupabase();
+        let query = sb.from('complexes').update({ timetable_url: null, updated_at: new Date().toISOString() });
+        if (complex_id) query = query.eq('id', complex_id);
+        else            query = query.eq('code', complex_code);
+        const { error } = await query;
+        if (error) throw error;
+        res.json({ success: true });
+    } catch(e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+/* ── END 시간표 업로드 ────────────────────────────────────────────────── */
+
 /**
  * POST /api/upload/csv/applications
  * Body (multipart): file=<CSV>, complex_id=<uuid>, overwrite=<'true'|'false'>

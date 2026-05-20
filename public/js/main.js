@@ -1,8 +1,6 @@
 // State Management
 let formData = {};
 let signaturePad = null;
-let adminClickCount = 0;
-let adminClickTimer = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async function() {
@@ -20,8 +18,6 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadTimeSlotStatus();
     loadPublicInquiries();
     loadNotices();
-    setupAdminTrigger();
-    
     console.log('✅ Application ready');
 });
 
@@ -1035,60 +1031,6 @@ async function loadPublicInquiries() {
     }
 }
 
-// Setup admin trigger - 5번 빠르게 클릭하면 관리자 페이지로
-function setupAdminTrigger() {
-    const logoText = document.getElementById('logoText');
-    
-    console.log('🔧 Admin trigger setup:', logoText ? 'Found' : 'NOT FOUND');
-    
-    if (!logoText) {
-        console.error('❌ logoText element not found!');
-        return;
-    }
-    
-    logoText.addEventListener('click', function(e) {
-        e.preventDefault();
-        adminClickCount++;
-        
-        console.log(`👆 Click ${adminClickCount}/5`);
-        
-        // Clear previous timer
-        if (adminClickTimer) {
-            clearTimeout(adminClickTimer);
-        }
-        
-        // Check if clicked 5 times within 2 seconds
-        if (adminClickCount >= 5) {
-            console.log('🎉 Trigger activated! Opening password modal...');
-            
-            // Visual feedback
-            logoText.style.color = '#667eea';
-            logoText.style.transition = 'color 0.3';
-            
-            // Show password modal
-            setTimeout(() => {
-                logoText.style.color = ''; // Reset color
-                showAdminPasswordModal();
-            }, 300);
-            
-            adminClickCount = 0;
-            return;
-        }
-        
-        // Reset counter after 2 seconds
-        adminClickTimer = setTimeout(() => {
-            console.log('⏰ Timer reset');
-            adminClickCount = 0;
-        }, 2000);
-    });
-    
-    // Add visible cursor for testing
-    logoText.style.cursor = 'pointer';
-    logoText.style.userSelect = 'none';
-    
-    console.log('✅ Admin trigger ready!');
-}
-
 // ===== CANCELLATION FUNCTIONS =====
 
 // Show cancellation form modal (기간 체크 추가)
@@ -1464,113 +1406,6 @@ function formatPrice(price) {
 }
 
 
-// ===== ADMIN PASSWORD MODAL =====
-
-// Show admin password modal
-function showAdminPasswordModal() {
-    const modal = document.getElementById('adminPasswordModal');
-    const input = document.getElementById('adminPasswordInput');
-    const errorMsg = document.getElementById('adminPasswordError');
-    
-    modal.style.display = 'flex';
-    input.value = '';
-    errorMsg.style.display = 'none';
-    
-    // Focus on input
-    setTimeout(() => {
-        input.focus();
-    }, 100);
-    
-    // Add Enter key support
-    const handleEnter = (e) => {
-        if (e.key === 'Enter') {
-            checkAdminPassword();
-        }
-    };
-    input.removeEventListener('keypress', handleEnter);
-    input.addEventListener('keypress', handleEnter);
-}
-
-// Close admin password modal
-function closeAdminPasswordModal() {
-    const modal = document.getElementById('adminPasswordModal');
-    const input = document.getElementById('adminPasswordInput');
-    const errorMsg = document.getElementById('adminPasswordError');
-    
-    modal.style.display = 'none';
-    input.value = '';
-    errorMsg.style.display = 'none';
-}
-
-// Check admin password
-async function checkAdminPassword() {
-    const input = document.getElementById('adminPasswordInput');
-    const password = input.value;
-    const errorMsg = document.getElementById('adminPasswordError');
-    
-    if (!password) {
-        errorMsg.textContent = '비밀번호를 입력하세요';
-        errorMsg.style.display = 'block';
-        return;
-    }
-    
-    try {
-        const complexId = complexContext.getComplexId();
-        
-        if (!complexId) {
-            console.error('❌ Complex ID not available');
-            errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i> 단지 정보를 불러올 수 없습니다';
-            errorMsg.style.display = 'block';
-            return;
-        }
-        
-        // Load complex settings to get admin_password
-        const response = await fetch(`tables/complex_settings?limit=100`);
-        const result = await response.json();
-        
-        const complex = (result.data || []).find(c => c.id === complexId);
-        
-        if (!complex) {
-            console.error('❌ Complex not found:', complexId);
-            errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i> 단지 정보를 찾을 수 없습니다';
-            errorMsg.style.display = 'block';
-            return;
-        }
-        
-        const correctPassword = complex.admin_password || 'admin1234'; // 기본 비밀번호
-        
-        if (password === correctPassword) {
-            console.log('✅ Password correct! Redirecting to admin page...');
-            closeAdminPasswordModal();
-            
-            // Visual feedback
-            const logoText = document.getElementById('logoText');
-            if (logoText) {
-                logoText.style.color = '#27ae60';
-            }
-            
-            setTimeout(() => {
-                window.location.href = 'admin-main.html';
-            }, 200);
-        } else {
-            console.log('❌ Incorrect password');
-            errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i> 비밀번호가 올바르지 않습니다';
-            errorMsg.style.display = 'block';
-            input.value = '';
-            input.focus();
-            
-            // Hide error after 3 seconds
-            setTimeout(() => {
-                errorMsg.style.display = 'none';
-            }, 3000);
-        }
-        
-    } catch (error) {
-        console.error('💥 Error checking password:', error);
-        errorMsg.innerHTML = '<i class="fas fa-exclamation-circle"></i> 오류가 발생했습니다';
-        errorMsg.style.display = 'block';
-    }
-}
 
 // ===== 🆕 CURRICULUM FUNCTIONS =====
 

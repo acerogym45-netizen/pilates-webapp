@@ -257,12 +257,29 @@ router.put('/inquiries/:id', async (req, res) => {
 
             // 신규 답변 등록 시에만 SMS 발송 (답변 수정은 발송 안 함)
             if (!wasAnsweredBefore) {
+                // 단지별 SMS 설정 조회 (sms_sender, sms_enabled)
+                let complexSmsSender  = null;
+                let complexSmsEnabled = null;
+                try {
+                    const { data: cxSms } = await sb
+                        .from('complexes')
+                        .select('sms_sender, sms_enabled')
+                        .eq('id', prevInquiry.complex_id)
+                        .single();
+                    if (cxSms) {
+                        complexSmsSender  = cxSms.sms_sender  || null;
+                        complexSmsEnabled = cxSms.sms_enabled != null ? Boolean(cxSms.sms_enabled) : null;
+                    }
+                } catch (_) { /* 컬럼 없으면 무시 → 환경변수 폴백 */ }
+
                 smsResult = await sendInquiryAnswerSms({
-                    phone: prevInquiry.phone,
-                    name:  prevInquiry.name,
-                    title: prevInquiry.title,
-                    answer: answer,
+                    phone:      prevInquiry.phone,
+                    name:       prevInquiry.name,
+                    title:      prevInquiry.title,
+                    answer:     answer,
                     complexName,
+                    sender:     complexSmsSender,
+                    smsEnabled: complexSmsEnabled,
                 });
                 console.log('[inquiries] SMS 발송 결과:', smsResult);
             }
@@ -701,24 +718,45 @@ router.post('/cancellations', async (req, res) => {
             processed_at: nowForInsert.toISOString(),    // 처리 일시 자동 기록
         };
 
-        // termination_month 자동 설정 (신청월 기준 다음달)
+        // termination_month / termination_date 자동 설정
         const kstNow = new Date(nowForInsert.getTime() + 9 * 60 * 60 * 1000);
-        const kstY = kstNow.getUTCFullYear();
-        const kstM = kstNow.getUTCMonth() + 1; // 1~12
+        const kstY    = kstNow.getUTCFullYear();
+        const kstM    = kstNow.getUTCMonth() + 1; // 1~12
+        const kstD    = kstNow.getUTCDate();
+        const kstH    = kstNow.getUTCHours();
+
+        // termination_month: 신청월 기준 다음달
         const termY = kstM === 12 ? kstY + 1 : kstY;
         const termM = kstM === 12 ? 1 : kstM + 1;
         insertData.termination_month = `${termY}-${String(termM).padStart(2, '0')}`;
 
+        // termination_date 자동 세팅
+        // ── 차월해지 구간 (22일 09:00 이상 AND 26일 09:00 미만) ──
+        //    → termination_date = 신청 당월 말일 (차월해지로 분류됨)
+        // ── 그 외 (관리자 source='admin' 등) ──
+        //    → termination_date = 신청 당일 (중도해지로 분류됨)
+        const isEndOfMonthCancel = (kstD > 22 || (kstD === 22 && kstH >= 9))
+                                && (kstD < 26  || (kstD === 26 && kstH < 9));
+        if (isEndOfMonthCancel) {
+            // 당월 말일 계산
+            const lastDay = new Date(kstY, kstM, 0).getDate(); // Date(year, month, 0) = 전월 말일
+            insertData.termination_date = `${kstY}-${String(kstM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        } else {
+            // 신청 당일
+            insertData.termination_date = `${kstY}-${String(kstM).padStart(2, '0')}-${String(kstD).padStart(2, '0')}`;
+        }
+
         let result;
-        // request_type / preferred_time / processed_at / termination_month 컬럼 없을 수 있으므로 fallback
+        // request_type / preferred_time / processed_at / termination_month / termination_date 컬럼 없을 수 있으므로 fallback
         let { data, error } = await sb.from('cancellations').insert(insertData).select().single();
         if (error && error.message && (
             error.message.includes('request_type') ||
             error.message.includes('preferred_time') ||
             error.message.includes('processed_at') ||
-            error.message.includes('termination_month')
+            error.message.includes('termination_month') ||
+            error.message.includes('termination_date')
         )) {
-            const { request_type: _rt, preferred_time: _pt, processed_at: _pa, termination_month: _tm, ...fallbackData } = insertData;
+            const { request_type: _rt, preferred_time: _pt, processed_at: _pa, termination_month: _tm, termination_date: _td, ...fallbackData } = insertData;
             const retry = await sb.from('cancellations').insert(fallbackData).select().single();
             if (retry.error) throw sbErr(retry.error);
             result = retry.data;
@@ -1078,11 +1116,16 @@ router.get('/settlement-report', async (req, res) => {
         const sb = getSupabase();
         const yr = parseInt(year), mo = parseInt(month);
 
-        // 단지 ID 확정
+        // 단지 ID 확정 + 단지명 조회
         let cid = complexId;
+        let complexName = '';
         if (!cid && complexCode) {
-            const { data: cx } = await sb.from('complexes').select('id').eq('code', complexCode).single();
-            if (cx) cid = cx.id;
+            const { data: cx } = await sb.from('complexes').select('id,name').eq('code', complexCode).single();
+            if (cx) { cid = cx.id; complexName = cx.name || ''; }
+        }
+        if (cid && !complexName) {
+            const { data: cx2 } = await sb.from('complexes').select('name').eq('id', cid).single();
+            if (cx2) complexName = cx2.name || '';
         }
         if (!cid) return res.status(400).json({ success: false, error: 'complexId 또는 complexCode 필수' });
 
@@ -1618,6 +1661,7 @@ router.get('/settlement-report', async (req, res) => {
             success:  true,
             year: yr, month: mo,
             monthKey, nextKey,
+            complex_name: complexName,
             summary: {
                 approved_count:   approvedList.length,
                 existing_count:   existingList.length,
@@ -1649,17 +1693,21 @@ router.get('/settlement-report', async (req, res) => {
             })),
             mid_cancel: midCancel,
             end_cancel: endCancel,
-            next_new:   nextNewList.map(a => ({
-                dong:           a.dong,
-                ho:             a.ho,
-                name:           a.name,
-                phone:          a.phone,
-                program_name:   a.program_name,
-                preferred_time: a.preferred_time,
-                monthly_fee:    getFee(a) || null,
-                approved_at:    (a.approved_at || a.created_at || '').slice(0, 10),
-                note:           `${nextKey}부터 수강`,
-            })),
+            next_new:   nextNewList.map(a => {
+                const k = `${a.dong}_${a.ho}_${a.name}_${a.phone}`;
+                return {
+                    dong:           a.dong,
+                    ho:             a.ho,
+                    name:           a.name,
+                    phone:          a.phone,
+                    program_name:   a.program_name,
+                    preferred_time: a.preferred_time,
+                    monthly_fee:    getFee(a) || null,
+                    approved_at:    (a.approved_at || a.created_at || '').slice(0, 10),
+                    is_duplicate:   (personKeyCount[k] || 0) >= 2,
+                    note:           `${nextKey}부터 수강`,
+                };
+            }),
             // ── 새 3시트용 데이터 ──
             settlement_rows:        settlementRows,       // 정산 내역 시트 (상단)
             new_section_rows:       newSectionRows,       // 정산 내역 시트 (하단 신규)
@@ -1680,41 +1728,83 @@ router.get('/settlement-report', async (req, res) => {
 // ═══════════════════════════════════════════════════════
 
 /**
- * GET /api/sms/status
- * SMS 설정 상태 조회 (관리자용)
+ * GET /api/sms/status?complexId=UUID
+ * SMS 설정 상태 조회 (단지별)
+ * - 공통: API Key/Secret 설정 여부 (환경변수)
+ * - 단지별: sms_sender, sms_enabled (DB)
  */
-router.get('/sms/status', (req, res) => {
-    res.json({ success: true, ...getSmsStatus() });
+router.get('/sms/status', async (req, res) => {
+    try {
+        const base = getSmsStatus(); // 공통 환경변수 상태
+        const { complexId } = req.query;
+
+        if (complexId) {
+            const sb = getSupabase();
+            const { data: cx } = await sb
+                .from('complexes')
+                .select('sms_sender, sms_enabled')
+                .eq('id', complexId)
+                .single();
+            return res.json({
+                success: true,
+                ...base,
+                // 단지별 설정으로 덮어쓰기
+                sender:  cx?.sms_sender  || base.sender,
+                enabled: cx?.sms_enabled != null ? Boolean(cx.sms_enabled) : base.enabled,
+                complexSender:  cx?.sms_sender  || null,
+                complexEnabled: cx?.sms_enabled != null ? Boolean(cx.sms_enabled) : null,
+            });
+        }
+
+        res.json({ success: true, ...base });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
 
 /**
  * POST /api/sms/settings
- * SMS 설정 저장 (런타임 환경변수 업데이트)
- * body: { apiKey, apiSecret, sender, enabled }
- *
- * ※ 이 설정은 현재 프로세스의 환경변수를 덮어쓰며,
- *    서버 재시작 시 .env 파일이 우선합니다.
- *    Vercel 환경에서는 Vercel 대시보드 > Environment Variables에서 설정하세요.
+ * SMS 설정 저장
+ * body: { apiKey, apiSecret, sender, enabled, complexId }
+ * - complexId 있으면 → 단지 DB(sms_sender, sms_enabled) 저장
+ * - complexId 없으면 → 전역 환경변수 업데이트 (총괄관리자용)
  */
-router.post('/sms/settings', (req, res) => {
+router.post('/sms/settings', async (req, res) => {
     try {
-        const { apiKey, apiSecret, sender, enabled } = req.body;
+        const { apiKey, apiSecret, sender, enabled, complexId } = req.body;
 
+        // 공통 API Key/Secret은 항상 환경변수에 저장 (입력 시)
         if (apiKey    !== undefined && apiKey    !== '') process.env.SOLAPI_API_KEY    = apiKey;
         if (apiSecret !== undefined && apiSecret !== '') process.env.SOLAPI_API_SECRET = apiSecret;
-        if (sender    !== undefined && sender    !== '') process.env.SOLAPI_SENDER     = sender;
-        if (enabled   !== undefined) process.env.SMS_ENABLED = String(enabled);
 
-        // 솔라피 서비스 인스턴스 재생성 (키가 바뀌었을 수 있으므로)
-        // sms.js 모듈의 캐시 초기화는 require 캐시 삭제로 처리
+        if (complexId) {
+            // ── 단지별 저장: DB complexes 테이블 업데이트 ──
+            const sb = getSupabase();
+            const updates = {};
+            if (sender  !== undefined) updates.sms_sender  = sender.replace(/\D/g, '') || null;
+            if (enabled !== undefined) updates.sms_enabled = Boolean(enabled);
+
+            if (Object.keys(updates).length > 0) {
+                const { error } = await sb
+                    .from('complexes')
+                    .update(updates)
+                    .eq('id', complexId);
+                if (error) throw error;
+            }
+            console.log('[SMS] 단지별 설정 저장:', complexId, updates);
+        } else {
+            // ── 전역 환경변수 업데이트 (총괄관리자 폴백용) ──
+            if (sender  !== undefined && sender  !== '') process.env.SOLAPI_SENDER = sender;
+            if (enabled !== undefined) process.env.SMS_ENABLED = String(enabled);
+        }
+
+        // 솔라피 인스턴스 캐시 초기화 (API Key 변경 시 재생성)
         try {
             const smsModulePath = require.resolve('../utils/sms');
-            if (require.cache[smsModulePath]) {
-                delete require.cache[smsModulePath];
-            }
+            if (require.cache[smsModulePath]) delete require.cache[smsModulePath];
         } catch(_) {}
 
-        console.log('[SMS] 설정 업데이트:', { sender: process.env.SOLAPI_SENDER, enabled: process.env.SMS_ENABLED });
+        console.log('[SMS] 설정 업데이트 완료');
         res.json({ success: true, message: 'SMS 설정이 저장되었습니다', ...getSmsStatus() });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -1723,25 +1813,45 @@ router.post('/sms/settings', (req, res) => {
 
 /**
  * POST /api/sms/test
- * SMS 테스트 발송 (관리자용)
- * body: { phone, name }
+ * SMS 테스트 발송 (단지별)
+ * body: { phone, name, complexId }
  */
 router.post('/sms/test', async (req, res) => {
     try {
-        const { phone, name } = req.body;
+        const { phone, name, complexId } = req.body;
         if (!phone) return res.status(400).json({ success: false, error: '전화번호를 입력하세요' });
+
+        // 단지별 SMS 설정 조회
+        let complexSmsSender  = null;
+        let complexSmsEnabled = null;
+        let complexName       = '테스트 단지';
+        if (complexId) {
+            const sb = getSupabase();
+            const { data: cx } = await sb
+                .from('complexes')
+                .select('name, sms_sender, sms_enabled')
+                .eq('id', complexId)
+                .single();
+            if (cx) {
+                complexName       = cx.name || complexName;
+                complexSmsSender  = cx.sms_sender  || null;
+                complexSmsEnabled = cx.sms_enabled != null ? Boolean(cx.sms_enabled) : null;
+            }
+        }
 
         const { sendInquiryAnswerSms: sendSms } = require('../utils/sms');
         const result = await sendSms({
             phone,
-            name: name || '테스트',
-            title: '테스트 문의 제목',
-            answer: '테스트 답변입니다. SMS 연동이 정상적으로 작동합니다.',
-            complexName: '테스트 단지',
+            name:       name || '테스트',
+            title:      '테스트 문의 제목',
+            answer:     '테스트 답변입니다. SMS 연동이 정상적으로 작동합니다.',
+            complexName,
+            sender:     complexSmsSender,
+            smsEnabled: complexSmsEnabled,
         });
 
         if (result.skipped) {
-            return res.status(400).json({ success: false, error: 'SMS가 비활성화되어 있습니다. 설정을 먼저 완료하세요.' });
+            return res.status(400).json({ success: false, error: 'SMS가 비활성화되어 있습니다. 발신번호 설정을 먼저 완료하세요.' });
         }
 
         res.json({

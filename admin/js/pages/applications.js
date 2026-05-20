@@ -342,6 +342,31 @@ const applications = {
                 const sessionsBadge = a.remaining_sessions != null
                     ? `<span style="font-size:.75rem;background:#e8f4fd;color:#2980b9;border:1px solid #bce0f9;border-radius:4px;padding:1px 6px;margin-left:4px">잔여 ${a.remaining_sessions}회</span>`
                     : '';
+
+                // 취소된 건: cancel_type으로 유형 배지 구분
+                // pre_start/waiting = 입주민 신청 취소·변경
+                // termination = 입주민 해지 신청 (cancellations 탭 경유)
+                // admin = 관리자 직접 처리
+                const cancelTypeBadge = (() => {
+                    if (a.status !== 'cancelled') return '';
+                    const cm = applications._parseCancelMeta(a.notes);
+                    if (!cm) return '';
+                    if (cm.cancelled_by === 'admin') {
+                        return `<span style="font-size:.72rem;background:#7f8c8d;color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px">관리자취소</span>`;
+                    }
+                    if (cm.cancel_type === 'termination') {
+                        return `<span style="font-size:.72rem;background:#e74c3c;color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px">입주민해지신청</span>`;
+                    }
+                    // pre_start or waiting = 입주민 직접 취소
+                    return `<span style="font-size:.72rem;background:#e67e22;color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px">입주민취소</span>`;
+                })();
+
+                // 변경 이력이 있는 건: 배지 표시
+                const changeLogs = applications._parseChangeLogs(a.notes);
+                const changedBadge = changeLogs.length > 0
+                    ? `<span style="font-size:.72rem;background:#3498db;color:#fff;border-radius:4px;padding:1px 6px;margin-left:4px">입주민변경 ${changeLogs.length}회</span>`
+                    : '';
+
                 return `
                 <div class="list-item" onclick="applications.showDetail('${a.id}')">
                     <div class="item-status">
@@ -352,7 +377,7 @@ const applications = {
                         }
                     </div>
                     <div class="item-main">
-                        <strong>${a.dong} ${a.ho} | ${a.name}</strong>${transferBadge}${sessionsBadge}
+                        <strong>${a.dong} ${a.ho} | ${a.name}</strong>${transferBadge}${sessionsBadge}${cancelTypeBadge}${changedBadge}
                         <p>${a.program_name}${a.preferred_time ? ' | ' + a.preferred_time : ''}${a.monthly_fee ? ' | ₩' + parseInt(a.monthly_fee).toLocaleString() : ''}</p>
                         <small>${a.phone} | ${formatDate(a.created_at)}${a.transfer_date ? ' | 양도일: ' + a.transfer_date : ''}${(() => { const cm = applications._parseCancelMeta(a.notes); return cm ? ' | 취소: ' + formatDate(cm.cancelled_at) : ''; })()}</small>
                     </div>
@@ -406,7 +431,26 @@ const applications = {
                 ${a.transfer_memo ? `<div class="detail-row"><label>양도 메모</label><span>${a.transfer_memo}</span></div>` : ''}
                 ${transferInfo}
                 <div class="detail-row"><label>신청일</label><span>${formatDate(a.created_at)}</span></div>
-                ${(() => { const cm = applications._parseCancelMeta(a.notes); return cm ? `<div class="detail-row" style="background:#fff3f3;border-radius:6px;padding:6px 10px"><label style="color:#c0392b">취소일시</label><span style="color:#c0392b;font-weight:600">${formatDate(cm.cancelled_at)}</span></div><div class="detail-row"><label>취소 유형</label><span>${cm.cancel_reason || (cm.cancel_type === 'waiting' ? '대기 취소' : '승인 신청 취소')}</span></div>` : ''; })()}
+                ${(() => {
+                    const cm = applications._parseCancelMeta(a.notes);
+                    if (!cm) return '';
+                    const typeLabel = (() => {
+                        if (cm.cancelled_by === 'admin')         return '🔧 관리자 직접 취소';
+                        if (cm.cancel_type  === 'termination')   return '🔴 입주민 해지 신청 (해지 신청 탭 경유)';
+                        if (cm.cancel_type  === 'waiting')       return '🟡 입주민 대기 취소 (신청 취소·변경 탭)';
+                        if (cm.cancel_type  === 'pre_start')     return '🟠 입주민 신청 철회 (신청 취소·변경 탭)';
+                        return cm.cancel_reason || cm.cancel_type || '취소';
+                    })();
+                    return `
+                        <div class="detail-row" style="background:#fff3f3;border-radius:6px;padding:6px 10px">
+                            <label style="color:#c0392b">취소일시</label>
+                            <span style="color:#c0392b;font-weight:600">${formatDate(cm.cancelled_at)}</span>
+                        </div>
+                        <div class="detail-row">
+                            <label>취소 유형</label>
+                            <span>${typeLabel}</span>
+                        </div>`;
+                })()}
                 ${(() => {
                     const changeLogs = applications._parseChangeLogs(a.notes);
                     const editLogs   = applications._parseEditLogs(a.notes);

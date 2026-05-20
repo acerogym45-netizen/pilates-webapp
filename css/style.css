@@ -117,7 +117,15 @@ button { font-family: inherit; cursor: pointer; }
     display: flex; align-items: center; justify-content: center;
     font-size: 1.3rem; flex-shrink: 0;
 }
-.header-text h1 { font-size: 1.45rem; font-weight: 800; line-height: 1.2; }
+.header-text h1 {
+    font-size: clamp(.95rem, 4vw, 1.45rem);
+    font-weight: 800;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 52vw;
+}
 .header-subtitle { font-size: .75rem; opacity: .8; margin-top: 2px; }
 .header-actions { display: flex; gap: 8px; }
 
@@ -144,6 +152,12 @@ button { font-family: inherit; cursor: pointer; }
 }
 .quick-row--three {
     grid-template-columns: repeat(3,1fr);
+}
+.quick-row--two {
+    grid-template-columns: repeat(2,1fr);
+}
+.quick-row--five {
+    grid-template-columns: repeat(5,1fr);
 }
 /* 기본 버튼 */
 .quick-btn {
@@ -173,6 +187,17 @@ button { font-family: inherit; cursor: pointer; }
     color: #fff;
 }
 .quick-btn--inquiry-main i { font-size: 1rem; }
+/* 시간표 버튼 (청록 계열) */
+.quick-btn--timetable {
+    background: #e8f5e9;
+    color: #1b5e20;
+    border: 1px solid #a5d6a7;
+    border-radius: 10px;
+}
+.quick-btn--timetable:hover {
+    background: #c8e6c9;
+    color: #1b5e20;
+}
 /* 3행: 액센트 버튼 (보라 계열 연한 배경) */
 .quick-btn--accent {
     background: #f0eeff;
@@ -746,6 +771,7 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 ════════════════════════════════════════════════ */
 @media (max-width: 400px) {
     .quick-row--four  { grid-template-columns: repeat(2,1fr); }
+    .quick-row--five  { grid-template-columns: repeat(3,1fr); }
     .quick-row--three { grid-template-columns: repeat(3,1fr); }
     .form-row      { grid-template-columns: 1fr; }
     .btn-group     { flex-direction: column; }

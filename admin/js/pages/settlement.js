@@ -1,10 +1,14 @@
-/** 월별 정산 리포트 - v5.2
- *  엑셀 3시트 출력:
- *    시트1) 정산 내역      (당월 수강생 + 하단 신규 섹션)
- *    시트2) 동호수계        (세대별 월수강료 합산)
- *    시트3) 수강신청 내역   (다음달 수강 예정자 전체)
+/** 월별 정산 리포트 - v6.0
+ *  엑셀 5시트 출력 (당월/차월 분리):
+ *  ── 당월 ──────────────────────────────────────────────
+ *    시트1) 📋 정산 내역      (자동연장·중도합류·차월해지·중도해지 / 차월신규 제거)
+ *    시트2) 🏠 동호수계        (세대별 월수강료 합산 + 전체합계행 추가)
+ *    시트3) ✂️ 중도해지 청구   (billing_amount·위약금·수강료 포함 / 신규)
+ *  ── 차월 ──────────────────────────────────────────────
+ *    시트4) 📑 수강신청 내역   (차월 수강 예정자 전체 + 프로그램별 소계)
+ *    시트5) 🆕 신규접수자      (이번달 승인 = 차월부터 수강 / 신규)
  *
- *  단가: 15,000원/회 (강사 인건비 계산 전용)
+ *  단가: 15,000원/회 (SESSION_FEE — 강사인건비·중도해지 공통)
  */
 const settlement = {
     _data:        null,
@@ -34,7 +38,7 @@ const settlement = {
               <h2 style="margin:0;font-size:1.3rem;font-weight:800;color:#1a252f">
                 <i class="fas fa-file-invoice-dollar" style="color:#e67e22;margin-right:6px"></i>월별 정산 리포트
               </h2>
-              <div style="font-size:.8rem;color:#888;margin-top:2px">정산 내역 · 동호수계 · 수강신청 내역 → 엑셀 3시트 다운로드</div>
+              <div style="font-size:.8rem;color:#888;margin-top:2px">[당월] 정산 내역 · 동호수계 · 중도해지 청구 &nbsp;/&nbsp; [차월] 수강신청 내역 · 신규접수자 → 엑셀 5시트 다운로드</div>
             </div>
           </div>
 
@@ -52,7 +56,7 @@ const settlement = {
             </button>
             <button id="settlementExcelBtn" onclick="settlement.downloadExcel()" style="display:none;
               padding:8px 22px;background:#27ae60;color:#fff;border:none;border-radius:7px;font-size:.9rem;font-weight:700;cursor:pointer">
-              <i class="fas fa-file-excel"></i> 엑셀 다운로드 (3시트)
+              <i class="fas fa-file-excel"></i> 엑셀 다운로드 (5시트)
             </button>
             <button onclick="settlement.toggleSessionPanel()"
               style="padding:8px 18px;background:#f39c12;color:#fff;border:none;border-radius:7px;font-size:.9rem;font-weight:700;cursor:pointer">
@@ -160,7 +164,7 @@ const settlement = {
                 월별 수업횟수 설정
                 <span style="font-size:.75rem;font-weight:400;color:#aaa;margin-left:8px" id="sessionMonthLabel"></span>
               </span>
-              <span style="font-size:.78rem;color:#999">수업횟수 입력 → 저장 시 요금 자동 반영 (회당 15,000원)</span>
+              <span style="font-size:.78rem;color:#999">수업횟수 입력 → 저장 시 요금 자동 반영 (회당 15,000원) · 엑셀 시트3 중도해지 청구에도 반영</span>
             </div>
             <div id="sessionSettingBody" style="padding:16px 18px"></div>
           </div>
@@ -279,16 +283,45 @@ const settlement = {
         html += this._midCancelCard(d.mid_cancel || [], d.summary.mid_cancel_count);
 
         // ── 3. 차월해지자
+        const endCancelInfo = `
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+            <div style="font-size:.76rem;color:#7d4f00;line-height:1.8">
+              <b>📋 포함 대상</b><br>
+              · cancellations 테이블 status = approved + termination_month = <b>이번 달</b><br>
+              · termination_date가 <b>이번 달 말일(${d.monthKey ? d.monthKey.replace('-','년 ')+'월 말' : '말일'})</b> 이거나 날짜 미상인 경우
+            </div>
+            <div style="font-size:.76rem;color:#7d4f00;line-height:1.8;border-left:2px solid #f0a500;padding-left:14px">
+              <b>💡 처리 방식</b><br>
+              · 이번 달 수강료는 <b>정상 부과</b> (정산 내역 상단에 함께 포함)<br>
+              · <b>${d.nextKey ? d.nextKey.replace('-','년 ')+'월' : '다음 달'}</b>부터 수강료 미부과 (관리비 청구 제외 대상)<br>
+              · 별도 후처리 불필요 — 다음 달 정산 시 자동으로 제외됨
+            </div>
+          </div>`;
         html += this._sectionCard(
             `<i class="fas fa-calendar-times" style="color:#e67e22"></i> 차월해지자
              <small style="font-weight:400;color:#888;font-size:.8rem">(${d.nextKey} 미부과 대상)</small>`,
             '#e67e22', '#fffaf5',
             d.end_cancel || [], d.summary.end_cancel_count,
             ['dong','ho','name','phone','program_name','termination_date'],
-            ['동','호수','이름','연락처','프로그램','해지일'], {}
+            ['동','호수','이름','연락처','프로그램','해지일'], {},
+            endCancelInfo
         );
 
         // ── 4. 차월신규접수
+        const nextNewInfo = `
+          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+            <div style="font-size:.76rem;color:#1a5c35;line-height:1.8">
+              <b>📋 포함 대상</b><br>
+              · applications 테이블 status = approved<br>
+              · approved_at(또는 created_at)이 <b>이번 달(${d.monthKey ? d.monthKey.replace('-','년 ')+'월' : '이번 달'}) 1일 ~ 말일</b> 사이
+            </div>
+            <div style="font-size:.76rem;color:#1a5c35;line-height:1.8;border-left:2px solid #52be80;padding-left:14px">
+              <b>💡 처리 방식</b><br>
+              · <b>${d.nextKey ? d.nextKey.replace('-','년 ')+'월' : '다음 달'}부터</b> 수강료 부과 시작<br>
+              · 이번 달 수강료는 미부과 — 정산 내역 상단에 <b>중도합류</b>로 구분 표시됨<br>
+              · 위 정산 내역 카드 하단 <b>▼ 신규 수강 예정자</b> 섹션과 동일한 인원
+            </div>
+          </div>`;
         html += this._sectionCard(
             `<i class="fas fa-user-plus" style="color:#27ae60"></i> 차월신규접수
              <small style="font-weight:400;color:#888;font-size:.8rem">(${d.nextKey}부터 수강 예정)</small>`,
@@ -296,7 +329,8 @@ const settlement = {
             d.next_new || [], d.summary.next_new_count,
             ['dong','ho','name','phone','program_name','preferred_time','monthly_fee'],
             ['동','호수','이름','연락처','프로그램','시간','월수강료'],
-            { monthly_fee: v => this._fmtFee(v) }
+            { monthly_fee: v => this._fmtFee(v) },
+            nextNewInfo
         );
 
         resEl.innerHTML = html;
@@ -459,6 +493,22 @@ const settlement = {
               <i class="fas fa-list-alt" style="color:#2980b9"></i> ${yr}년 ${mo}월 정산 내역${badge}
             </span>
             <span style="font-size:.75rem;color:#888;margin-left:8px">월수강료 기준 정산</span>
+          </div>
+          <div style="background:#eaf4ff;border-bottom:1px solid #c8e0f7;padding:9px 18px;
+                      display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+            <div style="font-size:.76rem;color:#1a5276;line-height:1.8">
+              <b>📋 포함 대상</b><br>
+              · <b>자동연장</b>: 이전 달부터 수강 중 (approved_at &lt; 이번달 1일)<br>
+              · <b>중도합류</b>: 이번 달 중 승인된 신규 수강생<br>
+              · <b>차월해지</b>: 이번 달 말일 해지 예정자 (요금은 이번 달까지 부과)<br>
+              · <b>중도해지</b>: 이번 달 중간 해지자 (요금은 아래 중도해지 섹션에서 별도 계산)
+            </div>
+            <div style="font-size:.76rem;color:#1a5276;line-height:1.8;border-left:2px solid #aad4f5;padding-left:14px">
+              <b>⚠️ 제외 대상</b><br>
+              · status = cancelled (접수기간 중 신청 취소자)<br>
+              · 이번 달 신규 접수자 → 아래 <b>▼ 신규 수강 예정자</b> 섹션에 별도 표시<br>
+              · 하단 신규 섹션은 <b>다음 달부터</b> 수강료 부과 대상
+            </div>
           </div>
           ${body}
         </div>`;
@@ -855,6 +905,20 @@ const settlement = {
               <i class="fas fa-cut" style="color:#e74c3c"></i> 중도해지자${badge}
               <small style="font-weight:400;color:#888;font-size:.8rem;margin-left:6px">(관리비 후청구)</small>
             </span>${formula}
+          </div>
+          <div style="background:#fff0f0;border-bottom:1px solid #f5c6c6;padding:9px 18px;
+                      display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+            <div style="font-size:.76rem;color:#7b241c;line-height:1.8">
+              <b>📋 포함 대상</b><br>
+              · cancellations 테이블 status = approved + termination_month = <b>이번 달</b><br>
+              · termination_date가 <b>이번 달 말일 미만</b>인 경우 (월 중간 해지)
+            </div>
+            <div style="font-size:.76rem;color:#7b241c;line-height:1.8;border-left:2px solid #f5b7b1;padding-left:14px">
+              <b>💡 처리 방식</b><br>
+              · 정산 내역 상단에도 <b>중도해지</b> 구분으로 함께 표시됨<br>
+              · 요금은 정액 부과 없이 <b>관리비 후청구</b> (수강횟수 직접 입력 후 저장)<br>
+              · 청구액 = 위약금(월수강료 × 10%) + 수강료(출석횟수 × 15,000원)
+            </div>
           </div>${body}
         </div>`;
     },
@@ -934,8 +998,9 @@ const settlement = {
 
     // ══════════════════════════════════════════════════════
     // 공통 섹션 카드
+    // infoHtml: 선택적 설명 박스 HTML (null이면 미표시)
     // ══════════════════════════════════════════════════════
-    _sectionCard(title, color, bg, rows, count, cols, labels, fmtMap) {
+    _sectionCard(title, color, bg, rows, count, cols, labels, fmtMap, infoHtml = null) {
         const badge = `<span style="background:${color};color:#fff;font-size:.72rem;font-weight:700;
           padding:2px 9px;border-radius:20px;margin-left:8px;vertical-align:middle">${count}건</span>`;
         let tableHtml = '';
@@ -959,16 +1024,22 @@ const settlement = {
                 <thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody>
               </table></div>`;
         }
+        const infoBand = infoHtml
+            ? `<div style="border-bottom:1px solid ${color}33;padding:9px 18px;
+                           background:${bg};opacity:.95">${infoHtml}</div>`
+            : '';
         return `
         <div style="background:#fff;border:1px solid #e0e0e0;border-radius:10px;margin-bottom:18px;overflow:hidden">
           <div style="background:${bg};border-bottom:2px solid ${color};padding:12px 18px">
             <span style="font-size:.95rem;font-weight:700;color:#222">${title}${badge}</span>
-          </div>${tableHtml}
+          </div>${infoBand}${tableHtml}
         </div>`;
     },
 
     // ══════════════════════════════════════════════════════
-    // 엑셀 3시트 다운로드
+    // 엑셀 5시트 다운로드
+    //  [당월] 시트1: 정산 내역   시트2: 동호수계   시트3: 중도해지 청구
+    //  [차월] 시트4: 수강신청 내역   시트5: 신규접수자
     // ══════════════════════════════════════════════════════
     async downloadExcel() {
         if (!this._data) { showToast('먼저 조회해주세요', 'error'); return; }
@@ -985,215 +1056,350 @@ const settlement = {
             const nextLabel  = d.nextKey ? d.nextKey.replace('-', '년 ') + '월' : '차월';
             const wb   = XLSX.utils.book_new();
 
-            // ─────────────────────────────────────────────
-            // 시트1: 정산 내역
-            // ─────────────────────────────────────────────
-            const s1 = [];
-            const LIGHT_GREEN = { fgColor: { rgb: 'D5F5D0' } };  // 연한 연두색
-            const YELLOW_BG   = { fgColor: { rgb: 'FFF9C4' } };
-            const BLUE_HDR    = { fgColor: { rgb: 'D6EAF8' } };
-            const GREEN_HDR   = { fgColor: { rgb: 'D5F5E3' } };
-            const SUB_BG      = { fgColor: { rgb: 'E8F4FD' } };
-            const TOTAL_BG    = { fgColor: { rgb: '1A5276' } };
+            // ── 공통 색상 팔레트 ─────────────────────────────
+            const LIGHT_GREEN  = { fgColor: { rgb: 'D5F5D0' } };
+            // 당월 계열 (파란색)
+            const BLUE_HDR     = { fgColor: { rgb: 'D6EAF8' } };
+            const BLUE_SUB     = { fgColor: { rgb: 'E8F4FD' } };
+            const BLUE_TOTAL   = { fgColor: { rgb: 'AED6F1' } };
+            const RED_HDR      = { fgColor: { rgb: 'FADBD8' } };
+            const RED_ROW      = { fgColor: { rgb: 'FFF0F0' } };
+            const RED_TOTAL    = { fgColor: { rgb: 'F1948A' } };
+            // 차월 계열 (초록색)
+            const GREEN_HDR    = { fgColor: { rgb: 'D5F5E3' } };
+            const GREEN_SUB    = { fgColor: { rgb: 'E9F7EF' } };
+            const GREEN_TOTAL  = { fgColor: { rgb: 'A9DFBF' } };
+            const LIME_HDR     = { fgColor: { rgb: 'EAFAF1' } };
 
-            // 헤더
-            s1.push([`${monthLabel} 정산 내역`]);
-            s1.push([]);
-            s1.push(['동','호수','이름','전화번호','프로그램종류','희망시간대','요금','구분']);
+            // ── 공통 스타일 헬퍼 ─────────────────────────────
+            const applyHdr = (ws, row, cols, fill) => {
+                for (let c = 0; c < cols; c++) {
+                    const ref = XLSX.utils.encode_cell({ r: row, c });
+                    if (!ws[ref]) ws[ref] = { v: '', t: 's' };
+                    ws[ref].s = { fill, font: { bold: true }, alignment: { horizontal: 'center' } };
+                }
+            };
+            const applyRow = (ws, row, cols, fill, bold = false) => {
+                for (let c = 0; c < cols; c++) {
+                    const ref = XLSX.utils.encode_cell({ r: row, c });
+                    if (!ws[ref]) ws[ref] = { v: '', t: 's' };
+                    if (!ws[ref].s) ws[ref].s = {};
+                    ws[ref].s.fill = fill;
+                    if (bold) ws[ref].s.font = { bold: true };
+                }
+            };
 
+            // ═════════════════════════════════════════════
+            // 【당월】시트1: 정산 내역
+            //  - 자동연장 / 중도합류 / 차월해지 / 중도해지 포함
+            //  - 차월 신규 섹션 제거 (→ 시트5로 분리)
+            //  - 프로그램별 소계 + 전체 합계
+            // ═════════════════════════════════════════════
             const settlementRows = d.settlement_rows || [];
-            const newSectionRows = d.new_section_rows || [];
-
-            // 프로그램별 그룹핑 (소계용)
-            const progOrder = [];
-            const progMap   = {};
-            settlementRows.forEach(r => {
-                const p = r.program_name || '미분류';
-                if (!progMap[p]) { progMap[p] = []; progOrder.push(p); }
-                progMap[p].push(r);
-            });
-
-            const cellStyles  = {}; // { 'R:C': style }
-            let   rowIdx      = 3;  // 0-based (s1 현재 3행)
-
-            progOrder.forEach(prog => {
-                const items = progMap[prog];
-                items.forEach(r => {
-                    s1.push([
-                        r.dong, r.ho, r.name, r.phone || '',
-                        r.program_name || '', r.preferred_time || '',
-                        r.monthly_fee || '', r.category || ''
-                    ]);
-                    rowIdx++;
-                });
-                // 소계 행
-                const subFee = items.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
-                s1.push(['', '', '', '', prog, '소계', subFee, '']);
-                rowIdx++;
-            });
-
-            // 합계 행
-            const totalFeeSum = settlementRows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
-            const cancelCount = settlementRows.filter(r => r.is_end_cancel || r.is_mid_cancel).length;
-
-            s1.push([]);
-            s1.push([
-                `등록세대 ${settlementRows.length}명`, '', '',
-                `해지세대 ${cancelCount}명`, '', '',
-                totalFeeSum, '합계액'
-            ]);
-            rowIdx += 2;
-
-            // 신규 섹션 (하단)
-            if (newSectionRows.length) {
+            {
+                const s1 = [];
+                s1.push([`${monthLabel} 정산 내역`]);
+                s1.push([`※ 포함: 자동연장 · 중도합류 · 차월해지(이번달까지 부과) · 중도해지 | 제외: 접수취소(cancelled) · 차월신규(→ 시트5 참조)`]);
                 s1.push([]);
-                s1.push([`▼ ${nextLabel} 신규 수강 예정자`]);
-                s1.push(['동','호수','이름','전화번호','프로그램종류','희망시간대','요금','구분']);
-                rowIdx += 3;
+                s1.push(['동','호수','이름','전화번호','프로그램','희망시간','월수강료','구분']);
 
-                newSectionRows.forEach(r => {
-                    s1.push([
-                        r.dong, r.ho, r.name, r.phone || '',
-                        r.program_name || '', r.preferred_time || '',
-                        r.monthly_fee || '', r.category || ''
-                    ]);
-                    if (r.is_duplicate) {
-                        cellStyles[`dup_${rowIdx}`] = true;
-                    }
-                    rowIdx++;
+                const progOrder = [], progMap = {};
+                settlementRows.forEach(r => {
+                    const p = r.program_name || '미분류';
+                    if (!progMap[p]) { progMap[p] = []; progOrder.push(p); }
+                    progMap[p].push(r);
                 });
-            }
 
-            const ws1 = XLSX.utils.aoa_to_sheet(s1);
-            ws1['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:10},{wch:18}];
-            ws1['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }];
-
-            // 헤더 행 배경
-            const hdrRow = 2; // 0-based
-            for (let c = 0; c < 8; c++) {
-                const cellRef = XLSX.utils.encode_cell({ r: hdrRow, c });
-                if (!ws1[cellRef]) ws1[cellRef] = { v: '', t: 's' };
-                ws1[cellRef].s = { fill: BLUE_HDR, font: { bold: true }, alignment: { horizontal: 'center' } };
-            }
-
-            // 소계/합계 행 배경
-            let r1 = 3;
-            progOrder.forEach(prog => {
-                const cnt = progMap[prog].length;
-                r1 += cnt;
-                // 소계 행
-                for (let c = 0; c < 8; c++) {
-                    const cellRef = XLSX.utils.encode_cell({ r: r1, c });
-                    if (!ws1[cellRef]) ws1[cellRef] = { v: '', t: 's' };
-                    if (!ws1[cellRef].s) ws1[cellRef].s = {};
-                    ws1[cellRef].s.fill = SUB_BG;
-                    ws1[cellRef].s.font = { bold: true, color: { rgb: '1A5276' } };
-                }
-                r1++;
-            });
-
-            XLSX.utils.book_append_sheet(wb, ws1, '정산 내역');
-
-            // ─────────────────────────────────────────────
-            // 시트2: 동호수계
-            // ─────────────────────────────────────────────
-            const s2 = [];
-            s2.push([`${monthLabel} 동호수계`]);
-            s2.push([]);
-            s2.push(['동','호수','이름','전화번호','프로그램','희망시간','요금','동호수계']);
-
-            const dhRows = d.dongho_settlement_rows || [];
-            const s2CellInfo = []; // { rowIdx, isMulti, isSum }
-            let r2 = 3;
-
-            dhRows.forEach(dh => {
-                const items = dh.items;
-                const isMulti = items.length > 1;
-
-                if (isMulti) {
-                    // 개별 행
-                    items.forEach(it => {
-                        s2.push([dh.dong, dh.ho, it.name, it.phone || '', it.program_name || '', it.preferred_time || '', it.final_charge || '', '']);
-                        s2CellInfo.push({ rowIdx: r2, isMulti: true, isSum: false });
-                        r2++;
+                let r1 = 4; // 0-based, 데이터 시작 행
+                progOrder.forEach(prog => {
+                    const items = progMap[prog];
+                    items.forEach(r => {
+                        s1.push([r.dong, r.ho, r.name, r.phone||'',
+                            r.program_name||'', r.preferred_time||'',
+                            r.monthly_fee||'', r.category||'']);
+                        r1++;
                     });
-                    // 합계 행
-                    const total = items.reduce((s, it) => s + (Number(it.final_charge) || 0), 0);
-                    s2.push(['', '', '', '', '', '', '', total]);
-                    s2CellInfo.push({ rowIdx: r2, isMulti: true, isSum: true });
-                    r2++;
-                } else {
-                    // 1명 세대
-                    const it = items[0];
-                    const fc = Number(it.final_charge) || '';
-                    s2.push([dh.dong, dh.ho, it.name, it.phone || '', it.program_name || '', it.preferred_time || '', fc, fc]);
-                    s2CellInfo.push({ rowIdx: r2, isMulti: false, isSum: false });
-                    r2++;
-                }
-            });
+                    const subFee = items.reduce((s,r) => s+(Number(r.monthly_fee)||0), 0);
+                    s1.push(['','','','', prog,'소계', subFee,'']);
+                    r1++;
+                });
 
-            const ws2 = XLSX.utils.aoa_to_sheet(s2);
-            ws2['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:10},{wch:12}];
-            ws2['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }];
+                const totalFee    = settlementRows.reduce((s,r) => s+(Number(r.monthly_fee)||0), 0);
+                const cancelCount = settlementRows.filter(r => r.is_end_cancel||r.is_mid_cancel).length;
+                s1.push([]);
+                s1.push([`등록 ${settlementRows.length}명`,'','',`해지 ${cancelCount}명`,'','', totalFee,'합계']);
 
-            // 헤더 스타일
-            for (let c = 0; c < 8; c++) {
-                const cellRef = XLSX.utils.encode_cell({ r: 2, c });
-                if (!ws2[cellRef]) ws2[cellRef] = { v: '', t: 's' };
-                ws2[cellRef].s = { fill: GREEN_HDR, font: { bold: true }, alignment: { horizontal: 'center' } };
+                const ws1 = XLSX.utils.aoa_to_sheet(s1);
+                ws1['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:12},{wch:18}];
+                ws1['!merges'] = [
+                    { s:{r:0,c:0}, e:{r:0,c:7} },
+                    { s:{r:1,c:0}, e:{r:1,c:7} },
+                ];
+                // 제목 행
+                const titleRef = XLSX.utils.encode_cell({ r:0, c:0 });
+                ws1[titleRef].s = { fill: BLUE_HDR, font:{ bold:true, sz:12 }, alignment:{ horizontal:'center' } };
+                // 설명 행
+                const descRef = XLSX.utils.encode_cell({ r:1, c:0 });
+                if (!ws1[descRef]) ws1[descRef] = { v:'', t:'s' };
+                ws1[descRef].s = { fill:{ fgColor:{ rgb:'EBF5FB' } }, font:{ italic:true, color:{ rgb:'1A5276' }, sz:8 }, alignment:{ wrapText:true } };
+                // 헤더 행
+                applyHdr(ws1, 3, 8, BLUE_HDR);
+                // 소계·합계 행
+                let ri = 4;
+                progOrder.forEach(prog => {
+                    ri += progMap[prog].length;
+                    applyRow(ws1, ri, 8, BLUE_SUB, true);
+                    ri++;
+                });
+                // 합계 행 (빈행 + 합계)
+                const totalRowIdx = s1.length - 1;
+                applyRow(ws1, totalRowIdx, 8, BLUE_TOTAL, true);
+
+                XLSX.utils.book_append_sheet(wb, ws1, `📋 ${mo}월 정산 내역`);
             }
 
-            // 다인세대 연두색 스타일
-            s2CellInfo.forEach(info => {
-                if (!info.isMulti) return;
-                for (let c = 0; c < 8; c++) {
-                    const cellRef = XLSX.utils.encode_cell({ r: info.rowIdx, c });
-                    if (!ws2[cellRef]) ws2[cellRef] = { v: '', t: 's' };
-                    if (!ws2[cellRef].s) ws2[cellRef].s = {};
-                    ws2[cellRef].s.fill = LIGHT_GREEN;
-                    if (info.isSum) {
-                        ws2[cellRef].s.font = { bold: true };
+            // ═════════════════════════════════════════════
+            // 【당월】시트2: 동호수계
+            //  - 세대별 월수강료 합산 (중도해지자 제외)
+            //  - 다인세대: 연두색 + 합계행
+            // ═════════════════════════════════════════════
+            {
+                const s2 = [];
+                s2.push([`${monthLabel} 동호수계`]);
+                s2.push([`※ 세대별 수강료 합산 | 중도해지자는 관리비 후청구 방식이므로 제외`]);
+                s2.push([]);
+                s2.push(['동','호수','이름','전화번호','프로그램','희망시간','개별요금','세대합계']);
+
+                const dhRows = d.dongho_settlement_rows || [];
+                const s2Info = [];
+                let r2 = 4;
+
+                dhRows.forEach(dh => {
+                    const items = dh.items;
+                    const isMulti = items.length > 1;
+                    if (isMulti) {
+                        items.forEach(it => {
+                            s2.push([dh.dong, dh.ho, it.name, it.phone||'',
+                                it.program_name||'', it.preferred_time||'', it.final_charge||'', '']);
+                            s2Info.push({ r: r2, isMulti:true, isSum:false });
+                            r2++;
+                        });
+                        const total = items.reduce((s,it) => s+(Number(it.final_charge)||0), 0);
+                        s2.push(['','','','','','','', total]);
+                        s2Info.push({ r: r2, isMulti:true, isSum:true });
+                        r2++;
+                    } else {
+                        const it = items[0];
+                        const fc = Number(it.final_charge)||'';
+                        s2.push([dh.dong, dh.ho, it.name, it.phone||'',
+                            it.program_name||'', it.preferred_time||'', fc, fc]);
+                        s2Info.push({ r: r2, isMulti:false, isSum:false });
+                        r2++;
                     }
-                }
-            });
+                });
 
-            XLSX.utils.book_append_sheet(wb, ws2, '동호수계');
+                // 세대 합계 총액 행
+                const grandDh = dhRows.reduce((sum, dh) => {
+                    return sum + dh.items.reduce((s,it) => s+(Number(it.final_charge)||0), 0);
+                }, 0);
+                s2.push([]);
+                s2.push(['','','','','','','전체합계', grandDh]);
 
-            // ─────────────────────────────────────────────
-            // 시트3: 수강신청 내역
-            // ─────────────────────────────────────────────
-            const s3 = [];
-            s3.push([`${nextLabel} 수강신청 내역`]);
-            s3.push([]);
-            s3.push(['동','호수','이름','전화번호','프로그램','희망시간','요금']);
+                const ws2 = XLSX.utils.aoa_to_sheet(s2);
+                ws2['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:12},{wch:12}];
+                ws2['!merges'] = [
+                    { s:{r:0,c:0}, e:{r:0,c:7} },
+                    { s:{r:1,c:0}, e:{r:1,c:7} },
+                ];
+                const t2Ref = XLSX.utils.encode_cell({ r:0, c:0 });
+                ws2[t2Ref].s = { fill: BLUE_HDR, font:{ bold:true, sz:12 }, alignment:{ horizontal:'center' } };
+                const d2Ref = XLSX.utils.encode_cell({ r:1, c:0 });
+                if (!ws2[d2Ref]) ws2[d2Ref] = { v:'', t:'s' };
+                ws2[d2Ref].s = { fill:{ fgColor:{ rgb:'EBF5FB' } }, font:{ italic:true, color:{ rgb:'1A5276' }, sz:8 }, alignment:{ wrapText:true } };
+                applyHdr(ws2, 3, 8, BLUE_HDR);
+                s2Info.forEach(info => {
+                    if (!info.isMulti) return;
+                    applyRow(ws2, info.r, 8, LIGHT_GREEN, info.isSum);
+                });
+                // 총합계 행
+                applyRow(ws2, s2.length-1, 8, BLUE_TOTAL, true);
 
-            (d.enrollment_rows || []).forEach(r => {
-                s3.push([
-                    r.dong, r.ho, r.name, r.phone || '',
-                    r.program_name || '', r.preferred_time || '',
-                    r.monthly_fee || ''
-                ]);
-            });
-
-            const ws3 = XLSX.utils.aoa_to_sheet(s3);
-            ws3['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:10}];
-            ws3['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:6} }];
-
-            // 헤더 스타일
-            for (let c = 0; c < 7; c++) {
-                const cellRef = XLSX.utils.encode_cell({ r: 2, c });
-                if (!ws3[cellRef]) ws3[cellRef] = { v: '', t: 's' };
-                ws3[cellRef].s = { fill: { fgColor: { rgb: 'FEF9E7' } }, font: { bold: true }, alignment: { horizontal: 'center' } };
+                XLSX.utils.book_append_sheet(wb, ws2, `🏠 ${mo}월 동호수계`);
             }
 
-            XLSX.utils.book_append_sheet(wb, ws3, '수강신청 내역');
+            // ═════════════════════════════════════════════
+            // 【당월】시트3: 중도해지 청구 내역  ← 신규
+            //  - 월 중간 해지자 (termination_date < 말일)
+            //  - 청구액 = 위약금(월수강료×10%) + 수강료(출석횟수×15,000)
+            //  - billing_amount 저장된 값 그대로 출력
+            // ═════════════════════════════════════════════
+            {
+                const midRows = d.mid_cancel || [];
+                const s3 = [];
+                s3.push([`${monthLabel} 중도해지 청구 내역`]);
+                s3.push([`※ 관리비 후청구 대상 | 청구액 = 위약금(월수강료×10%) + 수강료(출석횟수×15,000원)`]);
+                s3.push([]);
+                s3.push(['동','호수','이름','전화번호','프로그램','해지일',
+                    '월수강료','수강횟수','위약금(×10%)','수강료(×15,000)','총청구금액','처리상태']);
+
+                let midTotal = 0;
+                midRows.forEach(r => {
+                    const fee      = Number(r.monthly_fee) || 0;
+                    const att      = Number(r.attended_sessions) ?? '';
+                    const billing  = Number(r.billing_amount) || null;
+                    const penalty  = billing !== null && fee > 0 ? Math.round(fee * 0.1) : '';
+                    const courseFee= billing !== null && att !== '' ? att * 15000 : '';
+                    const status   = billing !== null ? '저장완료' : '미입력';
+                    if (billing) midTotal += billing;
+                    s3.push([
+                        r.dong, r.ho, r.name, r.phone||'',
+                        r.program_name||'', r.termination_date||'',
+                        fee||'', att, penalty, courseFee, billing||'', status
+                    ]);
+                });
+
+                s3.push([]);
+                s3.push(['','','','','','','','','','','합계', midTotal||'']);
+
+                const ws3 = XLSX.utils.aoa_to_sheet(s3);
+                ws3['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:12},
+                    {wch:12},{wch:10},{wch:13},{wch:15},{wch:13},{wch:10}];
+                ws3['!merges'] = [
+                    { s:{r:0,c:0}, e:{r:0,c:11} },
+                    { s:{r:1,c:0}, e:{r:1,c:11} },
+                ];
+                const t3Ref = XLSX.utils.encode_cell({ r:0, c:0 });
+                ws3[t3Ref].s = { fill: RED_HDR, font:{ bold:true, sz:12 }, alignment:{ horizontal:'center' } };
+                const d3Ref = XLSX.utils.encode_cell({ r:1, c:0 });
+                if (!ws3[d3Ref]) ws3[d3Ref] = { v:'', t:'s' };
+                ws3[d3Ref].s = { fill:{ fgColor:{ rgb:'FDF2F0' } }, font:{ italic:true, color:{ rgb:'7B241C' }, sz:8 }, alignment:{ wrapText:true } };
+                applyHdr(ws3, 3, 12, RED_HDR);
+                // 데이터 행 - 미입력 행 연한 빨강
+                midRows.forEach((r, i) => {
+                    if (!r.billing_amount) {
+                        applyRow(ws3, 4 + i, 12, RED_ROW);
+                    }
+                });
+                // 합계 행
+                applyRow(ws3, s3.length-1, 12, RED_TOTAL, true);
+
+                XLSX.utils.book_append_sheet(wb, ws3, `✂️ ${mo}월 중도해지 청구`);
+            }
+
+            // ═════════════════════════════════════════════
+            // 【차월】시트4: 수강신청 내역
+            //  - 차월 수강 예정자 전체 (해지자 제외)
+            //  - 프로그램별 소계 + 전체 합계
+            // ═════════════════════════════════════════════
+            {
+                const enrollRows = d.enrollment_rows || [];
+                const s4 = [];
+                s4.push([`${nextLabel} 수강신청 내역`]);
+                s4.push([`※ 차월(${nextLabel}) 수강료 부과 대상 전체 | 차월해지자 · 접수취소자 제외`]);
+                s4.push([]);
+                s4.push(['동','호수','이름','전화번호','프로그램','희망시간','월수강료']);
+
+                const ep = [], em = {};
+                enrollRows.forEach(r => {
+                    const p = r.program_name||'미분류';
+                    if (!em[p]) { em[p]=[]; ep.push(p); }
+                    em[p].push(r);
+                });
+
+                let r4 = 4;
+                ep.forEach(prog => {
+                    const items = em[prog];
+                    items.forEach(r => {
+                        s4.push([r.dong, r.ho, r.name, r.phone||'',
+                            r.program_name||'', r.preferred_time||'', r.monthly_fee||'']);
+                        r4++;
+                    });
+                    const subFee = items.reduce((s,r) => s+(Number(r.monthly_fee)||0), 0);
+                    s4.push(['','','','', prog,'소계', subFee]);
+                    r4++;
+                });
+
+                const totalNext = enrollRows.reduce((s,r) => s+(Number(r.monthly_fee)||0), 0);
+                s4.push([]);
+                s4.push([`총 ${enrollRows.length}명`,'','','','','', totalNext]);
+
+                const ws4 = XLSX.utils.aoa_to_sheet(s4);
+                ws4['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:12}];
+                ws4['!merges'] = [
+                    { s:{r:0,c:0}, e:{r:0,c:6} },
+                    { s:{r:1,c:0}, e:{r:1,c:6} },
+                ];
+                const t4Ref = XLSX.utils.encode_cell({ r:0, c:0 });
+                ws4[t4Ref].s = { fill: GREEN_HDR, font:{ bold:true, sz:12 }, alignment:{ horizontal:'center' } };
+                const d4Ref = XLSX.utils.encode_cell({ r:1, c:0 });
+                if (!ws4[d4Ref]) ws4[d4Ref] = { v:'', t:'s' };
+                ws4[d4Ref].s = { fill:{ fgColor:{ rgb:'EAFAF1' } }, font:{ italic:true, color:{ rgb:'1A5C35' }, sz:8 }, alignment:{ wrapText:true } };
+                applyHdr(ws4, 3, 7, GREEN_HDR);
+                let ri4 = 4;
+                ep.forEach(prog => {
+                    ri4 += em[prog].length;
+                    applyRow(ws4, ri4, 7, GREEN_SUB, true);
+                    ri4++;
+                });
+                applyRow(ws4, s4.length-1, 7, GREEN_TOTAL, true);
+
+                XLSX.utils.book_append_sheet(wb, ws4, `📑 ${nextLabel} 수강신청`);
+            }
+
+            // ═════════════════════════════════════════════
+            // 【차월】시트5: 신규접수자  ← 신규
+            //  - 이번달 승인 = 차월부터 수강 시작
+            //  - 중복수강 여부 표시
+            // ═════════════════════════════════════════════
+            {
+                const newRows = d.next_new || [];
+                const s5 = [];
+                s5.push([`${nextLabel} 신규접수자`]);
+                s5.push([`※ 이번달(${monthLabel}) 신청 승인 → ${nextLabel}부터 수강료 부과 시작 | 중복수강: 기존 수강 중 추가 신청`]);
+                s5.push([]);
+                s5.push(['동','호수','이름','전화번호','프로그램','희망시간','월수강료','중복수강']);
+
+                newRows.forEach(r => {
+                    s5.push([
+                        r.dong, r.ho, r.name, r.phone||'',
+                        r.program_name||'', r.preferred_time||'',
+                        r.monthly_fee||'', r.is_duplicate ? '중복' : ''
+                    ]);
+                });
+
+                s5.push([]);
+                const totalNew = newRows.reduce((s,r) => s+(Number(r.monthly_fee)||0), 0);
+                s5.push([`총 ${newRows.length}명`,'','','','','', totalNew,'']);
+
+                const ws5 = XLSX.utils.aoa_to_sheet(s5);
+                ws5['!cols'] = [{wch:6},{wch:7},{wch:10},{wch:14},{wch:22},{wch:10},{wch:12},{wch:10}];
+                ws5['!merges'] = [
+                    { s:{r:0,c:0}, e:{r:0,c:7} },
+                    { s:{r:1,c:0}, e:{r:1,c:7} },
+                ];
+                const t5Ref = XLSX.utils.encode_cell({ r:0, c:0 });
+                ws5[t5Ref].s = { fill: LIME_HDR, font:{ bold:true, sz:12 }, alignment:{ horizontal:'center' } };
+                const d5Ref = XLSX.utils.encode_cell({ r:1, c:0 });
+                if (!ws5[d5Ref]) ws5[d5Ref] = { v:'', t:'s' };
+                ws5[d5Ref].s = { fill:{ fgColor:{ rgb:'EAFAF1' } }, font:{ italic:true, color:{ rgb:'1A5C35' }, sz:8 }, alignment:{ wrapText:true } };
+                applyHdr(ws5, 3, 8, LIME_HDR);
+                // 중복수강 행 연두 강조
+                newRows.forEach((r, i) => {
+                    if (r.is_duplicate) applyRow(ws5, 4+i, 8, LIGHT_GREEN);
+                });
+                applyRow(ws5, s5.length-1, 8, GREEN_TOTAL, true);
+
+                XLSX.utils.book_append_sheet(wb, ws5, `🆕 ${nextLabel} 신규접수`);
+            }
 
             // ─────────────────────────────────────────────
-            // 파일명: 단지명_YYYY년MM월_정산.xlsx
+            // 파일 저장
             // ─────────────────────────────────────────────
-            const fileName = `${yr}년${mo}월_필라테스_정산.xlsx`;
+            const complexName = d.complex_name || '';
+            const filePrefix  = complexName ? `${complexName}_` : '';
+            const fileName = `${filePrefix}${yr}년${mo}월_정산.xlsx`;
             XLSX.writeFile(wb, fileName);
-            showToast(`${fileName} 다운로드 완료`, 'success');
+            showToast(`✅ ${fileName} 다운로드 완료 (5시트)`, 'success');
 
         } catch(e) {
             showToast('엑셀 생성 오류: ' + e.message, 'error');
@@ -1201,7 +1407,7 @@ const settlement = {
         } finally {
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-file-excel"></i> 엑셀 다운로드 (3시트)';
+                btn.innerHTML = '<i class="fas fa-file-excel"></i> 엑셀 다운로드 (5시트)';
             }
         }
     },
@@ -1411,7 +1617,10 @@ const settlement = {
     },
 
     // ══════════════════════════════════════════════════════
-    // 버튼1: 관리사무실 제출용 엑셀 (신규 / 유지 / 해지 3시트)
+    // 버튼1: 관리사무실 제출용 엑셀 (3시트)
+    //   시트1) 수강현황    — 신규·유지·해지 통합 1시트 (구분 컬럼으로 구별)
+    //   시트2) 동호수계    — 동, 호수, 부과금액
+    //   시트3) 동호수계(상세) — 동, 호수, 이름, 전화번호, 프로그램명, 부과금액
     // ══════════════════════════════════════════════════════
     async downloadMgmtOfficeExcel() {
         if (!this._data) { showToast('먼저 조회해주세요', 'error'); return; }
@@ -1425,70 +1634,248 @@ const settlement = {
             const nextLabel  = d.nextKey ? d.nextKey.replace('-', '년 ') + '월' : '차월';
             const wb   = XLSX.utils.book_new();
 
-            const HDR_NEW  = { fgColor: { rgb: 'D5F5E3' } };  // 연두 — 신규
-            const HDR_KEEP = { fgColor: { rgb: 'D6EAF8' } };  // 파랑 — 유지
-            const HDR_TERM = { fgColor: { rgb: 'FADBD8' } };  // 분홍 — 해지
-            const colsDef  = [
-                { wch: 6 }, { wch: 7 }, { wch: 10 }, { wch: 14 },
-                { wch: 22 }, { wch: 10 }, { wch: 11 },
-            ];
-            const cols = ['동','호수','이름','전화번호','프로그램','희망시간','월수강료'];
+            // ── 색상 팔레트 ──────────────────────────────────
+            const HDR_MAIN  = { fgColor: { rgb: 'D6EAF8' } };  // 파랑 — 수강현황 헤더
+            const ROW_NEW   = { fgColor: { rgb: 'D5F5E3' } };  // 연두 — 신규 행
+            const ROW_TERM  = { fgColor: { rgb: 'FADBD8' } };  // 분홍 — 해지 행
+            const HDR_DH    = { fgColor: { rgb: 'FEF9E7' } };  // 연노 — 동호수계 헤더
+            const TOTAL_BG  = { fgColor: { rgb: 'AED6F1' } };  // 합계행 배경
 
-            const makeSheet = (title, rows, hdrFill) => {
-                const data = [[title], [], cols];
-                rows.forEach(r => data.push([
-                    r.dong||'', r.ho||'', r.name||'', r.phone||'',
-                    r.program_name||'', r.preferred_time||'',
-                    r.monthly_fee ? Number(r.monthly_fee) : '',
-                ]));
-                const ws = XLSX.utils.aoa_to_sheet(data);
-                ws['!cols']   = colsDef;
-                ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:6} }];
-                // 헤더 스타일
-                for (let c = 0; c < 7; c++) {
-                    const ref = XLSX.utils.encode_cell({ r:2, c });
-                    if (!ws[ref]) ws[ref] = { v:'', t:'s' };
-                    ws[ref].s = { fill: hdrFill, font:{ bold:true }, alignment:{ horizontal:'center' } };
+            // ── 헬퍼: 특정 행 전체에 fill 적용 ─────────────
+            const applyFill = (ws, rowIdx, nCols, fill, bold = false) => {
+                for (let c = 0; c < nCols; c++) {
+                    const ref = XLSX.utils.encode_cell({ r: rowIdx, c });
+                    if (!ws[ref]) ws[ref] = { v: '', t: 's' };
+                    if (!ws[ref].s) ws[ref].s = {};
+                    ws[ref].s.fill = fill;
+                    if (bold) ws[ref].s.font = { bold: true };
+                    ws[ref].s.alignment = { horizontal: 'center' };
                 }
-                return ws;
             };
 
-            // ① 신규: 차월 신규 접수자
-            const newRows  = d.next_new || [];
-            const ws1 = makeSheet(`${nextLabel} 신규 수강 신청자 (${newRows.length}명)`, newRows, HDR_NEW);
-            XLSX.utils.book_append_sheet(wb, ws1, '신규');
+            // ═══════════════════════════════════════════════
+            // 시트1: 수강현황
+            //  행 구성:
+            //   - 신규(차월 신규접수자): 구분='신규'
+            //   - 유지(해지 아닌 수강자): 구분='' (빈칸)
+            //   - 해지(차월해지+중도해지): 구분='차월해지'/'중도해지'
+            //  정렬: 구분(신규→유지→해지) → 프로그램 → 동 → 호수
+            // ═══════════════════════════════════════════════
+            {
+                // 데이터 수집
+                const newRows  = (d.next_new       || []).map(r => ({ ...r, _cat: '신규',   _catOrd: 0 }));
+                const keepRows = (d.settlement_rows || [])
+                    .filter(r => !r.is_end_cancel && !r.is_mid_cancel)
+                    .map(r => ({ ...r, _cat: '', _catOrd: 1 }));
+                const termRows = [
+                    ...(d.end_cancel || []).map(r => ({ ...r, _cat: '차월해지', _catOrd: 2 })),
+                    ...(d.mid_cancel || []).map(r => ({ ...r, _cat: '중도해지', _catOrd: 2 })),
+                ];
+                const allRows = [...newRows, ...keepRows, ...termRows];
 
-            // ② 유지: 당월 정산 내역 중 해지 제외
-            const keepRows = (d.settlement_rows || []).filter(r => !r.is_end_cancel && !r.is_mid_cancel);
-            const ws2 = makeSheet(`${monthLabel} 유지 수강자 (${keepRows.length}명)`, keepRows, HDR_KEEP);
-            XLSX.utils.book_append_sheet(wb, ws2, '유지');
+                // 정렬: 구분순 → 프로그램 → 동(숫자) → 호수(숫자)
+                allRows.sort((a, b) => {
+                    if (a._catOrd !== b._catOrd) return a._catOrd - b._catOrd;
+                    const pa = (a.program_name||''), pb = (b.program_name||'');
+                    if (pa < pb) return -1; if (pa > pb) return 1;
+                    const da = parseInt((a.dong||'').replace(/[^0-9]/g,''))||0;
+                    const db = parseInt((b.dong||'').replace(/[^0-9]/g,''))||0;
+                    if (da !== db) return da - db;
+                    return (parseInt((a.ho||'').replace(/[^0-9]/g,''))||0)
+                         - (parseInt((b.ho||'').replace(/[^0-9]/g,''))||0);
+                });
 
-            // ③ 해지: 차월해지 + 중도해지 통합
-            const termRows = [
-                ...(d.end_cancel || []).map(r => ({ ...r, _type: '차월해지' })),
-                ...(d.mid_cancel || []).map(r => ({ ...r, _type: '중도해지' })),
-            ];
-            const termData = [[`${monthLabel} 해지자 (${termRows.length}명)`], [],
-                [...cols, '구분', '해지일']];
-            termRows.forEach(r => termData.push([
-                r.dong||'', r.ho||'', r.name||'', r.phone||'',
-                r.program_name||'', r.preferred_time||'',
-                r.monthly_fee ? Number(r.monthly_fee) : '',
-                r._type, r.termination_date||'',
-            ]));
-            const ws3 = XLSX.utils.aoa_to_sheet(termData);
-            ws3['!cols']   = [...colsDef, { wch:8 }, { wch:12 }];
-            ws3['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:8} }];
-            for (let c = 0; c < 9; c++) {
-                const ref = XLSX.utils.encode_cell({ r:2, c });
-                if (!ws3[ref]) ws3[ref] = { v:'', t:'s' };
-                ws3[ref].s = { fill: HDR_TERM, font:{ bold:true }, alignment:{ horizontal:'center' } };
+                const totalCount = allRows.length;
+                const newCount   = newRows.length;
+                const termCount  = termRows.length;
+                const keepCount  = keepRows.length;
+
+                const s1 = [
+                    [`${monthLabel} 수강현황 (전체 ${totalCount}명 — 신규 ${newCount}명 / 유지 ${keepCount}명 / 해지 ${termCount}명)`],
+                    [],
+                    ['동','호수','이름','전화번호','프로그램','희망시간','월수강료','구분'],
+                ];
+
+                // 행별 스타일 정보 수집
+                const rowStyleInfo = []; // { rowIdx, fill }
+                allRows.forEach((r, i) => {
+                    s1.push([
+                        r.dong||'', r.ho||'', r.name||'', r.phone||'',
+                        r.program_name||'', r.preferred_time||'',
+                        r.monthly_fee ? Number(r.monthly_fee) : '',
+                        r._cat,
+                    ]);
+                    const dataRowIdx = 3 + i;
+                    if (r._cat === '신규') rowStyleInfo.push({ rowIdx: dataRowIdx, fill: ROW_NEW });
+                    if (r._cat === '차월해지' || r._cat === '중도해지') rowStyleInfo.push({ rowIdx: dataRowIdx, fill: ROW_TERM });
+                });
+
+                // 합계 행
+                const totalFee = allRows.reduce((s, r) => s + (Number(r.monthly_fee)||0), 0);
+                s1.push([]); // 빈 행
+                s1.push(['','','','','','', totalFee, `총 ${totalCount}명`]);
+
+                const ws1 = XLSX.utils.aoa_to_sheet(s1);
+                ws1['!cols'] = [
+                    { wch:6 },{ wch:7 },{ wch:10 },{ wch:14 },
+                    { wch:22 },{ wch:10 },{ wch:11 },{ wch:10 },
+                ];
+                ws1['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }];
+
+                // 제목 행 스타일
+                const t1Ref = XLSX.utils.encode_cell({ r:0, c:0 });
+                ws1[t1Ref].s = { fill: HDR_MAIN, font:{ bold:true, sz:11 }, alignment:{ horizontal:'center' } };
+                // 헤더 행 스타일
+                applyFill(ws1, 2, 8, HDR_MAIN, true);
+                // 신규·해지 행 강조
+                rowStyleInfo.forEach(({ rowIdx, fill }) => applyFill(ws1, rowIdx, 8, fill));
+                // 합계 행
+                applyFill(ws1, s1.length - 1, 8, TOTAL_BG, true);
+
+                XLSX.utils.book_append_sheet(wb, ws1, '수강현황');
             }
-            XLSX.utils.book_append_sheet(wb, ws3, '해지');
+
+            // ═══════════════════════════════════════════════
+            // 시트2: 동호수계
+            //  컬럼: 동, 호수, 부과금액
+            //  대상: 당월 수강자 (해지자 포함, 중도해지자 제외 — 후청구 방식)
+            //  정렬: 동(숫자) → 호수(숫자)
+            // ═══════════════════════════════════════════════
+            {
+                // 동호수별 부과금액 집계
+                // settlement_rows 기준: 중도해지 제외 → 월수강료 합산
+                const dhMap = new Map(); // "동_호" → { dong, ho, totalFee }
+                (d.settlement_rows || []).forEach(r => {
+                    if (r.is_mid_cancel) return; // 중도해지 제외
+                    const fee = Number(r.monthly_fee) || 0;
+                    if (!fee) return;
+                    const key = `${r.dong}_${r.ho}`;
+                    if (!dhMap.has(key)) dhMap.set(key, { dong: r.dong, ho: r.ho, totalFee: 0 });
+                    dhMap.get(key).totalFee += fee;
+                });
+
+                // 신규(차월 신규접수자)는 이번달 부과 없음 → 제외
+                // 동(숫자) → 호수(숫자) 정렬
+                const dhRows = Array.from(dhMap.values()).sort((a, b) => {
+                    const da = parseInt((a.dong||'').replace(/[^0-9]/g,''))||0;
+                    const db = parseInt((b.dong||'').replace(/[^0-9]/g,''))||0;
+                    if (da !== db) return da - db;
+                    return (parseInt((a.ho||'').replace(/[^0-9]/g,''))||0)
+                         - (parseInt((b.ho||'').replace(/[^0-9]/g,''))||0);
+                });
+
+                const s2 = [
+                    [`${monthLabel} 동호수계`],
+                    [],
+                    ['동', '호수', '부과금액'],
+                ];
+
+                dhRows.forEach(r => {
+                    s2.push([r.dong||'', r.ho||'', r.totalFee]);
+                });
+
+                const grandTotal = dhRows.reduce((s, r) => s + r.totalFee, 0);
+                s2.push([]);
+                s2.push(['', '합계', grandTotal]);
+
+                const ws2 = XLSX.utils.aoa_to_sheet(s2);
+                ws2['!cols'] = [{ wch:7 }, { wch:8 }, { wch:13 }];
+                ws2['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:2} }];
+
+                const t2Ref = XLSX.utils.encode_cell({ r:0, c:0 });
+                ws2[t2Ref].s = { fill: HDR_DH, font:{ bold:true, sz:11 }, alignment:{ horizontal:'center' } };
+                applyFill(ws2, 2, 3, HDR_DH, true);
+                applyFill(ws2, s2.length - 1, 3, TOTAL_BG, true);
+
+                XLSX.utils.book_append_sheet(wb, ws2, '동호수계');
+            }
+
+            // ═══════════════════════════════════════════════
+            // 시트3: 동호수계(상세)
+            //  컬럼: 동, 호수, 이름, 전화번호, 프로그램명, 부과금액
+            //  대상: 시트2와 동일 (중도해지 제외)
+            //  다인세대: 각 수강자 개별 행 → 세대 소계행 추가
+            //  정렬: 동(숫자) → 호수(숫자)
+            // ═══════════════════════════════════════════════
+            {
+                const LIGHT_GREEN = { fgColor: { rgb: 'D5F5D0' } }; // 다인세대 소계 행
+
+                // 동호수별로 수강자 묶기
+                const dhDetailMap = new Map();
+                (d.settlement_rows || []).forEach(r => {
+                    if (r.is_mid_cancel) return;
+                    const fee = Number(r.monthly_fee) || 0;
+                    if (!fee) return;
+                    const key = `${r.dong}_${r.ho}`;
+                    if (!dhDetailMap.has(key)) {
+                        dhDetailMap.set(key, { dong: r.dong, ho: r.ho, items: [] });
+                    }
+                    dhDetailMap.get(key).items.push({
+                        name:         r.name||'',
+                        phone:        r.phone||'',
+                        program_name: r.program_name||'',
+                        fee,
+                    });
+                });
+
+                // 정렬: 동 → 호수
+                const dhDetailRows = Array.from(dhDetailMap.values()).sort((a, b) => {
+                    const da = parseInt((a.dong||'').replace(/[^0-9]/g,''))||0;
+                    const db = parseInt((b.dong||'').replace(/[^0-9]/g,''))||0;
+                    if (da !== db) return da - db;
+                    return (parseInt((a.ho||'').replace(/[^0-9]/g,''))||0)
+                         - (parseInt((b.ho||'').replace(/[^0-9]/g,''))||0);
+                });
+
+                const s3 = [
+                    [`${monthLabel} 동호수계(상세)`],
+                    [],
+                    ['동','호수','이름','전화번호','프로그램명','부과금액'],
+                ];
+
+                const multiRowInfo = []; // 다인세대 소계 행 인덱스
+                let rowIdx3 = 3;
+
+                dhDetailRows.forEach(dh => {
+                    const isMulti = dh.items.length > 1;
+                    dh.items.forEach(it => {
+                        s3.push([dh.dong||'', dh.ho||'', it.name, it.phone, it.program_name, it.fee]);
+                        rowIdx3++;
+                    });
+                    if (isMulti) {
+                        const subtotal = dh.items.reduce((s, it) => s + it.fee, 0);
+                        s3.push(['', '', '', '', '소계', subtotal]);
+                        multiRowInfo.push(rowIdx3);
+                        rowIdx3++;
+                    }
+                });
+
+                const grandTotal3 = dhDetailRows.reduce(
+                    (s, dh) => s + dh.items.reduce((ss, it) => ss + it.fee, 0), 0
+                );
+                s3.push([]);
+                s3.push(['','','','','합계', grandTotal3]);
+
+                const ws3 = XLSX.utils.aoa_to_sheet(s3);
+                ws3['!cols'] = [
+                    { wch:7 },{ wch:8 },{ wch:10 },{ wch:14 },{ wch:22 },{ wch:13 },
+                ];
+                ws3['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }];
+
+                const t3Ref = XLSX.utils.encode_cell({ r:0, c:0 });
+                ws3[t3Ref].s = { fill: HDR_DH, font:{ bold:true, sz:11 }, alignment:{ horizontal:'center' } };
+                applyFill(ws3, 2, 6, HDR_DH, true);
+                // 다인세대 소계 행 강조
+                multiRowInfo.forEach(ri => applyFill(ws3, ri, 6, LIGHT_GREEN, true));
+                // 합계 행
+                applyFill(ws3, s3.length - 1, 6, TOTAL_BG, true);
+
+                XLSX.utils.book_append_sheet(wb, ws3, '동호수계(상세)');
+            }
 
             const fileName = `${yr}년${mo}월_관리사무실제출.xlsx`;
             XLSX.writeFile(wb, fileName);
-            showToast(`${fileName} 다운로드 완료`, 'success');
+            showToast(`${fileName} 다운로드 완료 (수강현황 · 동호수계 · 동호수계(상세) 3시트)`, 'success');
         } catch(e) {
             showToast('엑셀 생성 오류: ' + e.message, 'error');
             console.error(e);

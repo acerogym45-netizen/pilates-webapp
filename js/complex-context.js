@@ -8,10 +8,17 @@ class ComplexContext {
         this.initialized = false;
     }
     
-    // URL에서 complex 파라미터 읽기
+    // URL에서 complex 코드 읽기
+    // 우선순위: ① 경로방식 /apt-xxx  ② 쿼리파라미터 ?complex=apt-xxx  ③ 기본값
     getComplexCodeFromURL() {
+        // ① 경로 방식: /apt-sclass 또는 /apt-cjxi 등 (apt- 로 시작하는 1단계 경로)
+        const pathMatch = window.location.pathname.match(/^\/([a-zA-Z0-9_-]+)\/?$/);
+        if (pathMatch && pathMatch[1] !== 'admin') {
+            return pathMatch[1];
+        }
+        // ② 쿼리파라미터 방식 (기존 호환)
         const params = new URLSearchParams(window.location.search);
-        return params.get('complex') || 'apt-demo'; // 기본값: apt-demo
+        return params.get('complex') || 'apt-cjxi';
     }
     
     // 단지 설정 로드
