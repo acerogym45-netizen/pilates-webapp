@@ -2666,7 +2666,8 @@ ${(() => {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ apply_period_enabled, apply_start, apply_end })
             });
-            if (!(await r1.json()).success) throw new Error('전역 기간 저장 실패');
+            const j1 = await r1.json();
+            if (!j1.success) throw new Error(j1.error || '전역 기간 저장 실패');
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); return; }
 
         // ── [2] 신청 종류별 기간 저장 ───────────────────────────
@@ -2692,7 +2693,8 @@ ${(() => {
                 method: 'PUT', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ settings })
             });
-            if (!(await r2.json()).success) throw new Error('신청 종류 기간 저장 실패');
+            const j2 = await r2.json();
+            if (!j2.success) throw new Error(j2.error || '신청 종류 기간 저장 실패');
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); return; }
 
         closeGlobalModal();

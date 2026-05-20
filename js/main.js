@@ -2244,12 +2244,28 @@ function displayNotices(notices) {
                 <div class="notice-content">
                     ${escapeHtml(notice.content || '').replace(/\n/g, '<br>')}
                 </div>
+                ${notice.image_url ? `
+                <div class="notice-image">
+                    <img src="${notice.image_url}" alt="공지 이미지"
+                         onclick="notices_openImageModal('${notice.image_url}')"
+                         style="max-width:100%;border-radius:8px;cursor:pointer;margin-top:8px">
+                </div>` : ''}
                 <div class="notice-date">
                     <i class="fas fa-calendar"></i> ${kstDateStr(notice.created_at)}
                 </div>
             </div>
         `;
     }).join('');
+}
+
+// 공지 이미지 클릭 시 전체화면 뷰어 (index.html imageModal 재사용)
+function notices_openImageModal(url) {
+    const modal = document.getElementById('imageModal');
+    if (!modal) return;
+    const img = document.getElementById('modalImage');
+    if (img) img.src = url;
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
 }
 
 // ===== LOAD PROGRAMS =====
