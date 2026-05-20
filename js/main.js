@@ -2244,6 +2244,12 @@ function displayNotices(notices) {
                 <div class="notice-content">
                     ${escapeHtml(notice.content || '')}
                 </div>
+                ${notice.image_url ? `
+                <div class="notice-image">
+                    <img src="${notice.image_url}" alt="공지 이미지"
+                         onclick="notices_openImageModal('${notice.image_url}')"
+                         style="max-width:100%;border-radius:8px;cursor:pointer;margin-top:8px">
+                </div>` : ''}
                 <div class="notice-date">
                     <i class="fas fa-calendar"></i> ${kstDateStr(notice.created_at)}
                 </div>
@@ -2252,7 +2258,42 @@ function displayNotices(notices) {
     }).join('');
 }
 
+// ===== NOTICE IMAGE MODAL =====
+
+// 공지사항 이미지 확대 보기
+function notices_openImageModal(imageUrl) {
+    // 기존 모달이 있으면 제거
+    const existing = document.getElementById('noticeImgModal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'noticeImgModal';
+    overlay.style.cssText = [
+        'position:fixed', 'inset:0', 'z-index:9999',
+        'background:rgba(0,0,0,.85)', 'display:flex',
+        'align-items:center', 'justify-content:center',
+        'padding:20px', 'cursor:zoom-out'
+    ].join(';');
+    overlay.innerHTML = `
+        <div style="position:relative;max-width:90vw;max-height:90vh">
+            <img src="${imageUrl}" alt="공지 이미지"
+                 style="max-width:100%;max-height:85vh;border-radius:8px;display:block">
+            <button onclick="document.getElementById('noticeImgModal').remove()"
+                    style="position:absolute;top:-14px;right:-14px;width:32px;height:32px;
+                           border-radius:50%;border:none;background:#fff;color:#333;
+                           font-size:1.1rem;cursor:pointer;line-height:32px;text-align:center;
+                           box-shadow:0 2px 8px rgba(0,0,0,.3)">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>`;
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+    document.body.appendChild(overlay);
+}
+
 // ===== LOAD PROGRAMS =====
+
 
 // Load programs from database
 async function loadPrograms() {

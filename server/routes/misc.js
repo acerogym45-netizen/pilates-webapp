@@ -64,12 +64,14 @@ router.get('/notices', async (req, res) => {
 
 router.post('/notices', async (req, res) => {
     try {
-        const { complex_id, title, content, is_pinned } = req.body;
+        const { complex_id, title, content, is_pinned, image_url } = req.body;
         if (!complex_id || !title || !content) return res.status(400).json({ success: false, error: '필수 항목 누락' });
         const sb = getSupabase();
+        const insertData = { complex_id, title, content, is_pinned: Boolean(is_pinned) };
+        if (image_url !== undefined) insertData.image_url = image_url || null;
         const { data, error } = await sb
             .from('notices')
-            .insert({ complex_id, title, content, is_pinned: Boolean(is_pinned) })
+            .insert(insertData)
             .select()
             .single();
         if (error) throw sbErr(error, 'POST /notices');
@@ -79,15 +81,17 @@ router.post('/notices', async (req, res) => {
 
 router.put('/notices/:id', async (req, res) => {
     try {
-        const { title, content, is_pinned, is_active } = req.body;
+        const { title, content, is_pinned, is_active, image_url } = req.body;
         const sb = getSupabase();
+        const updateData = {
+            title, content,
+            is_pinned: Boolean(is_pinned),
+            is_active: is_active !== undefined ? Boolean(is_active) : true
+        };
+        if (image_url !== undefined) updateData.image_url = image_url || null;
         const { data, error } = await sb
             .from('notices')
-            .update({
-                title, content,
-                is_pinned: Boolean(is_pinned),
-                is_active: is_active !== undefined ? Boolean(is_active) : true
-            })
+            .update(updateData)
             .eq('id', req.params.id)
             .select()
             .single();
