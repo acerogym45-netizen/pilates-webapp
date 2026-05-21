@@ -1213,17 +1213,74 @@ async function loadPublicInquiries() {
 // Show cancellation form modal (기간 체크 추가)
 
 /* ═══════════════════════════════════════════════════════════════
-   내 신청 취소·변경 탭바 초기화 (페이지 로드 시)
+   [공통 헬퍼] 내 신청 취소·변경 기간 설정 조회
+   - 서버 apply-settings 우선, 실패 시 22~26일 기본값 폴백
+   - 반환: { isOpen, periodLabel, cancelPeriodLabel }
    ═══════════════════════════════════════════════════════════════ */
-function initManageTabBar() {
-    const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-    const day  = nowKst.getUTCDate();
-    const hour = nowKst.getUTCHours();
-    // 신청 취소·변경 가능 기간: 매월 22일 09:00 ~ 26일 09:00 KST
-    const isOpen =
-        (day === 22 && hour >= 9) ||
-        (day > 22 && day < 26)   ||
-        (day === 26 && hour < 9);
+async function _getManagePeriodSetting() {
+    const now    = new Date();
+    const nowKst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+    const day    = nowKst.getUTCDate();
+    const hour   = nowKst.getUTCHours();
+    const autoIsOpen = (day === 22 && hour >= 9) || (day > 22 && day < 26) || (day === 26 && hour < 9);
+    const DEFAULT_LABEL = '매월 22일 09시 ~ 26일 09시';
+
+    // 기간 설정 → 표시 텍스트 변환
+    const makePeriodLabel = (setting) => {
+        if (!setting) return DEFAULT_LABEL;
+        const mode = setting.period_mode || 'auto';
+        if (mode === 'always') return '상시 가능';
+        if (mode === 'closed') return '현재 접수 마감';
+        if (mode === 'custom' && setting.period_start && setting.period_end) {
+            const fmt = (iso) => {
+                const d  = new Date(iso);
+                const kd = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+                const mo = kd.getUTCMonth() + 1;
+                const dy = kd.getUTCDate();
+                const hr = kd.getUTCHours();
+                const mi = kd.getUTCMinutes();
+                return `${mo}월 ${dy}일 ${hr}시${mi ? ' ' + mi + '분' : ''}`;
+            };
+            return `${fmt(setting.period_start)} ~ ${fmt(setting.period_end)}`;
+        }
+        return DEFAULT_LABEL; // auto
+    };
+
+    const complexId = complexContext?.getComplexId?.();
+    if (complexId) {
+        try {
+            const res  = await fetch(`/api/complexes/${complexId}/apply-settings`);
+            const json = await res.json();
+            if (json.success) {
+                const newSetting    = (json.data || []).find(x => x.apply_type_key === 'new');
+                const cancelSetting = (json.data || []).find(x => x.apply_type_key === 'cancel');
+                const isOpen = newSetting ? newSetting.is_open : autoIsOpen;
+                return {
+                    isOpen,
+                    periodLabel:       makePeriodLabel(newSetting),
+                    cancelPeriodLabel: makePeriodLabel(cancelSetting),
+                    newSetting,
+                    cancelSetting,
+                };
+            }
+        } catch(_) { /* 폴백 */ }
+    }
+    return {
+        isOpen:            autoIsOpen,
+        periodLabel:       DEFAULT_LABEL,
+        cancelPeriodLabel: DEFAULT_LABEL,
+        newSetting:        null,
+        cancelSetting:     null,
+    };
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   내 신청 취소·변경 탭바 초기화 (페이지 로드 시)
+   ─ 서버 apply-settings 기반으로 탭바/배지/헤더 버튼 활성화
+   ═══════════════════════════════════════════════════════════════ */
+async function initManageTabBar() {
+    // 서버 설정 기반 기간 조회 (비동기)
+    const { isOpen } = await _getManagePeriodSetting();
 
     // ① 탭바 버튼 스타일
     const tabBtn = document.getElementById('manageTabBtn');
@@ -1256,7 +1313,7 @@ function initManageTabBar() {
 /* ═══════════════════════════════════════════════════════════════
    내 신청 취소·변경 (매월 22일 09:00 ~ 26일 09:00 KST)
    ═══════════════════════════════════════════════════════════════ */
-function showMyManageModal() {
+async function showMyManageModal() {
     const modal = document.getElementById('myManageModal');
     if (!modal) return;
     // 입력 초기화
@@ -1266,31 +1323,33 @@ function showMyManageModal() {
     });
     document.getElementById('manageResult').innerHTML = '';
 
-    // 기간 배너 표시 (매월 22일 09:00 ~ 26일 09:00 KST)
-    const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-    const day  = nowKst.getUTCDate();
-    const hour = nowKst.getUTCHours();
+    // 서버 설정 기반으로 기간 배너 표시
     const banner = document.getElementById('managePeriodBanner');
     if (banner) {
-        const isOpen =
-            (day === 22 && hour >= 9) ||
-            (day > 22 && day < 26)   ||
-            (day === 26 && hour < 9);
+        // 로딩 중 임시 표시
+        banner.innerHTML = `<div style="background:#f3f4f6;border:1px solid #e5e7eb;border-radius:8px;
+                               padding:10px 13px;font-size:.82rem;color:#6b7280;margin-bottom:8px">
+                   <i class="fas fa-spinner fa-spin"></i> 접수 기간 확인 중...
+               </div>`;
+    }
+    modal.style.display = 'flex';
+
+    // 비동기로 실제 기간 설정 조회
+    const { isOpen, periodLabel } = await _getManagePeriodSetting();
+    if (banner) {
         banner.innerHTML = isOpen
             ? `<div style="background:#dcfce7;border:1px solid #22c55e;border-radius:8px;
                            padding:10px 13px;font-size:.82rem;color:#166534;margin-bottom:8px">
                    <i class="fas fa-calendar-check"></i>
-                   <strong> 신청 취소·변경 가능 기간입니다 (매월 22일 09시 ~ 26일 09시)</strong>
+                   <strong> 신청 취소·변경 가능 기간입니다 (${periodLabel})</strong>
                </div>`
             : `<div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;
                            padding:10px 13px;font-size:.82rem;color:#92400e;margin-bottom:8px">
                    <i class="fas fa-clock"></i>
-                   <strong> 신청 취소·변경은 매월 22일 09시 ~ 26일 09시에만 가능합니다</strong><br>
+                   <strong> 신청 취소·변경은 ${periodLabel}에만 가능합니다</strong><br>
                    <span style="font-size:.78rem">현재는 조회만 가능합니다</span>
                </div>`;
     }
-
-    modal.style.display = 'flex';
 }
 
 function closeMyManageModal() {
@@ -1338,14 +1397,8 @@ async function loadMyManageList() {
             return;
         }
 
-        const nowKst  = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-        const dayKst  = nowKst.getUTCDate();
-        const hourKst = nowKst.getUTCHours();
-        // 취소·변경 가능 기간: 매월 22일 09:00 ~ 26일 09:00 KST
-        const isOpen =
-            (dayKst === 22 && hourKst >= 9) ||
-            (dayKst > 22 && dayKst < 26)   ||
-            (dayKst === 26 && hourKst < 9);
+        // 서버 설정 기반으로 기간 조회
+        const { isOpen, periodLabel, cancelPeriodLabel } = await _getManagePeriodSetting();
 
         const fmtTime = t => {
             if (!t) return '-';
@@ -1435,8 +1488,8 @@ async function loadMyManageList() {
                             </button>
                         </div>` : `
                         <div style="text-align:center;font-size:.78rem;color:#9ca3af;padding:4px 0">
-                            <i class="fas fa-lock"></i> 신청 철회·변경은 매월 22일 09시 ~ 26일 09시에 가능합니다<br>
-                            <span style="font-size:.72rem;color:#c0c0c0">※ 익월 해지신청은 <strong>해지 신청 탭</strong>을 통하여 매월 22일 09시~26일 09시 해지 신청 기간에 접수하세요</span>
+                            <i class="fas fa-lock"></i> 신청 철회·변경은 ${periodLabel}에 가능합니다<br>
+                            <span style="font-size:.72rem;color:#c0c0c0">※ 익월 해지신청은 <strong>해지 신청 탭</strong>을 통하여 ${cancelPeriodLabel} 해지 신청 기간에 접수하세요</span>
                         </div>`}
                     </div>`;
                 }).join('')}
@@ -1455,19 +1508,21 @@ async function loadMyManageList() {
 
 // 신청 취소 확인 (대기/승인 모두)
 // ※ 이 취소는 "수강 시작 전 신청 철회" 입니다.
-//   - 수강을 중단하는 "해지"(매월 22일 09시~26일 09시)와 완전히 다릅니다.
+//   - 수강을 중단하는 "해지"(해지 신청 탭에서 설정된 접수 기간)와 완전히 다릅니다.
 //   - 관리비 부과 없음, 정산 집계 제외.
 async function confirmCancelApplication(appId, programName, status) {
     const isWaiting = (status === 'waiting');
     const phone4 = window._managePhone4;
     if (!phone4) { alert('먼저 전화번호를 입력하여 조회해 주세요.'); return; }
 
+    // 해지 신청 기간 레이블을 서버에서 가져와 confirm 메시지에 반영
+    const { cancelPeriodLabel } = await _getManagePeriodSetting();
     const confirmed = confirm(
         isWaiting
             ? `[${programName}] 대기 신청을 취소하시겠습니까?\n\n취소하면 대기 순번이 제거됩니다.`
             : `[${programName}] 신청을 철회하시겠습니까?\n\n` +
               `※ 이 기능은 수강 시작 전 신청을 철회하는 것입니다.\n` +
-              `익월 해지신청은 해지 신청 탭을 통하여 매월 22일 09시~26일 09시 해지 신청 기간에 접수하세요.`
+              `익월 해지신청은 해지 신청 탭을 통하여 ${cancelPeriodLabel} 해지 신청 기간에 접수하세요.`
     );
     if (!confirmed) return;
 
@@ -1906,13 +1961,47 @@ async function renderPeriodBanner() {
                 <span>📝 <strong>${mon}월 ${parts.join(' · ')} 기간입니다</strong> — 신청은 이 기간에만 가능합니다!</span>
             </div>`;
     } else {
-        const isAfter = day > 26 || (day === 26 && hour >= 9);
-        const nm = isAfter ? (mon === 12 ? 1 : mon+1) : mon;
+        // 다음 접수 기간 안내 — 서버 설정에서 next open 날짜 계산
+        let nextPeriodLabel = '';
+        if (complexId && !isEnrollOpen && !isCancelOpen) {
+            try {
+                const res2  = await fetch(`/api/complexes/${complexId}/apply-settings`);
+                const json2 = await res2.json();
+                if (json2.success) {
+                    // 'new' 또는 'cancel' 중 어느 쪽이든 custom 설정이면 그 날짜 안내
+                    const newS = (json2.data||[]).find(x => x.apply_type_key === 'new');
+                    const canS = (json2.data||[]).find(x => x.apply_type_key === 'cancel');
+                    const modeN = newS?.period_mode || 'auto';
+                    const modeC = canS?.period_mode || 'auto';
+                    const fmt = (iso) => {
+                        const d  = new Date(iso);
+                        const kd = new Date(d.getTime() + 9*60*60*1000);
+                        const mo2 = kd.getUTCMonth()+1, dy2 = kd.getUTCDate(), hr2 = kd.getUTCHours();
+                        const mi2 = kd.getUTCMinutes();
+                        return `${mo2}월 ${dy2}일 ${hr2}시${mi2?' '+mi2+'분':''}`;
+                    };
+                    if (modeN === 'custom' && newS?.period_start) {
+                        nextPeriodLabel = fmt(newS.period_start) + ' ~ ' + fmt(newS.period_end);
+                    } else if (modeC === 'custom' && canS?.period_start) {
+                        nextPeriodLabel = fmt(canS.period_start) + ' ~ ' + fmt(canS.period_end);
+                    } else if (modeN === 'always' || modeC === 'always') {
+                        nextPeriodLabel = '상시 접수';
+                    } else if (modeN === 'closed' && modeC === 'closed') {
+                        nextPeriodLabel = '접수 마감 (관리자 문의)';
+                    }
+                }
+            } catch(_) {}
+        }
+        if (!nextPeriodLabel) {
+            const isAfter = day > 26 || (day === 26 && hour >= 9);
+            const nm = isAfter ? (mon === 12 ? 1 : mon+1) : mon;
+            nextPeriodLabel = `${nm}월 22일 09시 ~ 26일 09시`;
+        }
         banner.innerHTML = `
             <div style="display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:8px;
                         background:#f9fafb;border:1px solid #e5e7eb;font-size:.81rem;color:#6b7280">
                 <i class="fas fa-calendar-alt"></i>
-                <span>다음 등록 접수 · 해지 신청 기간: <strong>${nm}월 22일 09시 ~ 26일 09시</strong></span>
+                <span>다음 등록 접수 · 해지 신청 기간: <strong>${nextPeriodLabel}</strong></span>
             </div>`;
     }
 }
