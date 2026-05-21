@@ -604,7 +604,7 @@ router.get('/cancellations/lookup-programs', async (req, res) => {
             }
         }
 
-        // ── 이미 해지 접수된 프로그램 확인 (중복 해지 방지) ──────────
+        // ── 이미 해지 접수된 프로그램 확인 (참고 표시용 — 관리자 조회이므로 선택은 항상 허용) ──
         const pendingCancelKeys    = new Set();
         const pendingCancelAppIds  = new Set();
         if (matched.length > 0) {
@@ -612,7 +612,7 @@ router.get('/cancellations/lookup-programs', async (req, res) => {
                 .from('cancellations')
                 .select('application_id, dong, ho, program_name, status')
                 .eq('complex_id', cid)
-                .in('status', ['pending', 'approved']);
+                .in('status', ['pending', 'approved']);  // pending/approved 모두 표시 (참고용)
             (existingCancels || []).forEach(c => {
                 const cd = (c.dong || '').replace(/[^0-9]/g, '');
                 const ch = (c.ho   || '').replace(/[^0-9]/g, '');
@@ -628,8 +628,9 @@ router.get('/cancellations/lookup-programs', async (req, res) => {
             name:              a.name,
             phone:             a.phone,
             program_name:      a.program_name,
-            preferred_time:    a.preferred_time,
+            preferred_time:    a.preferred_time,  // 항상 반환 (시간 자동 채움용)
             monthly_fee:       a.monthly_fee,
+            // 참고 표시만 — 프론트에서는 비활성화 없이 항상 클릭 가능
             already_cancelled: pendingCancelAppIds.has(a.id) || pendingCancelKeys.has(a.program_name),
         }));
 

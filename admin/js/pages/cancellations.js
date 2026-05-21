@@ -660,16 +660,16 @@ const cancellations = {
             const btns = list.map(p => {
                 const timeLabel = p.preferred_time ? ` (${p.preferred_time})` : '';
                 const already   = p.already_cancelled;
+                // already_cancelled여도 항상 선택 가능 (관리자 수정 목적)
                 return `<button
                     onclick="cancellations._applyEditLookup('${escHtml(p.program_name)}','${escHtml(p.preferred_time||'')}','${p.application_id||''}')"
-                    ${already ? 'disabled' : ''}
                     style="display:block;width:100%;text-align:left;padding:8px 12px;margin-bottom:4px;
-                           border:1.5px solid ${already ? '#e5e7eb' : '#0ea5e9'};border-radius:7px;
-                           background:${already ? '#f9fafb' : '#f0f9ff'};
-                           color:${already ? '#9ca3af' : '#0c4a6e'};font-size:.85rem;font-weight:600;cursor:${already ? 'default' : 'pointer'}">
-                    <i class="fas fa-${already ? 'ban' : 'check-circle'}" style="margin-right:6px;color:${already ? '#d1d5db' : '#0ea5e9'}"></i>
+                           border:1.5px solid ${already ? '#f59e0b' : '#0ea5e9'};border-radius:7px;
+                           background:${already ? '#fffbeb' : '#f0f9ff'};
+                           color:${already ? '#92400e' : '#0c4a6e'};font-size:.85rem;font-weight:600;cursor:pointer">
+                    <i class="fas fa-${already ? 'exclamation-triangle' : 'check-circle'}" style="margin-right:6px;color:${already ? '#f59e0b' : '#0ea5e9'}"></i>
                     ${escHtml(p.program_name)}${escHtml(timeLabel)}
-                    ${already ? ' <span style="font-size:.73rem;color:#9ca3af">(이미 해지 접수됨)</span>' : ''}
+                    ${already ? ' <span style="font-size:.73rem;color:#b45309">(해지 접수됨 — 클릭하여 선택 가능)</span>' : ''}
                 </button>`;
             }).join('');
 
