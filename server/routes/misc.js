@@ -995,38 +995,78 @@ router.put('/cancellations/:id', async (req, res) => {
         }
 
         // ── 해지 승인 시 신청 목록(applications) 자동 해지 처리 ─────────────
-        // cancellations 레코드에 application_id가 있으면 해당 신청의 status를 'cancelled'로 변경
         let appCancelResult = null;
-        if (status === 'approved' && data && data.application_id) {
+        if (status === 'approved' && data) {
             try {
-                const { data: appData, error: appErr } = await sb
-                    .from('applications')
-                    .update({
-                        status: 'cancelled',
-                        // notes 필드에 해지 처리 정보 기록 (컬럼이 있을 경우)
-                    })
-                    .eq('id', data.application_id)
-                    .select('id, status, name, program_name')
-                    .single();
+                let targetAppId = data.application_id || null;
 
-                if (appErr) {
-                    // notes 컬럼 없음 등 부가 컬럼 오류는 무시, status 업데이트만 재시도
-                    const { data: retryApp, error: retryAppErr } = await sb
+                // application_id 없으면 동/호수+프로그램명으로 approved 신청 검색
+                if (!targetAppId && data.complex_id && data.dong && data.ho) {
+                    const normDong = (data.dong || '').replace(/[^0-9]/g, '');
+                    const normHo   = (data.ho   || '').replace(/[^0-9]/g, '');
+
+                    const { data: candidates } = await sb
+                        .from('applications')
+                        .select('id, dong, ho, name, phone, program_name, preferred_time, status')
+                        .eq('complex_id', data.complex_id)
+                        .eq('status', 'approved');
+
+                    if (candidates && candidates.length > 0) {
+                        // 1차: 동/호수 + 프로그램명 일치
+                        let found = candidates.find(a => {
+                            const aDong = (a.dong || '').replace(/[^0-9]/g, '');
+                            const aHo   = (a.ho   || '').replace(/[^0-9]/g, '');
+                            const sameAddr = aDong === normDong && aHo === normHo;
+                            if (!sameAddr) return false;
+                            if (!data.program_name) return true; // 주소만으로도 매칭
+                            // 프로그램명 유사 비교 (포함 관계)
+                            const cp = (a.program_name || '').replace(/\s/g,'').toLowerCase();
+                            const dp = (data.program_name || '').replace(/\s/g,'').toLowerCase();
+                            return cp === dp || cp.includes(dp) || dp.includes(cp);
+                        });
+
+                        // 2차: 동/호수만으로 단 1건이면 그것으로 매칭
+                        if (!found) {
+                            const addrOnly = candidates.filter(a => {
+                                const aDong = (a.dong || '').replace(/[^0-9]/g, '');
+                                const aHo   = (a.ho   || '').replace(/[^0-9]/g, '');
+                                return aDong === normDong && aHo === normHo;
+                            });
+                            if (addrOnly.length === 1) found = addrOnly[0];
+                        }
+
+                        if (found) {
+                            targetAppId = found.id;
+                            // cancellations 레코드에 application_id 역기록
+                            await sb.from('cancellations')
+                                .update({ application_id: targetAppId })
+                                .eq('id', req.params.id);
+                            data = { ...data, application_id: targetAppId };
+                            console.log(`[cancellations PUT] application_id 없음 → 동/호수+프로그램명 매칭 성공: applications(${targetAppId})`);
+                        } else {
+                            console.warn(`[cancellations PUT] 동/호수 매칭 실패: ${data.dong}동 ${data.ho}호 — 자동 해지 처리 불가`);
+                        }
+                    }
+                }
+
+                // targetAppId 확정 후 applications 상태 변경
+                if (targetAppId) {
+                    const { data: appData, error: appErr } = await sb
                         .from('applications')
                         .update({ status: 'cancelled' })
-                        .eq('id', data.application_id)
-                        .select('id, status')
+                        .eq('id', targetAppId)
+                        .select('id, status, name, program_name')
                         .single();
-                    if (!retryAppErr) {
-                        appCancelResult = { success: true, application_id: data.application_id, new_status: 'cancelled' };
-                        console.log(`[cancellations PUT] 해지 승인 → applications(${data.application_id}) status='cancelled' 자동 처리 완료`);
+
+                    if (appErr) {
+                        appCancelResult = { success: false, error: appErr.message };
+                        console.warn(`[cancellations PUT] applications 자동 해지 처리 실패: ${appErr.message}`);
                     } else {
-                        appCancelResult = { success: false, error: retryAppErr.message };
-                        console.warn(`[cancellations PUT] applications 자동 해지 처리 실패: ${retryAppErr.message}`);
+                        appCancelResult = { success: true, application_id: targetAppId, new_status: 'cancelled', name: appData?.name };
+                        console.log(`[cancellations PUT] 해지 승인 → applications(${targetAppId}) status='cancelled' 완료`);
                     }
                 } else {
-                    appCancelResult = { success: true, application_id: data.application_id, new_status: 'cancelled', name: appData?.name };
-                    console.log(`[cancellations PUT] 해지 승인 → applications(${data.application_id}) status='cancelled' 자동 처리 완료`);
+                    appCancelResult = { success: false, reason: 'application_id 없음 + 매칭 실패' };
                 }
             } catch (appEx) {
                 // applications 자동 처리 실패는 cancellation 승인 자체를 막지 않음

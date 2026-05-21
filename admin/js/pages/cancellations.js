@@ -566,24 +566,14 @@ const cancellations = {
                 ${c.processed_at ? `<div class="detail-row"><label>처리일</label><span>${formatDate(c.processed_at)}</span></div>` : ''}
             </div>`;
 
-        // 해지 승인 버튼: application_id 있으면 "신청 목록도 자동 해지" 안내 문구 추가
+        // 해지 승인 버튼 안내
         const hasAppId = !!c.application_id;
-        const approveLabel = !isRefund
-            ? `승인${hasAppId ? ' + 신청목록 자동해지' : ''} (${applyDate} 해지)`
-            : '승인';
-        const approveConfirm = !isRefund && hasAppId
-            ? `confirm('해지 신청을 승인하면\\n수강 신청 목록에서도 자동으로 해지 처리됩니다.\\n\\n계속하시겠습니까?')`
-            : `confirm('해지 신청을 승인하시겠습니까?')`;
+        const approveLabel = !isRefund ? `승인 (${applyDate} 해지)` : '승인';
+        const approveConfirm = `confirm('해지 신청을 승인하시겠습니까?\\n\\n승인 시 수강 신청 목록에서도 자동으로 해지 처리됩니다.')`;
 
         const footer = `
             <div class="modal-btn-group" style="flex-wrap:wrap;gap:6px">
                 ${c.status === 'pending' ? `
-                ${!isRefund && hasAppId ? `
-                <div style="width:100%;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:8px;
-                     padding:8px 12px;font-size:.78rem;color:#92400e;margin-bottom:4px">
-                    <i class="fas fa-info-circle"></i>
-                    <strong>신청 목록 연동:</strong> 승인 시 해당 수강 신청도 자동으로 해지 처리됩니다.
-                </div>` : ''}
                 <button class="btn-success btn-sm" onclick="if(${approveConfirm}) cancellations.updateStatus('${c.id}','approved')">
                     <i class="fas fa-check"></i> ${approveLabel}
                 </button>
@@ -595,6 +585,11 @@ const cancellations = {
                     <i class="fas fa-undo"></i> 대기중으로 되돌리기
                 </button>` : ''}
                 ${!isRefund && c.status === 'approved' ? `
+                <button onclick="cancellations.syncApplicationCancel('${c.id}')"
+                    style="background:#f59e0b;color:#fff;border:none;padding:6px 14px;border-radius:7px;
+                           font-size:.8rem;font-weight:700;cursor:pointer">
+                    <i class="fas fa-sync-alt"></i> 신청 관리 해지 처리
+                </button>
                 <button class="btn-primary btn-sm" onclick="cancellations.showBillingModal('${c.id}')">
                     <i class="fas fa-won-sign"></i> 관리비 부과
                 </button>` : ''}
@@ -776,6 +771,36 @@ const cancellations = {
 
             await this.load(this.currentStatus);
             loadBadges();
+        } catch(e) { showToast('처리 실패: ' + e.message, 'error'); }
+    },
+
+    // ── 이미 승인된 해지 건의 신청 관리 해지 처리 (수동 동기화) ──────────
+    async syncApplicationCancel(id) {
+        const c = this.data.find(x => x.id === id);
+        if (!c) return;
+
+        const who = `${c.dong || ''}동 ${c.ho || ''}호 ${c.name || ''}`;
+        if (!confirm(`[${who}]\n신청 관리 목록에서 해지 처리를 진행하시겠습니까?\n\n해당 수강 신청의 상태가 "해지"로 변경됩니다.`)) return;
+
+        try {
+            // status는 변경 없이 application_id 연동 처리만 트리거
+            // → 서버에서 approved 상태 유지하면서 applications만 cancelled 처리
+            const result = await API.cancellations.update(id, { status: 'approved' });
+            const appCancel = result?.app_cancel;
+
+            if (appCancel && appCancel.success) {
+                showToast(`신청 관리 해지 처리 완료 ✓ (${appCancel.name || ''})`, 'success');
+            } else if (appCancel && !appCancel.success) {
+                // 매칭 실패 — 직접 안내
+                showToast(
+                    `자동 매칭 실패.\n\n신청 관리 메뉴에서 "${who}" 을(를) 직접 찾아 상태를 "해지"로 변경해 주세요.`,
+                    'warning'
+                );
+            } else {
+                showToast('처리되었습니다', 'success');
+            }
+            closeGlobalModal();
+            await this.load(this.currentStatus);
         } catch(e) { showToast('처리 실패: ' + e.message, 'error'); }
     },
 
