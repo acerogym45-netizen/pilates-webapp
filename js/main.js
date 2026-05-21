@@ -2663,20 +2663,18 @@ function populateProgramOptions(programs, newApplyIsOpen = null) {
         const isActive = program.is_active;
 
         // ── '곧 오픈 예정' 판단 ──────────────────────────────────────
-        // 우선순위: apply-settings new.is_open > programs.is_active
-        // newApplyIsOpen === null 이면 서버 apply-settings 조회 실패 → is_active 폴백
-        // newApplyIsOpen === false 이면 신청 기간 아님 → 모든 프로그램 '곧 오픈 예정'
-        // newApplyIsOpen === true  이면 신청 기간 중  → 기존 is_active 기준 사용
+        // apply-settings new.is_open 기반으로 판단 (is_active / schedule_mode 무관)
+        // is_open=true  → 신청 가능 기간 → 선택 가능 (곧 오픈 예정 X)
+        // is_open=false → 신청 불가 기간 → 모든 프로그램 '곧 오픈 예정'
+        // is_open=null  → API 조회 실패  → is_active 폴백 (기존 동작 유지)
         let showAsComingSoon;
         if (newApplyIsOpen === null) {
-            // apply-settings 조회 실패: 기존 is_active 기준 유지
+            // apply-settings 조회 실패: is_active 폴백
             showAsComingSoon = !isActive;
-        } else if (newApplyIsOpen === false) {
-            // 신청 기간이 아님: 모든 프로그램 비활성 표시
-            showAsComingSoon = true;
         } else {
-            // 신청 기간 중: is_active가 false인 것만 '곧 오픈 예정'
-            showAsComingSoon = !isActive;
+            // is_open이 true면 신청 가능 → 차단 안 함
+            // is_open이 false면 신청 불가 → 모든 프로그램 차단
+            showAsComingSoon = !newApplyIsOpen;
         }
 
         // Check if it's 1:1 or 2:1 lesson
