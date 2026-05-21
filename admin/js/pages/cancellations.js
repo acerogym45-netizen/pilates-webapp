@@ -469,17 +469,77 @@ const cancellations = {
                 <div class="detail-row"><label>상태</label>
                     <span class="status-badge status-${statusClass(c.status)}">${statusLabel(c.status)}</span>
                 </div>
-                <div class="detail-row"><label>동/호수</label><span>${c.dong} ${c.ho}</span></div>
-                <div class="detail-row"><label>이름</label><span>${c.name}</span></div>
-                <div class="detail-row"><label>전화</label><span>${c.phone}</span></div>
-                ${!isRefund ? `
-                <div class="detail-row"><label>프로그램</label><span>${c.program_name || '-'}</span></div>
-                ${c.preferred_time ? `<div class="detail-row"><label>희망시간</label><span style="color:#0369a1;font-weight:600">${c.preferred_time}</span></div>` : ''}
-                ` : ''}
-                <div class="detail-row"><label>${isRefund ? '환불 사유' : '해지 사유'}</label><span>${reasonDisplay}</span></div>
-                ${isRefund && refundDetailDisplay
-                    ? `<div class="detail-row full"><label>상세 내용</label><p style="white-space:pre-wrap">${refundDetailDisplay}</p></div>`
-                    : ''}
+                <!-- ── 수정 가능 정보 섹션 ─────────────────────────────── -->
+                <div class="detail-row full" style="background:#fafafa;border:1.5px solid #e5e7eb;border-radius:10px;padding:14px;margin-top:2px">
+                    <div style="font-weight:700;font-size:.85rem;color:#374151;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+                        <span><i class="fas fa-edit" style="color:#6366f1"></i> 신청 정보 수정</span>
+                        <button onclick="cancellations._saveDetailEdit('${c.id}')"
+                            style="background:#6366f1;color:#fff;border:none;padding:5px 14px;border-radius:6px;
+                                   font-size:.78rem;font-weight:700;cursor:pointer">
+                            <i class="fas fa-save"></i> 저장
+                        </button>
+                    </div>
+
+                    <!-- 동/호수 + 이름 -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                        <div>
+                            <label style="font-size:.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px">동</label>
+                            <input id="editDong" value="${escHtml(c.dong||'')}" placeholder="101"
+                                style="width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:.88rem;box-sizing:border-box">
+                        </div>
+                        <div>
+                            <label style="font-size:.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px">호수</label>
+                            <input id="editHo" value="${escHtml(c.ho||'')}" placeholder="1001"
+                                style="width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:.88rem;box-sizing:border-box">
+                        </div>
+                        <div>
+                            <label style="font-size:.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px">이름</label>
+                            <input id="editName" value="${escHtml(c.name||'')}" placeholder="이름"
+                                style="width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:.88rem;box-sizing:border-box">
+                        </div>
+                    </div>
+
+                    <!-- 전화번호 -->
+                    <div style="margin-bottom:10px">
+                        <label style="font-size:.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px">전화번호</label>
+                        <input id="editPhone" value="${escHtml(c.phone||'')}" placeholder="010-0000-0000" type="tel"
+                            style="width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:.88rem;box-sizing:border-box">
+                    </div>
+
+                    ${!isRefund ? `
+                    <!-- 프로그램 조회 + 선택 -->
+                    <div style="margin-bottom:8px">
+                        <label style="font-size:.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px">
+                            프로그램 / 희망시간
+                            <span style="font-weight:400;color:#9ca3af;margin-left:4px">— 조회 버튼으로 수강 목록에서 선택 가능</span>
+                        </label>
+                        <div style="display:flex;gap:6px;margin-bottom:6px">
+                            <input id="editProgramName" value="${escHtml(c.program_name||'')}" placeholder="프로그램명 직접 입력"
+                                style="flex:1;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:.88rem">
+                            <input id="editPreferredTime" value="${escHtml(c.preferred_time||'')}" placeholder="시간 (예: 월수 10시)"
+                                style="width:130px;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;font-size:.88rem">
+                        </div>
+                        <!-- 수강 목록 조회 버튼 -->
+                        <button onclick="cancellations._lookupForEdit('${c.id}')"
+                            id="editLookupBtn"
+                            style="width:100%;padding:8px;background:#0ea5e9;color:#fff;border:none;border-radius:7px;
+                                   font-size:.82rem;font-weight:700;cursor:pointer">
+                            <i class="fas fa-search"></i> 동/호수로 수강 목록 조회 후 선택
+                        </button>
+                        <div id="editLookupResult" style="margin-top:6px;display:none"></div>
+                    </div>` : ''}
+
+                    <!-- 사유 -->
+                    <div>
+                        <label style="font-size:.75rem;font-weight:600;color:#6b7280;display:block;margin-bottom:3px">
+                            ${isRefund ? '환불 사유' : '해지 사유'}
+                        </label>
+                        <textarea id="editReason" rows="2"
+                            style="width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;
+                                   font-size:.88rem;resize:vertical;box-sizing:border-box">${escHtml(c.reason||'')}</textarea>
+                    </div>
+                </div>
+                <!-- ── 수정 섹션 끝 ─────────────────────────────────── -->
 
                 ${!isRefund ? `
                 <div class="detail-row full" style="background:#f0fdf4;border-radius:6px;padding:10px 12px;margin-top:4px;border:1px solid #bbf7d0">
@@ -567,6 +627,129 @@ const cancellations = {
             const sel = document.getElementById('detailTypeSelect');
             const orig = this.data.find(x => x.id === id);
             if (sel && orig) sel.value = orig.request_type;
+        }
+    },
+
+    // ── 상세 모달: 동/호수로 수강 목록 조회 후 프로그램 선택 ────────────
+    async _lookupForEdit(cancellationId) {
+        const dong  = (document.getElementById('editDong')?.value  || '').trim();
+        const ho    = (document.getElementById('editHo')?.value    || '').trim();
+        const phone = (document.getElementById('editPhone')?.value || '').trim();
+        if (!dong || !ho) { showToast('동과 호수를 먼저 입력하세요', 'error'); return; }
+
+        const btn = document.getElementById('editLookupBtn');
+        const resultEl = document.getElementById('editLookupResult');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 조회 중...';
+        resultEl.style.display = 'none';
+
+        try {
+            const cid    = getEffectiveComplexId();
+            const params = new URLSearchParams({ complexId: cid, dong, ho });
+            if (phone) params.append('phone', phone);
+
+            const res  = await fetch(`/api/cancellations/lookup-programs?${params}`);
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || '조회 실패');
+
+            const list = json.data || [];
+            if (!list.length) {
+                resultEl.style.display = 'block';
+                resultEl.innerHTML = `<div style="color:#dc2626;font-size:.82rem;padding:6px 0">
+                    <i class="fas fa-exclamation-circle"></i> ${dong}동 ${ho}호에 수강 중인 프로그램이 없습니다.
+                </div>`;
+                return;
+            }
+
+            // 프로그램 선택 버튼 목록 렌더링
+            const btns = list.map(p => {
+                const timeLabel = p.preferred_time ? ` (${p.preferred_time})` : '';
+                const already   = p.already_cancelled;
+                return `<button
+                    onclick="cancellations._applyEditLookup('${escHtml(p.program_name)}','${escHtml(p.preferred_time||'')}','${p.application_id||''}')"
+                    ${already ? 'disabled' : ''}
+                    style="display:block;width:100%;text-align:left;padding:8px 12px;margin-bottom:4px;
+                           border:1.5px solid ${already ? '#e5e7eb' : '#0ea5e9'};border-radius:7px;
+                           background:${already ? '#f9fafb' : '#f0f9ff'};
+                           color:${already ? '#9ca3af' : '#0c4a6e'};font-size:.85rem;font-weight:600;cursor:${already ? 'default' : 'pointer'}">
+                    <i class="fas fa-${already ? 'ban' : 'check-circle'}" style="margin-right:6px;color:${already ? '#d1d5db' : '#0ea5e9'}"></i>
+                    ${escHtml(p.program_name)}${escHtml(timeLabel)}
+                    ${already ? ' <span style="font-size:.73rem;color:#9ca3af">(이미 해지 접수됨)</span>' : ''}
+                </button>`;
+            }).join('');
+
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = `
+                <div style="font-size:.78rem;color:#059669;font-weight:600;margin-bottom:6px">
+                    <i class="fas fa-check-circle"></i> ${json.data[0]?.name || ''} — 수강 중 ${list.length}개 프로그램
+                </div>
+                ${btns}`;
+        } catch(e) {
+            resultEl.style.display = 'block';
+            resultEl.innerHTML = `<div style="color:#dc2626;font-size:.82rem">
+                <i class="fas fa-exclamation-triangle"></i> 조회 오류: ${e.message}
+            </div>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-search"></i> 동/호수로 수강 목록 조회 후 선택';
+        }
+    },
+
+    // 수강 목록에서 선택 → 프로그램명/시간 input에 자동 채움
+    _applyEditLookup(programName, preferredTime, applicationId) {
+        const pEl = document.getElementById('editProgramName');
+        const tEl = document.getElementById('editPreferredTime');
+        if (pEl) pEl.value = programName;
+        if (tEl) tEl.value = preferredTime;
+        // 선택 결과 영역에 확인 표시
+        const resultEl = document.getElementById('editLookupResult');
+        if (resultEl) {
+            resultEl.innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;
+                padding:7px 10px;font-size:.82rem;color:#166534;font-weight:600">
+                <i class="fas fa-check-circle"></i> 선택됨: ${escHtml(programName)}${preferredTime ? ' (' + escHtml(preferredTime) + ')' : ''}
+                <span style="font-size:.72rem;font-weight:400;color:#6b7280;margin-left:6px">위 저장 버튼으로 저장하세요</span>
+            </div>`;
+        }
+        // application_id를 hidden으로 기억
+        let hidEl = document.getElementById('editApplicationId');
+        if (!hidEl) {
+            hidEl = document.createElement('input');
+            hidEl.type = 'hidden'; hidEl.id = 'editApplicationId';
+            document.body.appendChild(hidEl);
+        }
+        hidEl.value = applicationId || '';
+    },
+
+    // ── 상세 모달: 수정 내용 저장 ────────────────────────────────────────
+    async _saveDetailEdit(id) {
+        const dong        = (document.getElementById('editDong')?.value        || '').trim();
+        const ho          = (document.getElementById('editHo')?.value          || '').trim();
+        const name        = (document.getElementById('editName')?.value        || '').trim();
+        const phone       = (document.getElementById('editPhone')?.value       || '').trim();
+        const programName = (document.getElementById('editProgramName')?.value || '').trim();
+        const prefTime    = (document.getElementById('editPreferredTime')?.value|| '').trim();
+        const reason      = (document.getElementById('editReason')?.value      || '').trim();
+        const appId       = document.getElementById('editApplicationId')?.value || null;
+
+        if (!dong || !ho || !name) { showToast('동, 호수, 이름은 필수입니다', 'error'); return; }
+
+        try {
+            const payload = { dong, ho, name, phone, reason };
+            if (programName) payload.program_name   = programName;
+            if (prefTime)    payload.preferred_time = prefTime;
+            if (appId)       payload.application_id = appId;
+
+            await API.cancellations.update(id, payload);
+
+            // 로컬 data 즉시 갱신
+            const item = this.data.find(x => x.id === id);
+            if (item) Object.assign(item, payload);
+
+            showToast('수정 내용이 저장되었습니다', 'success');
+            closeGlobalModal();
+            await this.load(this.currentStatus);
+        } catch(e) {
+            showToast('저장 실패: ' + e.message, 'error');
         }
     },
 
