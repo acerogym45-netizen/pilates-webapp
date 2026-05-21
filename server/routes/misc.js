@@ -858,6 +858,7 @@ router.put('/cancellations/:id', async (req, res) => {
     try {
         const {
             status, refund_amount, doc_urls,
+            request_type,            // 유형 변경: 'cancel' | 'mid_cancel' | 'refund'
             // ── 해지 관리비 부과 필드 ──────────────────────────
             termination_date,        // 실제 해지 처리 날짜 (YYYY-MM-DD)
             termination_month,       // 해지 처리 월 (YYYY-MM)
@@ -872,6 +873,11 @@ router.put('/cancellations/:id', async (req, res) => {
         const updates = {};
         if (status !== undefined)       updates.status       = status;
         if (refund_amount !== undefined) updates.refund_amount = refund_amount || 0;
+        // 유형 변경 허용: cancel / mid_cancel / refund
+        const VALID_TYPES = ['cancel', 'mid_cancel', 'refund'];
+        if (request_type !== undefined && VALID_TYPES.includes(request_type)) {
+            updates.request_type = request_type;
+        }
         if (status === 'approved' || status === 'rejected') {
             updates.processed_at = new Date().toISOString();
             // 승인 시 해지 처리 월 자동 설정 (미입력 시)

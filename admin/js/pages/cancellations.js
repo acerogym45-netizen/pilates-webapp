@@ -66,6 +66,9 @@ const cancellations = {
                     <button class="btn-secondary btn-sm" onclick="cancellations.exportBillingCSV()" title="관리비 부과 현황 CSV">
                         <i class="fas fa-file-csv"></i> 관리비 내보내기
                     </button>
+                    <button class="btn-secondary btn-sm" onclick="cancellations.exportListExcel()" title="해지/환불 목록 엑셀 다운로드">
+                        <i class="fas fa-file-excel"></i> 목록 엑셀
+                    </button>
                     <button class="btn-secondary btn-sm" onclick="cancellations.reload()"><i class="fas fa-sync"></i></button>
                 </div>
             </div>
@@ -302,7 +305,8 @@ const cancellations = {
             });
             return;
         }
-        const isRefund = (c.request_type === 'refund');
+        const isRefund   = (c.request_type === 'refund');
+        const isMidCancel = (c.request_type === 'mid_cancel');
         const applyDate = (!isRefund) ? this.calcApplyMonth(c.created_at) : '';  // null → '' 방어
 
         // reason 파싱 (환불)
@@ -451,10 +455,16 @@ const cancellations = {
             <div class="detail-grid">
                 <div class="detail-row">
                     <label>유형</label>
-                    <span>${isRefund
-                        ? '<span class="status-badge badge-refund"><i class=\'fas fa-file-invoice-dollar\'></i> 환불 신청</span>'
-                        : '<span class="status-badge badge-cancel"><i class=\'fas fa-times-circle\'></i> 해지 신청</span>'
-                    }</span>
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <select id="detailTypeSelect"
+                            onchange="cancellations.changeType('${c.id}', this.value)"
+                            style="font-size:.82rem;padding:4px 8px;border:1.5px solid #d1d5db;border-radius:6px;background:#fff;cursor:pointer;font-weight:600">
+                            <option value="cancel"     ${c.request_type === 'cancel'     ? 'selected' : ''}>🗓 차월 해지</option>
+                            <option value="mid_cancel" ${c.request_type === 'mid_cancel' ? 'selected' : ''}>✂️ 중도 해지</option>
+                            <option value="refund"     ${c.request_type === 'refund'     ? 'selected' : ''}>💸 환불 신청</option>
+                        </select>
+                        <span style="font-size:.73rem;color:#9ca3af">변경 시 즉시 저장</span>
+                    </div>
                 </div>
                 <div class="detail-row"><label>상태</label>
                     <span class="status-badge status-${statusClass(c.status)}">${statusLabel(c.status)}</span>
@@ -520,6 +530,10 @@ const cancellations = {
                 <button class="btn-danger btn-sm" onclick="cancellations.updateStatus('${c.id}','rejected')">
                     <i class="fas fa-times"></i> 거부
                 </button>` : ''}
+                ${c.status === 'rejected' || c.status === 'approved' ? `
+                <button class="btn-secondary btn-sm" onclick="if(confirm('대기중으로 되돌리시겠습니까?')) cancellations.updateStatus('${c.id}','pending')">
+                    <i class="fas fa-undo"></i> 대기중으로 되돌리기
+                </button>` : ''}
                 ${!isRefund && c.status === 'approved' ? `
                 <button class="btn-primary btn-sm" onclick="cancellations.showBillingModal('${c.id}')">
                     <i class="fas fa-won-sign"></i> 관리비 부과
@@ -533,6 +547,26 @@ const cancellations = {
         } catch(err) {
             console.error('[cancellations] showDetail 오류:', err);
             alert('상세 정보를 표시하는 중 오류가 발생했습니다: ' + err.message);
+        }
+    },
+
+    // 유형 변경 (차월해지 ↔ 중도해지 ↔ 환불)
+    async changeType(id, newType) {
+        const TYPE_LABELS = { cancel: '차월 해지', mid_cancel: '중도 해지', refund: '환불 신청' };
+        try {
+            await API.cancellations.update(id, { request_type: newType });
+            // data 내부도 즉시 갱신
+            const item = this.data.find(x => x.id === id);
+            if (item) item.request_type = newType;
+            showToast(`유형이 「${TYPE_LABELS[newType] || newType}」로 변경되었습니다`, 'success');
+            await this.load(this.currentStatus);
+            loadBadges();
+        } catch(e) {
+            showToast('유형 변경 실패: ' + e.message, 'error');
+            // select 원복
+            const sel = document.getElementById('detailTypeSelect');
+            const orig = this.data.find(x => x.id === id);
+            if (sel && orig) sel.value = orig.request_type;
         }
     },
 
@@ -967,6 +1001,79 @@ const cancellations = {
         }));
         downloadCSV(`해지관리비_${nowKst.toISOString().slice(0,7)}.csv`, rows, headers);
         showToast(`${rows.length}건 CSV 다운로드 완료`);
+    },
+
+    /** ── 해지·환불 목록 전체 엑셀(CSV) 추출 ─────────────────────────────
+     *  현재 탭(차월해지/중도해지/환불) + 전체 상태를 한 번에 내보냄
+     *  엑셀에서 바로 열 수 있는 UTF-8 BOM CSV 형식
+     */
+    async exportListExcel() {
+        const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
+        const TYPE_LABEL = { cancel: '차월 해지', mid_cancel: '중도 해지', refund: '환불 신청' };
+        const STATUS_LABEL = { pending: '대기중', approved: '승인', rejected: '거부' };
+
+        // 현재 단지의 모든 유형 전체 조회
+        let allData = [];
+        try {
+            showToast('데이터 조회 중...', 'info');
+            const cxId = getEffectiveComplexId();
+            // 차월해지, 중도해지, 환불 순차 조회
+            const [r1, r2, r3] = await Promise.all([
+                API.cancellations.list({ complexId: cxId, request_type: 'cancel' }),
+                API.cancellations.list({ complexId: cxId, request_type: 'mid_cancel' }),
+                API.cancellations.list({ complexId: cxId, request_type: 'refund' }),
+            ]);
+            allData = [
+                ...(r1.data || []),
+                ...(r2.data || []),
+                ...(r3.data || []),
+            ];
+        } catch(e) {
+            showToast('데이터 조회 실패: ' + e.message, 'error');
+            return;
+        }
+
+        if (!allData.length) { showToast('내보낼 데이터가 없습니다', 'error'); return; }
+
+        // 날짜 기준 최신순 정렬
+        allData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        const headers = [
+            '유형', '상태', '이름', '동', '호수', '전화번호',
+            '프로그램', '희망시간', '사유',
+            '해지적용예정일', '해지처리월', '해지처리날짜',
+            '수강횟수', '총수업횟수', '수강료단가', '청구금액', '청구완료',
+            '환불금액', '신청일', '처리일'
+        ];
+        const rows = allData.map(c => {
+            const applyDate = (c.request_type !== 'refund') ? this.calcApplyMonth(c.created_at) : '';
+            return {
+                '유형':         TYPE_LABEL[c.request_type] || c.request_type,
+                '상태':         STATUS_LABEL[c.status] || c.status,
+                '이름':         c.name || '',
+                '동':           c.dong || '',
+                '호수':         c.ho || '',
+                '전화번호':     fmtPhone(c.phone),
+                '프로그램':     c.program_name || '',
+                '희망시간':     c.preferred_time || '',
+                '사유':         c.reason || '',
+                '해지적용예정일': applyDate,
+                '해지처리월':   c.termination_month || '',
+                '해지처리날짜': c.termination_date || '',
+                '수강횟수':     c.attended_sessions ?? '',
+                '총수업횟수':   c.total_sessions_in_month ?? '',
+                '수강료단가':   c.session_fee ?? '',
+                '청구금액':     c.billing_amount ?? '',
+                '청구완료':     c.billing_processed ? '완료' : (c.billing_amount > 0 ? '미처리' : ''),
+                '환불금액':     c.refund_amount ? c.refund_amount : '',
+                '신청일':       formatDate(c.created_at),
+                '처리일':       c.processed_at ? formatDate(c.processed_at) : '',
+            };
+        });
+
+        const dateStr = nowKst.toISOString().slice(0, 10);
+        downloadCSV(`해지환불목록_${dateStr}.csv`, rows, headers);
+        showToast(`총 ${rows.length}건 엑셀 다운로드 완료 (차월해지 ${allData.filter(x=>x.request_type==='cancel').length}건 / 중도해지 ${allData.filter(x=>x.request_type==='mid_cancel').length}건 / 환불 ${allData.filter(x=>x.request_type==='refund').length}건)`, 'success');
     },
 
     /**
