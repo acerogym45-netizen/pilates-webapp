@@ -155,15 +155,28 @@ router.get('/program-summary', async (req, res) => {
         const seen = new Set(appsById.map(a => a.id));
         const apps = [...appsById, ...appsByName.filter(a => !seen.has(a.id))];
 
+        // program_id → 프로그램명 역방향 맵 구성 (교차 검증용)
+        // 잘못된 program_id가 저장된 데이터(다른 프로그램의 ID를 갖는 신청)를 필터링하기 위함
+        const idToName = {};
+        (rawPrograms || []).forEach(p => { idToName[p.id] = p.name; });
+
         // 프로그램 그룹별 집계
         const result = programs.map(grp => {
             const prog     = grp.representative;
             const capacity = prog.capacity || 6;
             const slots    = [...grp.slots].sort();
-            const progApps = apps.filter(a =>
-                grp.ids.includes(a.program_id) ||
-                (a.program_id == null && a.program_name === prog.name)
-            );
+            const progApps = apps.filter(a => {
+                if (a.program_id == null) {
+                    // program_id 없음 → program_name으로만 매칭
+                    return a.program_name === prog.name;
+                }
+                // program_id 있음 → 이 그룹 ids에 포함되고,
+                // program_name도 이 그룹 이름과 일치해야 함 (오염된 program_id 방지)
+                if (!grp.ids.includes(a.program_id)) return false;
+                // program_name이 있으면 교차 검증, 없으면 program_id만으로 허용
+                if (a.program_name) return a.program_name === prog.name;
+                return true;
+            });
 
             const approved  = progApps.filter(a => a.status === 'approved');
             const waiting   = progApps.filter(a => a.status === 'waiting');
