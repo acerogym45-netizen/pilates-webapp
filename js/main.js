@@ -38,8 +38,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     // 1. 먼저 단지 컨텍스트 로드
     await initializeComplexContext();
     console.log('✅ Complex context initialized');
+
+    // 2. 문의하기 퀵액션 표시 여부 적용 (show_inquiry 설정)
+    applyInquiryVisibility();
     
-    // 2. 나머지 초기화
+    // 3. 나머지 초기화
     setupEventListeners();
     setMinDate();
     setSignatureDate();
@@ -52,6 +55,33 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     console.log('✅ Application ready');
 });
+
+// ── 문의하기 퀵액션 표시/숨김 적용 ─────────────────────────────────────
+// complexes.show_inquiry = false 이면
+//  - "문의하기" 버튼 숨김
+//  - "내 문의 조회" 행 숨김
+//  - 2행 그리드를 5열→4열로 전환 (빈칸 없이 정렬)
+function applyInquiryVisibility() {
+    const complex = complexContext?.getComplex?.();
+    // show_inquiry가 명시적으로 false인 경우만 숨김 (null/undefined는 true로 간주)
+    const show = complex?.show_inquiry !== false;
+
+    const btnInquiry    = document.getElementById('quickBtnInquiry');
+    const rowInquiryMain= document.getElementById('quickRowInquiryMain');
+    const rowFive       = document.getElementById('quickRowFive');
+
+    if (!show) {
+        // 문의하기 버튼 숨김
+        if (btnInquiry)     btnInquiry.style.display     = 'none';
+        // 내 문의 조회 행 숨김
+        if (rowInquiryMain) rowInquiryMain.style.display = 'none';
+        // 2행 그리드: 5열 → 4열 전환
+        if (rowFive) {
+            rowFive.classList.remove('quick-row--five');
+            rowFive.classList.add('quick-row--four');
+        }
+    }
+}
 
 // Setup Event Listeners
 function setupEventListeners() {

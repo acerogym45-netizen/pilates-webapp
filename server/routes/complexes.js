@@ -411,7 +411,7 @@ router.delete('/:id', async (req, res) => {
 // ── 내 단지 설정 수정 (일반 관리자) ──────────────────────────
 router.put('/:id/self', async (req, res) => {
     try {
-        const { currentPassword, name, address, primary_color, new_password } = req.body;
+        const { currentPassword, name, address, primary_color, new_password, show_inquiry } = req.body;
         const sb = getSupabase();
 
         const { data: existing, error: fetchErr } = await sb
@@ -426,14 +426,20 @@ router.put('/:id/self', async (req, res) => {
             return res.status(403).json({ success: false, error: '현재 비밀번호가 올바르지 않습니다' });
         }
 
+        const updatePayload = {
+            name: name || existing.name,
+            address: address !== undefined ? address : existing.address,
+            primary_color: primary_color || existing.primary_color,
+            admin_password: new_password || existing.admin_password,
+        };
+        // show_inquiry: 명시적으로 전달된 경우만 업데이트 (boolean)
+        if (show_inquiry !== undefined) {
+            updatePayload.show_inquiry = Boolean(show_inquiry);
+        }
+
         const { data, error } = await sb
             .from('complexes')
-            .update({
-                name: name || existing.name,
-                address: address !== undefined ? address : existing.address,
-                primary_color: primary_color || existing.primary_color,
-                admin_password: new_password || existing.admin_password
-            })
+            .update(updatePayload)
             .eq('id', req.params.id)
             .select()
             .single();

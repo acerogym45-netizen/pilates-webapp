@@ -66,7 +66,7 @@
         <div class="quick-actions-wrap">
 
             <!-- 1행: 내 문의 조회 (단독 전체 너비) -->
-            <div class="quick-row quick-row--single">
+            <div class="quick-row quick-row--single" id="quickRowInquiryMain">
                 <button class="quick-btn quick-btn--inquiry-main" onclick="showMyInquiryModal()">
                     <i class="fas fa-search"></i>
                     <span>내 문의 조회</span>
@@ -74,7 +74,8 @@
             </div>
 
             <!-- 2행: 시간표 / 커리큘럼 / 강사 소개 / 공지사항 / 문의하기 -->
-            <div class="quick-row quick-row--five">
+            <!-- show_inquiry=false 단지는 JS에서 quick-row--four로 전환 + 문의하기 버튼 숨김 -->
+            <div class="quick-row quick-row--five" id="quickRowFive">
                 <button class="quick-btn quick-btn--timetable" onclick="showTimetableModal()">
                     <i class="fas fa-table"></i>
                     <span>시간표</span>
@@ -91,7 +92,7 @@
                     <i class="fas fa-bullhorn"></i>
                     <span>공지사항</span>
                 </button>
-                <button class="quick-btn" onclick="showInquiryForm()">
+                <button class="quick-btn" id="quickBtnInquiry" onclick="showInquiryForm()">
                     <i class="fas fa-pen"></i>
                     <span>문의하기</span>
                 </button>
