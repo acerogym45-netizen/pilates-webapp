@@ -1003,77 +1003,128 @@ const cancellations = {
         showToast(`${rows.length}건 CSV 다운로드 완료`);
     },
 
-    /** ── 해지·환불 목록 전체 엑셀(CSV) 추출 ─────────────────────────────
-     *  현재 탭(차월해지/중도해지/환불) + 전체 상태를 한 번에 내보냄
-     *  엑셀에서 바로 열 수 있는 UTF-8 BOM CSV 형식
+    /** ── 해지·환불 목록 전체 XLSX 추출 ─────────────────────────────
+     *  차월해지 / 중도해지 / 환불 신청을 시트 3개로 분리해서 .xlsx 저장
      */
     async exportListExcel() {
         const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-        const TYPE_LABEL = { cancel: '차월 해지', mid_cancel: '중도 해지', refund: '환불 신청' };
+        const TYPE_LABEL   = { cancel: '차월 해지', mid_cancel: '중도 해지', refund: '환불 신청' };
         const STATUS_LABEL = { pending: '대기중', approved: '승인', rejected: '거부' };
 
-        // 현재 단지의 모든 유형 전체 조회
-        let allData = [];
+        // ── 1. SheetJS 로드 ──────────────────────────────────────────
+        await new Promise((resolve, reject) => {
+            if (window.XLSX) { resolve(); return; }
+            const s = document.createElement('script');
+            s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+            s.onload  = resolve;
+            s.onerror = () => reject(new Error('SheetJS 로드 실패'));
+            document.head.appendChild(s);
+        });
+        const XLSX = window.XLSX;
+
+        // ── 2. 전체 데이터 조회 ──────────────────────────────────────
+        let cancelList = [], midList = [], refundList = [];
         try {
             showToast('데이터 조회 중...', 'info');
             const cxId = getEffectiveComplexId();
-            // 차월해지, 중도해지, 환불 순차 조회
             const [r1, r2, r3] = await Promise.all([
                 API.cancellations.list({ complexId: cxId, request_type: 'cancel' }),
                 API.cancellations.list({ complexId: cxId, request_type: 'mid_cancel' }),
                 API.cancellations.list({ complexId: cxId, request_type: 'refund' }),
             ]);
-            allData = [
-                ...(r1.data || []),
-                ...(r2.data || []),
-                ...(r3.data || []),
-            ];
+            cancelList = (r1.data || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+            midList    = (r2.data || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+            refundList = (r3.data || []).sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
         } catch(e) {
             showToast('데이터 조회 실패: ' + e.message, 'error');
             return;
         }
+        const total = cancelList.length + midList.length + refundList.length;
+        if (!total) { showToast('내보낼 데이터가 없습니다', 'error'); return; }
 
-        if (!allData.length) { showToast('내보낼 데이터가 없습니다', 'error'); return; }
+        // ── 3. 시트 생성 헬퍼 ────────────────────────────────────────
+        const CANCEL_HEADERS = ['상태','이름','동','호수','전화번호','프로그램','희망시간','사유',
+                                '해지적용예정일','해지처리월','해지처리날짜',
+                                '수강횟수','총수업횟수','수강료단가','청구금액','청구완료','신청일','처리일'];
+        const REFUND_HEADERS  = ['상태','이름','동','호수','전화번호','사유','환불금액','신청일','처리일'];
 
-        // 날짜 기준 최신순 정렬
-        allData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-        const headers = [
-            '유형', '상태', '이름', '동', '호수', '전화번호',
-            '프로그램', '희망시간', '사유',
-            '해지적용예정일', '해지처리월', '해지처리날짜',
-            '수강횟수', '총수업횟수', '수강료단가', '청구금액', '청구완료',
-            '환불금액', '신청일', '처리일'
-        ];
-        const rows = allData.map(c => {
-            const applyDate = (c.request_type !== 'refund') ? this.calcApplyMonth(c.created_at) : '';
-            return {
-                '유형':         TYPE_LABEL[c.request_type] || c.request_type,
-                '상태':         STATUS_LABEL[c.status] || c.status,
-                '이름':         c.name || '',
-                '동':           c.dong || '',
-                '호수':         c.ho || '',
-                '전화번호':     fmtPhone(c.phone),
-                '프로그램':     c.program_name || '',
-                '희망시간':     c.preferred_time || '',
-                '사유':         c.reason || '',
-                '해지적용예정일': applyDate,
-                '해지처리월':   c.termination_month || '',
-                '해지처리날짜': c.termination_date || '',
-                '수강횟수':     c.attended_sessions ?? '',
-                '총수업횟수':   c.total_sessions_in_month ?? '',
-                '수강료단가':   c.session_fee ?? '',
-                '청구금액':     c.billing_amount ?? '',
-                '청구완료':     c.billing_processed ? '완료' : (c.billing_amount > 0 ? '미처리' : ''),
-                '환불금액':     c.refund_amount ? c.refund_amount : '',
-                '신청일':       formatDate(c.created_at),
-                '처리일':       c.processed_at ? formatDate(c.processed_at) : '',
-            };
+        const makeCancelRows = (list) => list.map(c => {
+            const applyDate = this.calcApplyMonth(c.created_at) || '';
+            return [
+                STATUS_LABEL[c.status]  || c.status,
+                c.name || '',
+                c.dong || '',
+                c.ho   || '',
+                fmtPhone(c.phone),
+                c.program_name  || '',
+                c.preferred_time || '',
+                c.reason || '',
+                applyDate,
+                c.termination_month  || '',
+                c.termination_date   || '',
+                c.attended_sessions  ?? '',
+                c.total_sessions_in_month ?? '',
+                c.session_fee        ?? '',
+                c.billing_amount     ?? '',
+                c.billing_processed  ? '완료' : (c.billing_amount > 0 ? '미처리' : ''),
+                formatDate(c.created_at),
+                c.processed_at ? formatDate(c.processed_at) : '',
+            ];
         });
 
-        const dateStr = nowKst.toISOString().slice(0, 10);
-        downloadCSV(`해지환불목록_${dateStr}.csv`, rows, headers);
-        showToast(`총 ${rows.length}건 엑셀 다운로드 완료 (차월해지 ${allData.filter(x=>x.request_type==='cancel').length}건 / 중도해지 ${allData.filter(x=>x.request_type==='mid_cancel').length}건 / 환불 ${allData.filter(x=>x.request_type==='refund').length}건)`, 'success');
+        const makeRefundRows = (list) => list.map(c => [
+            STATUS_LABEL[c.status] || c.status,
+            c.name || '',
+            c.dong || '',
+            c.ho   || '',
+            fmtPhone(c.phone),
+            c.reason || '',
+            c.refund_amount || '',
+            formatDate(c.created_at),
+            c.processed_at ? formatDate(c.processed_at) : '',
+        ]);
+
+        // 헤더행 스타일 적용 헬퍼
+        const styledSheet = (headers, dataRows, sheetTitle) => {
+            const aoa = [headers, ...dataRows];
+            const ws  = XLSX.utils.aoa_to_sheet(aoa);
+            // 컬럼 너비 자동 설정
+            ws['!cols'] = headers.map((h, i) => {
+                const maxLen = Math.max(
+                    h.length,
+                    ...dataRows.map(r => String(r[i] ?? '').length)
+                );
+                return { wch: Math.min(Math.max(maxLen + 2, 8), 30) };
+            });
+            // 헤더 셀 굵게 + 배경색
+            headers.forEach((_, c) => {
+                const ref = XLSX.utils.encode_cell({ r: 0, c });
+                if (!ws[ref]) return;
+                ws[ref].s = {
+                    font:    { bold: true, color: { rgb: 'FFFFFF' } },
+                    fill:    { fgColor: { rgb: '4F46E5' } },
+                    alignment: { horizontal: 'center' },
+                };
+            });
+            return ws;
+        };
+
+        // ── 4. 워크북 조립 ────────────────────────────────────────────
+        const wb = XLSX.utils.book_new();
+
+        const ws1 = styledSheet(CANCEL_HEADERS, makeCancelRows(cancelList),  '차월 해지');
+        const ws2 = styledSheet(CANCEL_HEADERS, makeCancelRows(midList),     '중도 해지');
+        const ws3 = styledSheet(REFUND_HEADERS, makeRefundRows(refundList),  '환불 신청');
+
+        XLSX.utils.book_append_sheet(wb, ws1, `🗓 차월 해지(${cancelList.length}건)`);
+        XLSX.utils.book_append_sheet(wb, ws2, `✂️ 중도 해지(${midList.length}건)`);
+        XLSX.utils.book_append_sheet(wb, ws3, `💸 환불 신청(${refundList.length}건)`);
+
+        // ── 5. 파일 저장 ──────────────────────────────────────────────
+        const dateStr  = nowKst.toISOString().slice(0, 10);
+        const fileName = `해지환불목록_${dateStr}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+        showToast(`총 ${total}건 XLSX 다운로드 완료 (차월 ${cancelList.length} / 중도 ${midList.length} / 환불 ${refundList.length})`, 'success');
     },
 
     /**
