@@ -242,12 +242,17 @@ router.get('/fee-settlement', async (req, res) => {
         }
 
         // 프로그램 price 맵 (해당 단지만)
+        // is_active 조건 없이 전체 조회 — 비활성화된 프로그램도 정산에 사용해야 하므로
+        // 동일 이름이 여러 개면 price가 큰 것(가장 최근 등록 기준)을 우선 사용
         let priceMap = {};
         {
             const { data: progs } = await sb
-                .from('programs').select('name, price')
-                .eq('is_active', true).eq('complex_id', cxId);  // ← 단지 필터 필수
+                .from('programs').select('id, name, price, is_active')
+                .eq('complex_id', cxId)  // ← 단지 필터 필수 (is_active 조건 제거)
+                .order('is_active', { ascending: false })  // 활성 프로그램 우선
+                .order('created_at', { ascending: false }); // 최신 등록 우선
             (progs || []).forEach(p => {
+                // 같은 이름이 여러 개면 처음(활성+최신) 것만 사용
                 if (p.price && !priceMap[p.name]) priceMap[p.name] = parseInt(p.price);
             });
         }
