@@ -50,8 +50,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     loadTimeSlotStatus();
     loadPublicInquiries();
     loadNotices();
-    renderPeriodBanner();   // 접수·해지 기간 배너
-    initManageTabBar();     // 내 신청 취소·변경 탭바 초기화
+    renderPeriodBanner();              // 접수·해지 기간 배너
+    initManageTabBar();                // 내 신청 취소·변경 탭바 초기화
+    _updateContractPeriodLabels();     // 계약서·해지모달 기간 텍스트 실시간 반영
     
     console.log('✅ Application ready');
 });
@@ -1299,6 +1300,39 @@ async function _getManagePeriodSetting() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   계약서 페이지 · 레슨 해지 모달 내 하드코딩 기간 텍스트 동적 업데이트
+   ─ 서버 apply-settings + apply-period 기반으로 실시간 반영
+   ═══════════════════════════════════════════════════════════════ */
+async function _updateContractPeriodLabels() {
+    const { periodLabel, cancelPeriodLabel, globalLabel, newSetting, cancelSetting } = await _getManagePeriodSetting();
+
+    // 계약서 상단 "신청·해지 기간 필수 안내" 섹션
+    // 등록 접수 기간
+    const newPeriodEl = document.getElementById('contractNewPeriodDate');
+    if (newPeriodEl) newPeriodEl.innerHTML = `매월 <strong>${periodLabel}</strong>`;
+
+    // 해지 신청 기간
+    const cancelPeriodEl = document.getElementById('contractCancelPeriodDate');
+    if (cancelPeriodEl) cancelPeriodEl.innerHTML = `매월 <strong>${cancelPeriodLabel}</strong>`;
+
+    // 자동 재등록 안내 텍스트 내 기간
+    const autoRenewEl = document.getElementById('contractAutoRenewPeriod');
+    if (autoRenewEl) autoRenewEl.textContent = cancelPeriodLabel;
+
+    // 해지 및 환불 규정 → "해지 신청 기간" (strong#policyHaejiPeriod1)
+    const p1 = document.getElementById('policyHaejiPeriod1');
+    if (p1) p1.textContent = cancelPeriodLabel;
+
+    // 이용약관 ② 환불 규정 내 (span#policyHaejiPeriod2)
+    const p2 = document.getElementById('policyHaejiPeriod2');
+    if (p2) p2.textContent = cancelPeriodLabel;
+
+    // 이용약관 ⑧ 자동 연장 및 해지 신청 (strong#policyHaejiPeriod3)
+    const p3 = document.getElementById('policyHaejiPeriod3');
+    if (p3) p3.textContent = cancelPeriodLabel;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    내 신청 취소·변경 탭바 초기화 (페이지 로드 시)
    ─ 서버 apply-settings 기반으로 탭바/배지/헤더 버튼 활성화
    ═══════════════════════════════════════════════════════════════ */
@@ -2037,6 +2071,19 @@ async function showCancellationForm() {
     const kst = new Date(now.getTime() + 9*60*60*1000);
     const d = kst.getUTCDate(), h = kst.getUTCHours();
 
+    const fmtKst = (iso) => {
+        const dt = new Date(iso);
+        const kd = new Date(dt.getTime() + 9*60*60*1000);
+        const mo = kd.getUTCMonth()+1, dy = kd.getUTCDate(), hr = kd.getUTCHours(), mi = kd.getUTCMinutes();
+        return `${mo}월 ${dy}일 ${hr}시${mi ? ' '+mi+'분' : ''}`;
+    };
+
+    // 모달 내 접수 기간 레이블 업데이트 헬퍼
+    const updateModalPeriodLabel = (label) => {
+        const el = document.getElementById('cancelModalPeriodLabel');
+        if (el) el.textContent = label;
+    };
+
     if (complexId) {
         try {
             // apply-settings(개별)와 apply-period(global) 병렬 조회
@@ -2051,15 +2098,19 @@ async function showCancellationForm() {
                 const mode    = setting?.period_mode || 'auto';
 
                 let isOpen = false;
+                let periodLabel = '매월 22일 09시 ~ 26일 09시 (KST)';
+
                 if (mode === 'always') {
                     isOpen = true;
+                    periodLabel = '상시 가능';
                 } else if (mode === 'closed') {
                     isOpen = false;
+                    periodLabel = '현재 접수 마감';
                 } else if (mode === 'custom' && setting?.period_start && setting?.period_end) {
                     isOpen = now >= new Date(setting.period_start) && now <= new Date(setting.period_end);
+                    periodLabel = `${fmtKst(setting.period_start)} ~ ${fmtKst(setting.period_end)} (KST)`;
                 } else {
-                    // auto: 서버가 global 설정 포함해서 계산한 is_open 직접 사용
-                    // (apply-settings GET의 is_open이 complexCustomOpen 기반으로 정확히 계산됨)
+                    // auto: global 설정 기반 is_open + periodLabel
                     if (setting && typeof setting.is_open === 'boolean') {
                         isOpen = setting.is_open;
                     } else if (jsonP.success && typeof jsonP.data?.is_open === 'boolean') {
@@ -2067,15 +2118,22 @@ async function showCancellationForm() {
                     } else {
                         isOpen = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
                     }
+                    // global custom 설정이 있으면 그 날짜로 레이블 생성
+                    if (jsonP.success && jsonP.data?.mode === 'custom' && jsonP.data?.apply_start) {
+                        periodLabel = `${fmtKst(jsonP.data.apply_start)} ~ ${fmtKst(jsonP.data.apply_end)} (KST)`;
+                    } else if (jsonP.success && jsonP.data?.mode === 'always_open') {
+                        periodLabel = '상시 가능';
+                    }
                 }
 
                 if (!isOpen) {
                     await showCancellationPeriodWarning(kst.getUTCMonth()+1, d, h);
                     return;
                 }
-                // isOpen → 모달 열기
+                // isOpen → 모달 열기 + 레이블 업데이트
                 resetCancelFormMain();
                 document.getElementById('cancellationModal').classList.add('active');
+                updateModalPeriodLabel(periodLabel);
                 return;
             }
         } catch(e) { /* 서버 오류 시 하드코딩 기본값으로 폴백 */ }
@@ -2089,6 +2147,7 @@ async function showCancellationForm() {
     }
     resetCancelFormMain();
     document.getElementById('cancellationModal').classList.add('active');
+    updateModalPeriodLabel('매월 22일 09시 ~ 26일 09시 (KST)');
 }
 
 // ── 전화번호 포맷 ────────────────────────────────────────────────────────────
@@ -2520,49 +2579,65 @@ function notices_openImageModal(url) {
 async function loadPrograms() {
     try {
         const complexCode = complexContext.getComplexCode();
+        const complexId   = complexContext?.getComplexId?.();
         if (!complexCode) {
             console.warn('⚠️ Complex code not available for programs');
             return;
         }
-        
-        // /api/programs 엔드포인트로 단지별 프로그램 조회 (비활성 포함)
-        const response = await fetch(`/api/programs?complexCode=${complexCode}&includeInactive=true`);
-        const result = await response.json();
-        
-        // 승인된 신청 수 조회
-        const contractsResponse = await fetch(`/api/applications?complexCode=${complexCode}&status=approved&limit=1000`);
-        const contractsResult = await contractsResponse.json();
+
+        // 프로그램 목록 + 승인된 신청 수 + 신청기간 설정(apply-settings) 병렬 조회
+        const fetchPromises = [
+            fetch(`/api/programs?complexCode=${complexCode}&includeInactive=true`).then(r => r.json()),
+            fetch(`/api/applications?complexCode=${complexCode}&status=approved&limit=1000`).then(r => r.json()),
+        ];
+        if (complexId) {
+            fetchPromises.push(
+                fetch(`/api/complexes/${complexId}/apply-settings`).then(r => r.json()).catch(() => null),
+                fetch(`/api/complexes/${complexId}/apply-period`).then(r => r.json()).catch(() => null),
+            );
+        }
+        const [result, contractsResult, jsonS, jsonP] = await Promise.all(fetchPromises);
         const approvedContracts = contractsResult.data || [];
-        
+
+        // ── 신청기간 설정에서 신규 수강 신청(new)의 is_open 읽기 ──
+        // is_open은 서버가 auto 모드일 때 global apply-period 기반으로 이미 계산해서 반환
+        let newApplyIsOpen = null; // null = 서버 값 없음 → is_active 폴백
+        if (jsonS && jsonS.success) {
+            const newSetting = (jsonS.data || []).find(x => x.apply_type_key === 'new');
+            if (newSetting) newApplyIsOpen = !!newSetting.is_open;
+        }
+        console.log(`📅 신규 수강 신청 is_open (apply-settings): ${newApplyIsOpen}`);
+
         console.log(`📊 Found ${approvedContracts.length} approved contracts for complex ${complexCode}`);
-        
+
         // Filter programs: active OR (inactive but show_on_inactive=true/null/undefined)
         // show_on_inactive가 명시적으로 false일 때만 입주민 페이지에서 숨김
         const programs = (result.data || [])
             .filter(p => p.is_active || p.show_on_inactive === true || p.show_on_inactive === null || p.show_on_inactive === undefined)
             .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
-        
+
         console.log(`✅ Filtered programs: ${programs.length} (active or display_on_inactive)`);
-        
+
         // Calculate current count for each program based on approved contracts
         programs.forEach(program => {
             const pName = program.name || program.program_name;
-            const count = approvedContracts.filter(c => 
+            const count = approvedContracts.filter(c =>
                 (c.program_name || c.lesson_type) === pName
             ).length;
             program.current_count = count;
             program._displayName = pName;
-            console.log(`📌 Program "${pName}": ${count}/${program.capacity || program.max_capacity} (승인된 신청자) - active: ${program.is_active}`);
+            console.log(`📌 Program "${pName}": ${count}/${program.capacity || program.max_capacity} (승인된 신청자) - is_active: ${program.is_active}`);
         });
-        
+
         console.log(`📋 Loaded ${programs.length} programs for complex ${complexCode}`);
-        
+
         if (programs.length > 0) {
-            populateProgramOptions(programs);
+            // newApplyIsOpen: apply-settings new.is_open (null이면 is_active 폴백)
+            populateProgramOptions(programs, newApplyIsOpen);
         } else {
             console.warn('⚠️ No programs found for complex', complexCode);
         }
-        
+
     } catch (error) {
         console.error('Error loading programs:', error);
         console.warn('⚠️ Using default program options');
@@ -2570,25 +2645,43 @@ async function loadPrograms() {
 }
 
 // Populate program options in select dropdown
-function populateProgramOptions(programs) {
+// newApplyIsOpen: apply-settings의 'new' 타입 is_open 값 (null이면 is_active 폴백)
+function populateProgramOptions(programs, newApplyIsOpen = null) {
     const lessonTypeSelect = document.getElementById('lessonType');
     if (!lessonTypeSelect) return;
-    
+
     // Keep the first "선택하세요" option
     lessonTypeSelect.innerHTML = '<option value="">선택하세요</option>';
-    
+
     programs.forEach(program => {
         const pName = program._displayName || program.name || program.program_name;
         const option = document.createElement('option');
         option.value = pName;
-        
+
         const currentCount = program.current_count || 0;
         const maxCapacity = program.capacity || program.max_capacity || 0;
         const isActive = program.is_active;
-        
+
+        // ── '곧 오픈 예정' 판단 ──────────────────────────────────────
+        // 우선순위: apply-settings new.is_open > programs.is_active
+        // newApplyIsOpen === null 이면 서버 apply-settings 조회 실패 → is_active 폴백
+        // newApplyIsOpen === false 이면 신청 기간 아님 → 모든 프로그램 '곧 오픈 예정'
+        // newApplyIsOpen === true  이면 신청 기간 중  → 기존 is_active 기준 사용
+        let showAsComingSoon;
+        if (newApplyIsOpen === null) {
+            // apply-settings 조회 실패: 기존 is_active 기준 유지
+            showAsComingSoon = !isActive;
+        } else if (newApplyIsOpen === false) {
+            // 신청 기간이 아님: 모든 프로그램 비활성 표시
+            showAsComingSoon = true;
+        } else {
+            // 신청 기간 중: is_active가 false인 것만 '곧 오픈 예정'
+            showAsComingSoon = !isActive;
+        }
+
         // Check if it's 1:1 or 2:1 lesson
         const isPersonalLesson = pName.includes('1:1') || pName.includes('2:1');
-        
+
         // Build display text
         let displayText = pName;
         if (program.days) {
@@ -2597,21 +2690,21 @@ function populateProgramOptions(programs) {
         if (program.price) {
             displayText += ` - ${formatPrice(program.price)}원/월`;
         }
-        
+
         // Add "별도 문의" for personal lessons instead of capacity
         if (isPersonalLesson) {
             displayText += ' [별도 문의]';
         }
-        
-        // Add "곧 오픈" or "준비중" for inactive programs
-        if (!isActive) {
+
+        // Add "곧 오픈 예정": apply-settings new.is_open 기반 (schedule_mode 무관)
+        if (showAsComingSoon) {
             displayText += ' [곧 오픈 예정]';
             option.disabled = true;
             option.style.color = '#999';
         }
-        
+
         option.textContent = displayText;
-        
+
         // Store program data as data attributes
         option.dataset.programId = program.id;
         option.dataset.programType = program.type || program.program_type;
@@ -2623,11 +2716,15 @@ function populateProgramOptions(programs) {
         option.dataset.isPersonalLesson = isPersonalLesson;
         option.dataset.availableTimeSlots = JSON.stringify(program.time_slots || program.available_time_slots || []);
         option.dataset.isActive = isActive;
-        
+
         lessonTypeSelect.appendChild(option);
     });
-    
-    console.log(`✅ Populated ${programs.length} program options (${programs.filter(p => !p.is_active).length} inactive but visible)`);
+
+    const comingSoonCount = programs.filter((_, i) => {
+        const opt = lessonTypeSelect.options[i + 1];
+        return opt && opt.disabled;
+    }).length;
+    console.log(`✅ Populated ${programs.length} program options (newApplyIsOpen=${newApplyIsOpen}, comingSoon=${comingSoonCount})`);
 }
 
 // Format price helper

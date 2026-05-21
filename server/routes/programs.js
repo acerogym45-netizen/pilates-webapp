@@ -42,6 +42,7 @@ router.get('/', async (req, res) => {
 // ── 현재 자동 스케줄 상태 조회 ───────────────────────────────────
 // GET /api/programs/schedule-status?complexId=
 // ※ 반드시 /:id 라우트보다 앞에 위치해야 함 (라우트 충돌 방지)
+// ※ admin 프로그램 관리 패널에서는 더 이상 사용하지 않음 (신청 관리의 apply-settings 기반으로 교체됨)
 router.get('/schedule-status', async (req, res) => {
     try {
         const nowUtc  = new Date();
@@ -51,38 +52,57 @@ router.get('/schedule-status', async (req, res) => {
         const minKst  = nowKst.getUTCMinutes();
         const monKst  = nowKst.getUTCMonth() + 1;
 
-        const isInPeriod =
-            (dayKst === 22 && hourKst >= 9) ||
-            (dayKst > 22 && dayKst < 26)   ||
-            (dayKst === 26 && hourKst < 9);
-
-        // 다음 전환 시각 계산 (auto 모드용)
-        let nextToggleKst, nextAction;
-        if (isInPeriod) {
-            const nextDate = new Date(nowKst);
-            nextDate.setUTCDate(26); nextDate.setUTCHours(9); nextDate.setUTCMinutes(0); nextDate.setUTCSeconds(0);
-            if (nextDate <= nowKst) { nextDate.setUTCMonth(nextDate.getUTCMonth() + 1); }
-            nextToggleKst = `${nextDate.getUTCMonth()+1}월 26일 09:00`;
-            nextAction = '비활성화';
-        } else {
-            const nextDate = new Date(nowKst);
-            nextDate.setUTCDate(22); nextDate.setUTCHours(9); nextDate.setUTCMinutes(0); nextDate.setUTCSeconds(0);
-            if (nextDate <= nowKst) { nextDate.setUTCMonth(nextDate.getUTCMonth() + 1); }
-            nextToggleKst = `${nextDate.getUTCMonth()+1}월 22일 09:00`;
-            nextAction = '활성화';
-        }
-
-        // 단지별 schedule_mode 조회
-        let scheduleMode = 'auto';
+        const sb = getSupabase();
         const { complexId } = req.query;
+
+        // ── apply-period(global) 기반 isInPeriod 계산 ─────────────────
+        // 단지 설정 조회: apply_period_enabled, apply_start, apply_end
+        let isInPeriod = false;
+        let scheduleMode = 'auto';
+        let periodInfo = '매월 22일 09:00 ~ 26일 09:00 KST';
+
         if (complexId && /^[0-9a-f-]{36}$/i.test(complexId)) {
-            const sb = getSupabase();
             const { data: cx } = await sb
                 .from('complexes')
-                .select('schedule_mode')
+                .select('apply_period_enabled, apply_start, apply_end, schedule_mode')
                 .eq('id', complexId)
                 .single();
-            if (cx?.schedule_mode) scheduleMode = cx.schedule_mode;
+            if (cx) {
+                if (cx.schedule_mode) scheduleMode = cx.schedule_mode;
+                if (cx.apply_period_enabled && cx.apply_start && cx.apply_end) {
+                    // custom 기간: apply_start ~ apply_end
+                    isInPeriod = nowUtc >= new Date(cx.apply_start) && nowUtc <= new Date(cx.apply_end);
+                    const fmtKst = (iso) => {
+                        const d = new Date(iso);
+                        const kd = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+                        return `${kd.getUTCMonth()+1}월 ${kd.getUTCDate()}일 ${String(kd.getUTCHours()).padStart(2,'0')}:${String(kd.getUTCMinutes()).padStart(2,'0')}`;
+                    };
+                    periodInfo = `${fmtKst(cx.apply_start)} ~ ${fmtKst(cx.apply_end)} KST`;
+                } else if (cx.apply_period_enabled && !cx.apply_start && !cx.apply_end) {
+                    // always_open: 상시 접수
+                    isInPeriod = true;
+                    periodInfo = '상시 접수';
+                } else {
+                    // auto: 매월 22일 09:00 ~ 26일 09:00 KST (기본값)
+                    isInPeriod = (dayKst === 22 && hourKst >= 9) || (dayKst > 22 && dayKst < 26) || (dayKst === 26 && hourKst < 9);
+                }
+            } else {
+                // 단지 조회 실패 → auto 기본값
+                isInPeriod = (dayKst === 22 && hourKst >= 9) || (dayKst > 22 && dayKst < 26) || (dayKst === 26 && hourKst < 9);
+            }
+        } else {
+            // complexId 없음 → auto 기본값
+            isInPeriod = (dayKst === 22 && hourKst >= 9) || (dayKst > 22 && dayKst < 26) || (dayKst === 26 && hourKst < 9);
+        }
+
+        // 다음 전환 시각 계산 (auto 모드용 안내 — 실제 ON/OFF는 apply-settings 기반)
+        let nextToggleKst, nextAction;
+        if (isInPeriod) {
+            nextToggleKst = '접수 기간 종료 시';
+            nextAction = '비활성화';
+        } else {
+            nextToggleKst = '다음 접수 기간 시작 시';
+            nextAction = '활성화';
         }
 
         res.json({
@@ -93,7 +113,7 @@ router.get('/schedule-status', async (req, res) => {
             currentStatus: isInPeriod ? '접수 기간 (활성화)' : '비접수 기간 (비활성화)',
             nextToggleKst,
             nextAction,
-            periodInfo: '매월 22일 09:00 ~ 26일 09:00 KST'
+            periodInfo
         });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -237,11 +257,34 @@ router.post('/auto-toggle', async (req, res) => {
         const hourKst = nowKst.getUTCHours();
         const monKst  = nowKst.getUTCMonth() + 1;
 
-        // 22일 09:00 ~ 26일 09:00 → 활성화, 그 외 → 비활성화
-        const isInPeriod =
-            (dayKst === 22 && hourKst >= 9) ||
-            (dayKst > 22 && dayKst < 26)   ||
-            (dayKst === 26 && hourKst < 9);
+        // ── apply-period(global) 기반 isInPeriod 계산 ─────────────────
+        // 단지 complexId가 있으면 해당 단지의 apply_period 설정으로 판단
+        // 없으면 (Cron 호출 등) 매월 22~26일 기본값 사용
+        let isInPeriod;
+        const { complexId: bodyComplexId } = req.body;
+        const targetComplexId = bodyComplexId && /^[0-9a-f-]{36}$/i.test(bodyComplexId) ? bodyComplexId : null;
+
+        if (targetComplexId) {
+            const sb2 = getSupabase();
+            const { data: cx } = await sb2
+                .from('complexes')
+                .select('apply_period_enabled, apply_start, apply_end')
+                .eq('id', targetComplexId)
+                .single();
+            if (cx && cx.apply_period_enabled && cx.apply_start && cx.apply_end) {
+                // custom 기간: apply_start ~ apply_end
+                isInPeriod = nowUtc >= new Date(cx.apply_start) && nowUtc <= new Date(cx.apply_end);
+            } else if (cx && cx.apply_period_enabled && !cx.apply_start && !cx.apply_end) {
+                // always_open: 항상 접수 중
+                isInPeriod = true;
+            } else {
+                // auto 또는 설정 없음 → 22~26일 기본값
+                isInPeriod = (dayKst === 22 && hourKst >= 9) || (dayKst > 22 && dayKst < 26) || (dayKst === 26 && hourKst < 9);
+            }
+        } else {
+            // Cron 호출(complexId 없음) → 22~26일 기본값
+            isInPeriod = (dayKst === 22 && hourKst >= 9) || (dayKst > 22 && dayKst < 26) || (dayKst === 26 && hourKst < 9);
+        }
 
         const targetActive = isInPeriod;
 
@@ -252,8 +295,8 @@ router.post('/auto-toggle', async (req, res) => {
         const sb = getSupabase();
 
         // ── 단지 필터 + schedule_mode 업데이트 ───────────────────────
-        const { complexId } = req.body;
-        const validComplexId = complexId && /^[0-9a-f-]{36}$/i.test(complexId) ? complexId : null;
+        // targetComplexId와 동일한 값 (위에서 이미 계산됨)
+        const validComplexId = targetComplexId;
 
         // 즉시 활성화/비활성화 시 해당 단지의 schedule_mode도 함께 업데이트
         // force=true  → always_on  (Cron이 덮어쓰지 않음)
