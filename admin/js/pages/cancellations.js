@@ -5,57 +5,6 @@ const cancellations = {
     currentStatus: '',
 
     async render() {
-        const now    = new Date();
-        const kst    = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-        const day    = kst.getUTCDate();
-        const mon    = kst.getUTCMonth() + 1;
-        const hour = kst.getUTCHours();
-        // 해지 신청 기간: 매월 22일 09:00 ~ 26일 09:00 KST (시간 단위 정밀 체크)
-        const isCancelPeriod =
-            (day === 22 && hour >= 9) ||
-            (day > 22 && day < 26)   ||
-            (day === 26 && hour < 9);
-        // 등록 접수 기간 = 해지 신청 기간: 매월 22일 09:00 ~ 26일 09:00 KST
-        const isEnrollPeriod = isCancelPeriod;
-        const nextMon = mon === 12 ? 1 : mon + 1;
-
-        // ── 기간 안내 배너 ──
-        let periodBannerHtml = '';
-        if (isCancelPeriod) {
-            periodBannerHtml = `
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
-                        background:#fff7ed;border:2px solid #f97316;margin-bottom:12px;font-size:.83rem;color:#9a3412">
-                <i class="fas fa-exclamation-triangle" style="font-size:1.1rem;color:#f97316"></i>
-                <span><strong>🔔 현재 해지 신청 기간 (${mon}월 22일 09시 ~ 26일 09시)</strong><br>
-                <small style="opacity:.85">접수 즉시 자동 승인 · 당월 정상 수강 후 ${nextMon}월부터 해지 적용</small></span>
-            </div>`;
-        } else if (isEnrollPeriod) {
-            periodBannerHtml = `
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
-                        background:#eff6ff;border:2px solid #3b82f6;margin-bottom:12px;font-size:.83rem;color:#1e40af">
-                <i class="fas fa-calendar-check" style="font-size:1.1rem"></i>
-                <span><strong>📝 현재 신규 등록 접수 기간 (${mon}월 22일 09시 ~ 26일 09시)</strong></span>
-            </div>`;
-        } else {
-            // 다음 기간 계산: 26일 09시 이후면 다음달 22일, 그 전이면 이번달 22일
-            const isAfterClose = day > 26 || (day === 26 && hour >= 9);
-            const isBeforeOpen  = day < 22 || (day === 22 && hour < 9);
-            let next;
-            // 등록 접수 = 해지 신청 기간으로 통일, 단일 표시
-            if (isAfterClose) {
-                // 26일 09시 이후 → 다음달
-                next = `다음 등록 접수 · 해지 신청: <strong>${nextMon}월 22일 09시 ~ 26일 09시</strong>`;
-            } else {
-                // 이번달 22일 09시 전
-                next = `다음 등록 접수 · 해지 신청: <strong>${mon}월 22일 09시 ~ 26일 09시</strong>`;
-            }
-            periodBannerHtml = `
-            <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
-                        background:#f9fafb;border:1px solid #e5e7eb;margin-bottom:12px;font-size:.8rem;color:#6b7280">
-                <i class="fas fa-calendar-alt"></i><span>${next}</span>
-            </div>`;
-        }
-
         document.getElementById('pageContent').innerHTML = `
             <div class="page-header">
                 <h2><i class="fas fa-times-circle"></i> 해지 관리</h2>
@@ -73,15 +22,21 @@ const cancellations = {
                 </div>
             </div>
 
-            ${periodBannerHtml}
+            <!-- 기간 안내 배너: 서버 설정값 기반으로 동적 업데이트 -->
+            <div id="cancelPeriodBanner" style="margin-bottom:12px">
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
+                            background:#f9fafb;border:1px solid #e5e7eb;font-size:.8rem;color:#6b7280">
+                    <i class="fas fa-spinner fa-spin"></i><span>기간 설정 확인 중...</span>
+                </div>
+            </div>
 
             <!-- 관리 가이드 박스 (기간은 설정값으로 동적 업데이트) -->
             <div id="cancelGuideBox" style="background:#f0fdf4;border:1.5px solid #22c55e;border-radius:10px;
                  padding:12px 14px;margin-bottom:14px;font-size:.8rem;color:#166534;line-height:1.75">
                 <div style="font-weight:700;margin-bottom:6px"><i class="fas fa-info-circle"></i> 해지 관리 운영 가이드</div>
                 <div id="cancelGuideGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px">
-                    <div>📅 <strong>등록 접수:</strong> <span id="guideEnrollPeriod">매월 22일 09시 ~ 26일 09시</span></div>
-                    <div>🚫 <strong>해지 신청:</strong> <span id="guideCancelPeriod">매월 22일 09시 ~ 26일 09시</span></div>
+                    <div>📅 <strong>등록 접수:</strong> <span id="guideEnrollPeriod">확인 중...</span></div>
+                    <div>🚫 <strong>해지 신청:</strong> <span id="guideCancelPeriod">확인 중...</span></div>
                     <div>🔄 <strong>해지 적용:</strong> 당월 수강 후 익월부터</div>
                     <div>⚡ <strong>미신청 시:</strong> 자동 재등록 (차월 수강료 청구)</div>
                 </div>
@@ -114,7 +69,7 @@ const cancellations = {
 
         this.applyTabStyle();
         await this.load();
-        this._updateGuide(); // 운영 가이드 기간 동적 업데이트 (비동기, UI 블로킹 안 함)
+        this._updateGuide(); // 기간 배너 + 운영 가이드 동적 업데이트 (비동기, UI 블로킹 안 함)
     },
 
     // 운영 가이드 기간 표시를 신청기간 설정값으로 동적 업데이트
@@ -149,6 +104,11 @@ const cancellations = {
             return '매월 22일 09시 ~ 26일 09시'; // 기본값
         };
 
+        const now    = new Date();
+        const kst    = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+        const mon    = kst.getUTCMonth() + 1;
+        const nextMon = mon === 12 ? 1 : mon + 1;
+
         try {
             const [r1, r2] = await Promise.all([
                 fetch(`/api/complexes/${complexId}/apply-period`).then(r => r.json()),
@@ -161,17 +121,58 @@ const cancellations = {
             settings.forEach(s => { byKey[s.apply_type_key] = s; });
 
             // 등록 접수 = 신규 수강 신청('new') 기간
-            const enrollLabel = periodLabel(byKey['new'], cx);
+            const enrollLabel   = periodLabel(byKey['new'],    cx);
             // 해지 신청 = 차월 해지('cancel') 기간
-            const cancelLabel = periodLabel(byKey['cancel'], cx);
+            const cancelLabel   = periodLabel(byKey['cancel'], cx);
 
+            // is_open: 서버가 auto 모드의 경우 global apply-period 기반으로 이미 계산
+            const isCancelOpen  = !!(byKey['cancel']?.is_open);
+            const isEnrollOpen  = !!(byKey['new']?.is_open);
+
+            // ── 기간 안내 배너 업데이트 ────────────────────────────────
+            const bannerEl = document.getElementById('cancelPeriodBanner');
+            if (bannerEl) {
+                if (isCancelOpen) {
+                    bannerEl.innerHTML = `
+                        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
+                                    background:#fff7ed;border:2px solid #f97316;font-size:.83rem;color:#9a3412">
+                            <i class="fas fa-exclamation-triangle" style="font-size:1.1rem;color:#f97316"></i>
+                            <span><strong>🔔 현재 해지 신청 기간 (${cancelLabel})</strong><br>
+                            <small style="opacity:.85">접수 즉시 자동 승인 · 당월 정상 수강 후 ${nextMon}월부터 해지 적용</small></span>
+                        </div>`;
+                } else if (isEnrollOpen) {
+                    bannerEl.innerHTML = `
+                        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
+                                    background:#eff6ff;border:2px solid #3b82f6;font-size:.83rem;color:#1e40af">
+                            <i class="fas fa-calendar-check" style="font-size:1.1rem"></i>
+                            <span><strong>📝 현재 신규 등록 접수 기간 (${enrollLabel})</strong></span>
+                        </div>`;
+                } else {
+                    // 접수 기간 외: 다음 기간 안내
+                    const nextLabel = cancelLabel.startsWith('매월') ? cancelLabel : `매월 ${cancelLabel}`;
+                    bannerEl.innerHTML = `
+                        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
+                                    background:#f9fafb;border:1px solid #e5e7eb;font-size:.8rem;color:#6b7280">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>다음 등록 접수 · 해지 신청: <strong>${nextLabel}</strong></span>
+                        </div>`;
+                }
+            }
+
+            // ── 운영 가이드 기간 라벨 업데이트 ────────────────────────
             const elEnroll = document.getElementById('guideEnrollPeriod');
             const elCancel = document.getElementById('guideCancelPeriod');
             if (elEnroll) elEnroll.textContent = enrollLabel;
             if (elCancel) elCancel.textContent = cancelLabel;
         } catch (e) {
-            // 실패해도 기본값(하드코딩)이 표시되므로 조용히 무시
+            // 실패 시 기본값 표시
             console.warn('[_updateGuide] 기간 조회 실패:', e.message);
+            const bannerEl = document.getElementById('cancelPeriodBanner');
+            if (bannerEl) bannerEl.innerHTML = '';
+            const elEnroll = document.getElementById('guideEnrollPeriod');
+            const elCancel = document.getElementById('guideCancelPeriod');
+            if (elEnroll) elEnroll.textContent = '매월 22일 09시 ~ 26일 09시';
+            if (elCancel) elCancel.textContent = '매월 22일 09시 ~ 26일 09시';
         }
     },
 
