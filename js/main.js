@@ -1225,40 +1225,63 @@ async function _getManagePeriodSetting() {
     const autoIsOpen = (day === 22 && hour >= 9) || (day > 22 && day < 26) || (day === 26 && hour < 9);
     const DEFAULT_LABEL = '매월 22일 09시 ~ 26일 09시';
 
+    // ISO 날짜 → KST 표시 텍스트
+    const fmtKst = (iso) => {
+        const d  = new Date(iso);
+        const kd = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        const mo = kd.getUTCMonth() + 1;
+        const dy = kd.getUTCDate();
+        const hr = kd.getUTCHours();
+        const mi = kd.getUTCMinutes();
+        return `${mo}월 ${dy}일 ${hr}시${mi ? ' ' + mi + '분' : ''}`;
+    };
+
     // 기간 설정 → 표시 텍스트 변환
-    const makePeriodLabel = (setting) => {
-        if (!setting) return DEFAULT_LABEL;
+    // globalLabel: 전체 기본 기간(global) 설정에서 만든 레이블 (auto 모드 폴백용)
+    const makePeriodLabel = (setting, globalLabel) => {
+        if (!setting) return globalLabel || DEFAULT_LABEL;
         const mode = setting.period_mode || 'auto';
         if (mode === 'always') return '상시 가능';
         if (mode === 'closed') return '현재 접수 마감';
         if (mode === 'custom' && setting.period_start && setting.period_end) {
-            const fmt = (iso) => {
-                const d  = new Date(iso);
-                const kd = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-                const mo = kd.getUTCMonth() + 1;
-                const dy = kd.getUTCDate();
-                const hr = kd.getUTCHours();
-                const mi = kd.getUTCMinutes();
-                return `${mo}월 ${dy}일 ${hr}시${mi ? ' ' + mi + '분' : ''}`;
-            };
-            return `${fmt(setting.period_start)} ~ ${fmt(setting.period_end)}`;
+            return `${fmtKst(setting.period_start)} ~ ${fmtKst(setting.period_end)}`;
         }
-        return DEFAULT_LABEL; // auto
+        // auto: 개별 설정이 없으면 global 기간 레이블 사용, 그것도 없으면 기본값
+        return globalLabel || DEFAULT_LABEL;
     };
 
     const complexId = complexContext?.getComplexId?.();
     if (complexId) {
         try {
-            const res  = await fetch(`/api/complexes/${complexId}/apply-settings`);
-            const json = await res.json();
-            if (json.success) {
-                const newSetting    = (json.data || []).find(x => x.apply_type_key === 'new');
-                const cancelSetting = (json.data || []).find(x => x.apply_type_key === 'cancel');
-                const isOpen = newSetting ? newSetting.is_open : autoIsOpen;
+            // apply-settings(개별)와 apply-period(전체 기본) 병렬 조회
+            const [resS, resP] = await Promise.all([
+                fetch(`/api/complexes/${complexId}/apply-settings`),
+                fetch(`/api/complexes/${complexId}/apply-period`),
+            ]);
+            const [jsonS, jsonP] = await Promise.all([resS.json(), resP.json()]);
+
+            // 전체 기본 기간(global) 레이블 계산
+            let globalLabel = DEFAULT_LABEL;
+            if (jsonP.success && jsonP.data) {
+                const gd = jsonP.data;
+                if (gd.mode === 'always_open') {
+                    globalLabel = '상시 가능';
+                } else if (gd.mode === 'custom' && gd.apply_start && gd.apply_end) {
+                    globalLabel = `${fmtKst(gd.apply_start)} ~ ${fmtKst(gd.apply_end)}`;
+                }
+                // mode === 'auto' → DEFAULT_LABEL 유지
+            }
+
+            if (jsonS.success) {
+                const newSetting    = (jsonS.data || []).find(x => x.apply_type_key === 'new');
+                const cancelSetting = (jsonS.data || []).find(x => x.apply_type_key === 'cancel');
+                // is_open은 서버에서 global 설정 포함해 정확히 계산된 값
+                const isOpen = newSetting ? newSetting.is_open : (jsonP.data?.is_open ?? autoIsOpen);
                 return {
                     isOpen,
-                    periodLabel:       makePeriodLabel(newSetting),
-                    cancelPeriodLabel: makePeriodLabel(cancelSetting),
+                    periodLabel:       makePeriodLabel(newSetting, globalLabel),
+                    cancelPeriodLabel: makePeriodLabel(cancelSetting, globalLabel),
+                    globalLabel,
                     newSetting,
                     cancelSetting,
                 };
@@ -1269,6 +1292,7 @@ async function _getManagePeriodSetting() {
         isOpen:            autoIsOpen,
         periodLabel:       DEFAULT_LABEL,
         cancelPeriodLabel: DEFAULT_LABEL,
+        globalLabel:       DEFAULT_LABEL,
         newSetting:        null,
         cancelSetting:     null,
     };
@@ -2007,18 +2031,26 @@ async function renderPeriodBanner() {
 }
 
 async function showCancellationForm() {
-    // === 해지 접수 기간 체크: 서버 설정 우선, 실패 시 22~26일 기본값 ===
+    // === 해지 접수 기간 체크: 서버 설정 우선(global 포함), 실패 시 22~26일 기본값 ===
     const complexId = complexContext?.getComplexId?.();
+    const now = new Date();
+    const kst = new Date(now.getTime() + 9*60*60*1000);
+    const d = kst.getUTCDate(), h = kst.getUTCHours();
+
     if (complexId) {
         try {
-            const res  = await fetch(`/api/complexes/${complexId}/apply-settings`);
-            const json = await res.json();
-            if (json.success) {
-                const setting = (json.data || []).find(s => s.apply_type_key === 'cancel');
+            // apply-settings(개별)와 apply-period(global) 병렬 조회
+            const [resS, resP] = await Promise.all([
+                fetch(`/api/complexes/${complexId}/apply-settings`),
+                fetch(`/api/complexes/${complexId}/apply-period`),
+            ]);
+            const [jsonS, jsonP] = await Promise.all([resS.json(), resP.json()]);
+
+            if (jsonS.success) {
+                const setting = (jsonS.data || []).find(s => s.apply_type_key === 'cancel');
                 const mode    = setting?.period_mode || 'auto';
 
                 let isOpen = false;
-                const now = new Date();
                 if (mode === 'always') {
                     isOpen = true;
                 } else if (mode === 'closed') {
@@ -2026,15 +2058,19 @@ async function showCancellationForm() {
                 } else if (mode === 'custom' && setting?.period_start && setting?.period_end) {
                     isOpen = now >= new Date(setting.period_start) && now <= new Date(setting.period_end);
                 } else {
-                    // auto: 22~26일 기본
-                    const kst  = new Date(now.getTime() + 9*60*60*1000);
-                    const d = kst.getUTCDate(), h = kst.getUTCHours();
-                    isOpen = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
+                    // auto: 서버가 global 설정 포함해서 계산한 is_open 직접 사용
+                    // (apply-settings GET의 is_open이 complexCustomOpen 기반으로 정확히 계산됨)
+                    if (setting && typeof setting.is_open === 'boolean') {
+                        isOpen = setting.is_open;
+                    } else if (jsonP.success && typeof jsonP.data?.is_open === 'boolean') {
+                        isOpen = jsonP.data.is_open;
+                    } else {
+                        isOpen = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
+                    }
                 }
 
                 if (!isOpen) {
-                    const kst = new Date(new Date().getTime() + 9*60*60*1000);
-                    showCancellationPeriodWarning(kst.getUTCMonth()+1, kst.getUTCDate(), kst.getUTCHours());
+                    await showCancellationPeriodWarning(kst.getUTCMonth()+1, d, h);
                     return;
                 }
                 // isOpen → 모달 열기
@@ -2046,12 +2082,9 @@ async function showCancellationForm() {
     }
 
     // 서버 조회 실패 시 하드코딩 기본값 (22~26일)
-    const now = new Date();
-    const kst = new Date(now.getTime() + 9*60*60*1000);
-    const d = kst.getUTCDate(), h = kst.getUTCHours();
     const isInCancelPeriod = (d === 22 && h >= 9) || (d > 22 && d < 26) || (d === 26 && h < 9);
     if (!isInCancelPeriod) {
-        showCancellationPeriodWarning(kst.getUTCMonth()+1, d, h);
+        await showCancellationPeriodWarning(kst.getUTCMonth()+1, d, h);
         return;
     }
     resetCancelFormMain();
@@ -2312,17 +2345,61 @@ function showToastMain(msg, type = 'success') {
     }
 }
 
-// 🆕 Show cancellation period warning
-function showCancellationPeriodWarning(currentMonth, currentDay, currentHour = 0) {
+// 🆕 Show cancellation period warning (global 설정 기반 동적 기간 표시)
+async function showCancellationPeriodWarning(currentMonth, currentDay, currentHour = 0) {
     const modal = document.getElementById('cancellationPeriodWarningModal');
     const content = document.getElementById('cancellationPeriodWarningContent');
-    // 26일 09시 이후면 다음달 22일, 그렇지 않으면 이번달 22일
-    const isAfterClose = currentDay > 26 || (currentDay === 26 && currentHour >= 9);
-    const nextMonth = isAfterClose ? (currentMonth === 12 ? 1 : currentMonth + 1) : currentMonth;
+    if (!modal || !content) return;
+
     const hourStr = String(currentHour).padStart(2, '0');
+
+    // 서버에서 global 기간 설정 조회 → 다음 접수 기간 표시
+    let nextPeriodLabel = null;
+    try {
+        const complexId = complexContext?.getComplexId?.();
+        if (complexId) {
+            const [resS, resP] = await Promise.all([
+                fetch(`/api/complexes/${complexId}/apply-settings`),
+                fetch(`/api/complexes/${complexId}/apply-period`),
+            ]);
+            const [jsonS, jsonP] = await Promise.all([resS.json(), resP.json()]);
+
+            const cancelSetting = (jsonS.data || []).find(x => x.apply_type_key === 'cancel');
+            const cMode = cancelSetting?.period_mode || 'auto';
+
+            const fmtKst = (iso) => {
+                const d  = new Date(iso);
+                const kd = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+                const mo = kd.getUTCMonth() + 1, dy = kd.getUTCDate();
+                const hr = kd.getUTCHours(), mi = kd.getUTCMinutes();
+                return `${mo}월 ${dy}일 ${hr}시${mi ? ' ' + mi + '분' : ''}`;
+            };
+
+            if (cMode === 'always') {
+                nextPeriodLabel = '상시 가능 (지금 바로 신청 가능)';
+            } else if (cMode === 'closed') {
+                nextPeriodLabel = '현재 접수 마감 (관리자 문의)';
+            } else if (cMode === 'custom' && cancelSetting?.period_start && cancelSetting?.period_end) {
+                nextPeriodLabel = `${fmtKst(cancelSetting.period_start)} ~ ${fmtKst(cancelSetting.period_end)}`;
+            } else if (jsonP.success && jsonP.data?.mode === 'custom' && jsonP.data?.apply_start) {
+                // auto 모드 → global 설정 사용
+                nextPeriodLabel = `${fmtKst(jsonP.data.apply_start)} ~ ${fmtKst(jsonP.data.apply_end)}`;
+            } else if (jsonP.success && jsonP.data?.mode === 'always_open') {
+                nextPeriodLabel = '상시 가능 (지금 바로 신청 가능)';
+            }
+        }
+    } catch(_) { /* 폴백 */ }
+
+    // global 조회 실패 또는 auto 모드 → 22~26일 기본값
+    if (!nextPeriodLabel) {
+        const isAfterClose = currentDay > 26 || (currentDay === 26 && currentHour >= 9);
+        const nextMonth = isAfterClose ? (currentMonth === 12 ? 1 : currentMonth + 1) : currentMonth;
+        nextPeriodLabel = `${nextMonth}월 22일 09:00 ~ ${nextMonth}월 26일 09:00`;
+    }
+
     content.innerHTML = `
         <p><strong>현재 날짜:</strong> ${currentMonth}월 ${currentDay}일 ${hourStr}시 (한국시간)</p>
-        <p><strong>다음 접수 기간:</strong> ${nextMonth}월 22일 09:00 ~ ${nextMonth}월 26일 09:00</p>
+        <p><strong>다음 접수 기간:</strong> ${nextPeriodLabel}</p>
     `;
     modal.classList.add('active');
 }
