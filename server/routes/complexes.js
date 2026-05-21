@@ -408,6 +408,31 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+// ── 단지 기능 플래그 토글 (비밀번호 불필요, 관리자 로그인 세션 신뢰) ──
+// PATCH /api/complexes/:id/flags
+// body: { show_inquiry: true|false, ... }
+router.patch('/:id/flags', async (req, res) => {
+    try {
+        const sb = getSupabase();
+        const allowed = ['show_inquiry']; // 허용 플래그 목록
+        const patch = {};
+        for (const key of allowed) {
+            if (req.body[key] !== undefined) patch[key] = Boolean(req.body[key]);
+        }
+        if (Object.keys(patch).length === 0) {
+            return res.status(400).json({ success: false, error: '변경할 항목이 없습니다' });
+        }
+        const { data, error } = await sb
+            .from('complexes')
+            .update(patch)
+            .eq('id', req.params.id)
+            .select()
+            .single();
+        if (error) throw sbErr(error, 'PATCH /complexes/:id/flags');
+        res.json({ success: true, data });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 // ── 내 단지 설정 수정 (일반 관리자) ──────────────────────────
 router.put('/:id/self', async (req, res) => {
     try {

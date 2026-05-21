@@ -37,6 +37,8 @@ const API = (() => {
             byCode:         (code)   => req('GET',  `/complexes/by-code/${code}`),
             create:         (data)   => req('POST', '/complexes', data),
             update:         (id, d)  => req('PUT',  `/complexes/${id}`, d),
+            selfUpdate:     (id, d)  => req('PUT',  `/complexes/${id}/self`, d),
+            patchFlags:     (id, d)  => req('PATCH', `/complexes/${id}/flags`, d),
             delete:         (id)     => req('DELETE',`/complexes/${id}`),
             verifyPassword: (code, pw) => req('POST', '/complexes/verify-password', { complexCode: code, password: pw }),
         },

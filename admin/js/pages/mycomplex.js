@@ -582,10 +582,8 @@ const mycomplex = {
         }
 
         try {
-            const res = await API.complexes.selfUpdate(Admin.complex.id, {
-                currentPassword: Admin.complex.admin_password,
-                show_inquiry: checked
-            });
+            // 비밀번호 불필요한 flags 전용 PATCH 엔드포인트 사용
+            const res = await API.complexes.patchFlags(Admin.complex.id, { show_inquiry: checked });
             Admin.complex = res.data;
             sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
             showToast(checked ? '문의하기 버튼이 활성화되었습니다' : '문의하기 버튼이 숨겨졌습니다');
