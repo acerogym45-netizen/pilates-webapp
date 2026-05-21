@@ -2347,14 +2347,24 @@ function showToastMain(msg, type = 'success') {
 
 // 🆕 Show cancellation period warning (global 설정 기반 동적 기간 표시)
 async function showCancellationPeriodWarning(currentMonth, currentDay, currentHour = 0) {
-    const modal = document.getElementById('cancellationPeriodWarningModal');
+    const modal   = document.getElementById('cancellationPeriodWarningModal');
     const content = document.getElementById('cancellationPeriodWarningContent');
+    const msgEl   = document.getElementById('cancellationPeriodWarningMessage');
     if (!modal || !content) return;
 
     const hourStr = String(currentHour).padStart(2, '0');
 
-    // 서버에서 global 기간 설정 조회 → 다음 접수 기간 표시
+    const fmtKst = (iso) => {
+        const d  = new Date(iso);
+        const kd = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+        const mo = kd.getUTCMonth() + 1, dy = kd.getUTCDate();
+        const hr = kd.getUTCHours(), mi = kd.getUTCMinutes();
+        return `${mo}월 ${dy}일 ${hr}시${mi ? ' ' + mi + '분' : ''}`;
+    };
+
+    // 서버에서 cancel + global 기간 설정 조회
     let nextPeriodLabel = null;
+    let mainMessageLabel = null; // 본문 "~에만 가능합니다" 텍스트
     try {
         const complexId = complexContext?.getComplexId?.();
         if (complexId) {
@@ -2367,25 +2377,27 @@ async function showCancellationPeriodWarning(currentMonth, currentDay, currentHo
             const cancelSetting = (jsonS.data || []).find(x => x.apply_type_key === 'cancel');
             const cMode = cancelSetting?.period_mode || 'auto';
 
-            const fmtKst = (iso) => {
-                const d  = new Date(iso);
-                const kd = new Date(d.getTime() + 9 * 60 * 60 * 1000);
-                const mo = kd.getUTCMonth() + 1, dy = kd.getUTCDate();
-                const hr = kd.getUTCHours(), mi = kd.getUTCMinutes();
-                return `${mo}월 ${dy}일 ${hr}시${mi ? ' ' + mi + '분' : ''}`;
-            };
-
             if (cMode === 'always') {
-                nextPeriodLabel = '상시 가능 (지금 바로 신청 가능)';
+                nextPeriodLabel    = '상시 가능 (지금 바로 신청 가능)';
+                mainMessageLabel   = '상시 가능';
             } else if (cMode === 'closed') {
-                nextPeriodLabel = '현재 접수 마감 (관리자 문의)';
+                nextPeriodLabel    = '현재 접수 마감 (관리자 문의)';
+                mainMessageLabel   = '현재 접수 마감 (관리자 문의)';
             } else if (cMode === 'custom' && cancelSetting?.period_start && cancelSetting?.period_end) {
-                nextPeriodLabel = `${fmtKst(cancelSetting.period_start)} ~ ${fmtKst(cancelSetting.period_end)}`;
-            } else if (jsonP.success && jsonP.data?.mode === 'custom' && jsonP.data?.apply_start) {
-                // auto 모드 → global 설정 사용
-                nextPeriodLabel = `${fmtKst(jsonP.data.apply_start)} ~ ${fmtKst(jsonP.data.apply_end)}`;
-            } else if (jsonP.success && jsonP.data?.mode === 'always_open') {
-                nextPeriodLabel = '상시 가능 (지금 바로 신청 가능)';
+                const lbl          = `${fmtKst(cancelSetting.period_start)} ~ ${fmtKst(cancelSetting.period_end)}`;
+                nextPeriodLabel    = lbl;
+                mainMessageLabel   = lbl;
+            } else {
+                // auto 모드 → global(apply-period) 설정 우선 사용
+                if (jsonP.success && jsonP.data?.mode === 'custom' && jsonP.data?.apply_start) {
+                    const lbl        = `${fmtKst(jsonP.data.apply_start)} ~ ${fmtKst(jsonP.data.apply_end)}`;
+                    nextPeriodLabel  = lbl;
+                    mainMessageLabel = lbl;
+                } else if (jsonP.success && jsonP.data?.mode === 'always_open') {
+                    nextPeriodLabel  = '상시 가능 (지금 바로 신청 가능)';
+                    mainMessageLabel = '상시 가능';
+                }
+                // else → auto 22~26일 기본값 (폴백)
             }
         }
     } catch(_) { /* 폴백 */ }
@@ -2393,10 +2405,17 @@ async function showCancellationPeriodWarning(currentMonth, currentDay, currentHo
     // global 조회 실패 또는 auto 모드 → 22~26일 기본값
     if (!nextPeriodLabel) {
         const isAfterClose = currentDay > 26 || (currentDay === 26 && currentHour >= 9);
-        const nextMonth = isAfterClose ? (currentMonth === 12 ? 1 : currentMonth + 1) : currentMonth;
-        nextPeriodLabel = `${nextMonth}월 22일 09:00 ~ ${nextMonth}월 26일 09:00`;
+        const nextMonth    = isAfterClose ? (currentMonth === 12 ? 1 : currentMonth + 1) : currentMonth;
+        nextPeriodLabel    = `${nextMonth}월 22일 09:00 ~ ${nextMonth}월 26일 09:00`;
+        mainMessageLabel   = `매월 22일 09시부터 26일 09시까지 (KST)`;
     }
 
+    // ① 본문 "~에만 가능합니다" 텍스트 동적 업데이트
+    if (msgEl && mainMessageLabel) {
+        msgEl.innerHTML = `해지 신청은 <strong style="color:#e74c3c">${mainMessageLabel}</strong>에만 가능합니다.`;
+    }
+
+    // ② 상세 박스: 현재 날짜 + 다음 접수 기간
     content.innerHTML = `
         <p><strong>현재 날짜:</strong> ${currentMonth}월 ${currentDay}일 ${hourStr}시 (한국시간)</p>
         <p><strong>다음 접수 기간:</strong> ${nextPeriodLabel}</p>
