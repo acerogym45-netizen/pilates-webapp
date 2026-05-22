@@ -249,13 +249,16 @@ const settlement = {
                 const s   = json.summary;
                 const yr2 = json.year, mo2 = json.month;
                 const feeSum = s.settlement_fee_sum ?? s.total_charge ?? 0;
+                // 전체 수강자 수 = approved_count (신규 포함, 차월해지 포함 — 이달 수강 중인 모든 인원)
+                const totalMember = s.approved_count ?? s.settlement_total_rows ?? 0;
+                const cancelTotal = (s.mid_cancel_count || 0) + (s.end_cancel_count || 0);
                 sumEl.style.display = 'block';
                 sumEl.innerHTML =
                     `<span style="font-size:.82rem;color:#555;display:flex;gap:14px;flex-wrap:wrap;align-items:center">
                       <span><i class="fas fa-users" style="color:#2980b9;margin-right:3px"></i>
-                        ${yr2}년 ${mo2}월 수강자 <strong style="color:#2980b9">${s.settlement_total_rows ?? s.approved_count}</strong>명</span>
+                        ${yr2}년 ${mo2}월 수강자 <strong style="color:#2980b9">${totalMember}</strong>명</span>
                       <span style="color:#ddd">|</span>
-                      <span>해지 <strong style="color:#e74c3c">${s.settlement_cancel_rows ?? (s.mid_cancel_count + s.end_cancel_count)}</strong>명</span>
+                      <span>해지 <strong style="color:#e74c3c">${cancelTotal}</strong>명</span>
                       <span style="color:#ddd">|</span>
                       <span>신규 <strong style="color:#27ae60">${s.next_new_count}</strong>명</span>
                       <span style="color:#ddd">|</span>
@@ -325,31 +328,9 @@ const settlement = {
             endCancelInfo
         );
 
-        // ── 4. 차월신규접수
-        const nextNewInfo = `
-          <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
-            <div style="font-size:.76rem;color:#1a5c35;line-height:1.8">
-              <b>📋 포함 대상</b><br>
-              · applications 테이블 status = approved<br>
-              · approved_at(또는 created_at)이 <b>이번 달(${d.monthKey ? d.monthKey.replace('-','년 ')+'월' : '이번 달'}) 1일 ~ 말일</b> 사이
-            </div>
-            <div style="font-size:.76rem;color:#1a5c35;line-height:1.8;border-left:2px solid #52be80;padding-left:14px">
-              <b>💡 처리 방식</b><br>
-              · <b>${d.nextKey ? d.nextKey.replace('-','년 ')+'월' : '다음 달'}부터</b> 수강료 부과 시작<br>
-              · 이번 달 수강료 <b>미청구</b> — 위 정산 내역에서 완전 제외됨<br>
-              · 위 정산 내역 카드 하단 <b>▼ 신규 수강 예정자</b> 섹션과 동일한 인원
-            </div>
-          </div>`;
-        html += this._sectionCard(
-            `<i class="fas fa-user-plus" style="color:#27ae60"></i> 차월신규접수
-             <small style="font-weight:400;color:#888;font-size:.8rem">(${d.nextKey}부터 수강 예정)</small>`,
-            '#27ae60', '#f0fff4',
-            d.next_new || [], d.summary.next_new_count,
-            ['dong','ho','name','phone','program_name','preferred_time','monthly_fee'],
-            ['동','호수','이름','연락처','프로그램','시간','월수강료'],
-            { monthly_fee: v => this._fmtFee(v) },
-            nextNewInfo
-        );
+        // ── 4. 차월신규접수 독립 카드 제거
+        //    → 정산 내역 카드 하단 서브섹션(▼ 신규 수강 예정자)으로 통합 표시
+        //    → _settlementCard 내부에서 newSectionRows로 렌더링
 
         resEl.innerHTML = html;
     },
@@ -358,10 +339,12 @@ const settlement = {
     // 정산 내역 카드
     // ══════════════════════════════════════════════════════
     _settlementCard(d) {
-        const rows = d.settlement_rows || [];
-        const newRows = d.new_section_rows || [];
+        const rows    = d.settlement_rows || [];
+        // 신규 섹션: new_section_rows 또는 next_new 사용 (동일 데이터)
+        const newRows = d.next_new || d.new_section_rows || [];
         const yr = d.year, mo = d.month;
-        const totalRows = rows.length;
+        const nextLbl = d.nextKey ? d.nextKey.replace('-', '년 ') + '월' : '차월';
+        const totalRows  = rows.length;
         const cancelRows = rows.filter(r => r.is_end_cancel || r.is_mid_cancel).length;
 
         const badge = `<span style="background:#2980b9;color:#fff;font-size:.72rem;font-weight:700;
@@ -442,54 +425,85 @@ const settlement = {
           <td style="border:1px solid #0d3349;background:#1a5276"></td>
         </tr>`;
 
-        // 신규 섹션 (하단)
+        // ── 차월신규접수 서브섹션 (하단 통합 — 독립 카드 제거됨)
         let newSectionHtml = '';
         if (newRows.length) {
-            const nextLbl = d.nextKey ? d.nextKey.replace('-', '년 ') + '월' : '차월';
-            const newThStyle = `padding:7px 8px;border:1px solid #ddd;font-size:.78rem;font-weight:700;
-              background:#f0fff4;white-space:nowrap;text-align:center`;
-            const newThead = `<tr>
-              <th style="${newThStyle}" colspan="8"
-                style="background:#27ae60;color:#fff;padding:8px;font-size:.9rem;font-weight:700">
-                ▼ ${nextLbl} 신규 수강 예정자 (${newRows.length}명)
-              </th>
-            </tr>
-            <tr>
-              <th style="${newThStyle}">동</th>
-              <th style="${newThStyle}">호수</th>
-              <th style="${newThStyle}">이름</th>
-              <th style="${newThStyle}">연락처</th>
-              <th style="${newThStyle}">프로그램</th>
-              <th style="${newThStyle}">희망시간</th>
-              <th style="${newThStyle}">요금</th>
-              <th style="${newThStyle}">구분</th>
+            // 타이틀 행 (접이형 헤더)
+            const newTitleRow = `
+              <tr>
+                <td colspan="8" style="
+                  padding:10px 14px;
+                  background:linear-gradient(90deg,#1e8449,#27ae60);
+                  border-top:3px solid #1e8449;
+                  font-size:.9rem;font-weight:800;color:#fff;text-align:left">
+                  <i class="fas fa-user-plus" style="margin-right:6px"></i>
+                  ${nextLbl} 차월신규접수
+                  <span style="background:rgba(255,255,255,.25);color:#fff;font-size:.72rem;
+                    padding:2px 9px;border-radius:20px;margin-left:8px;font-weight:700">
+                    ${newRows.length}건
+                  </span>
+                  <span style="font-size:.73rem;font-weight:400;opacity:.85;margin-left:10px">
+                    이번 달 수강료 미청구 · ${nextLbl}부터 정상 부과
+                  </span>
+                </td>
+              </tr>`;
+
+            // 컬럼 헤더
+            const nThS = `padding:7px 8px;border:1px solid #a9dfbf;font-size:.78rem;font-weight:700;
+              background:#eafaf1;white-space:nowrap;text-align:center;color:#1a5c35`;
+            const newHdrRow = `<tr>
+              <th style="${nThS}">동</th>
+              <th style="${nThS}">호수</th>
+              <th style="${nThS}">이름</th>
+              <th style="${nThS}">연락처</th>
+              <th style="${nThS}">프로그램</th>
+              <th style="${nThS}">희망시간</th>
+              <th style="${nThS}">요금</th>
+              <th style="${nThS}">구분</th>
             </tr>`;
 
+            // 데이터 행
             const newTbody = newRows.map((r, i) => {
                 const isDup = r.is_duplicate;
-                const bg = isDup ? 'background:#d5f5d0' : (i % 2 ? 'background:#f9fffe' : '');
-                const tdS = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bg}`;
+                const bg = isDup ? 'background:#d5f5e3' : (i % 2 ? 'background:#f4fdf7' : 'background:#fff');
+                const tdS = `padding:6px 8px;border:1px solid #e8f8f0;font-size:.82rem;text-align:center;${bg}`;
                 const catBadge = isDup
-                    ? `<span style="background:#27ae60;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">신규/중복수강</span>`
-                    : `<span style="background:#aaa;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">신규</span>`;
+                    ? `<span style="background:#27ae60;color:#fff;font-size:.68rem;
+                        padding:2px 8px;border-radius:10px;font-weight:700">신규/중복수강</span>`
+                    : `<span style="background:#95a5a6;color:#fff;font-size:.68rem;
+                        padding:2px 8px;border-radius:10px">신규</span>`;
                 return `<tr>
                   <td style="${tdS}">${r.dong||''}</td>
                   <td style="${tdS}">${r.ho||''}</td>
-                  <td style="${tdS};font-weight:600">${r.name||''}</td>
+                  <td style="${tdS};font-weight:600;color:#1a5c35">${r.name||''}</td>
                   <td style="${tdS}">${r.phone||''}</td>
                   <td style="${tdS};font-size:.78rem">${r.program_name||''}</td>
                   <td style="${tdS}">${r.preferred_time||''}</td>
-                  <td style="${tdS}">${r.monthly_fee ? Number(r.monthly_fee).toLocaleString('ko-KR') + '원' : '-'}</td>
+                  <td style="${tdS};font-weight:600;color:#117a65">
+                    ${r.monthly_fee ? Number(r.monthly_fee).toLocaleString('ko-KR') + '원' : '-'}</td>
                   <td style="${tdS}">${catBadge}</td>
                 </tr>`;
             }).join('');
 
-            newSectionHtml = `<div style="margin-top:4px;border-top:3px solid #27ae60">
-              <table style="width:100%;border-collapse:collapse;min-width:900px">
-                <thead>${newThead}</thead>
-                <tbody>${newTbody}</tbody>
-              </table>
-            </div>`;
+            // 소계 행
+            const newTotal = newRows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
+            const newSumRow = `<tr style="background:#a9dfbf">
+              <td colspan="6" style="padding:6px 10px;border:1px solid #7dbb9b;
+                font-size:.82rem;font-weight:700;color:#1a5c35;text-align:right">
+                ${nextLbl} 신규 ${newRows.length}명 합계 (차월 부과 예정)</td>
+              <td style="padding:6px 10px;border:1px solid #7dbb9b;
+                font-size:.88rem;font-weight:800;color:#1a5c35;text-align:center">
+                ${newTotal.toLocaleString('ko-KR')}원</td>
+              <td style="border:1px solid #7dbb9b"></td>
+            </tr>`;
+
+            newSectionHtml = `
+              <div style="overflow-x:auto;margin-top:2px">
+                <table style="width:100%;border-collapse:collapse;min-width:900px">
+                  <thead>${newTitleRow}${newHdrRow}</thead>
+                  <tbody>${newTbody}${newSumRow}</tbody>
+                </table>
+              </div>`; 
         }
 
         const body = rows.length
@@ -1734,14 +1748,16 @@ const settlement = {
                     if (r._cat === '차월해지' || r._cat === '중도해지') rowStyleInfo.push({ rowIdx: dataRowIdx, fill: ROW_TERM });
                 });
 
-                // 합계 행 — 신규(차월부터 부과)는 이번달 미청구이므로 합계에서 제외
+                // 합계 행 — 신규(차월부터 부과)·중도해지(후청구 방식, 중도해지 섹션에서 별도 청구)는 제외
+                // → 동호수계 시트 집계 기준과 동일하게 맞춤 (불일치 해소)
                 const totalFee = allRows
-                    .filter(r => r._cat !== '신규')
+                    .filter(r => r._cat !== '신규' && r._cat !== '중도해지')
                     .reduce((s, r) => s + (Number(r.monthly_fee)||0), 0);
-                const chargeCount = totalCount - newCount; // 실제 청구 대상 인원
+                const midCancelCount = termRows.filter(r => r._cat === '중도해지').length;
+                const chargeCount = totalCount - newCount - midCancelCount; // 실제 청구 대상 인원
                 s1.push([]); // 빈 행
                 s1.push(['','','','','','', totalFee,
-                    `청구 ${chargeCount}명 (신규 ${newCount}명 차월부터)`]);
+                    `청구 ${chargeCount}명 (신규 ${newCount}명 차월부터 / 중도해지 ${midCancelCount}명 별도청구)`]);
 
                 const ws1 = XLSX.utils.aoa_to_sheet(s1);
                 ws1['!cols'] = [
