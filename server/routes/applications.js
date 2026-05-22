@@ -1069,8 +1069,12 @@ router.get('/:id/available-slots', async (req, res) => {
         for (const prog of programs) {
             const slots = Array.isArray(prog.time_slots) ? prog.time_slots : [];
             for (const slot of slots) {
-                // 현재 신청과 동일한 프로그램+시간대면 제외 (program_id 또는 name 기반 비교)
-                const isSameProg = (prog.id === app.program_id) || (prog.id === myProgramId);
+                // 현재 신청과 동일한 프로그램+시간대면 목록에서 제외
+                // ★ app.program_id가 null인 경우 myProgramId(name 역매핑)로 비교
+                //   단, myProgramId는 단지 내 동명 프로그램 ID이므로 name 일치 여부로 판단
+                const isSameProg = app.program_id
+                    ? (prog.id === app.program_id)
+                    : (prog.name === app.program_name);
                 if (isSameProg && slot === app.preferred_time) continue;
 
                 const key = `${prog.id}::${slot}`;
@@ -1175,7 +1179,13 @@ router.post('/:id/change-time', async (req, res) => {
         }
 
         // 같은 프로그램+시간대면 불필요
-        if (targetProgram.id === (app.program_id || targetProgramId) && app.preferred_time === new_preferred_time) {
+        // ★ 주의: app.program_id가 null인 경우 name으로 프로그램 식별 → program_id 비교 불가
+        //   → targetProgram.id vs app.program_id 직접 비교 (null이면 다른 프로그램으로 간주하지 않도록 name 비교 병행)
+        const isSameProgramId   = app.program_id && targetProgram.id === app.program_id;
+        const isSameProgramName = !app.program_id && targetProgram.name === app.program_name;
+        const isSameProgram     = isSameProgramId || isSameProgramName;
+        const isSameTime        = app.preferred_time === new_preferred_time;
+        if (isSameProgram && isSameTime) {
             return res.status(400).json({ success: false, error: '현재와 동일한 프로그램·시간대입니다' });
         }
 
