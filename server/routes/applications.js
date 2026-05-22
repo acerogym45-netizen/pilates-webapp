@@ -651,7 +651,8 @@ router.put('/:id', async (req, res) => {
         const sb = getSupabase();
         const {
             dong, ho, name, phone, program_name, preferred_time, status, notes, assigned_time,
-            remaining_sessions, total_sessions, monthly_fee, transfer_memo, transfer_date
+            remaining_sessions, total_sessions, monthly_fee, transfer_memo, transfer_date,
+            start_date, expiry_date
         } = req.body;
 
         const { data: current, error: fetchErr } = await sb
@@ -677,32 +678,9 @@ router.put('/:id', async (req, res) => {
         if (monthly_fee !== undefined)        updates.monthly_fee = monthly_fee;
         if (transfer_memo !== undefined)      updates.transfer_memo = transfer_memo;
         if (transfer_date !== undefined)      updates.transfer_date = transfer_date;
-
-        // ── 승인 시 start_date / expiry_date 자동 세팅 (direct 결제 단지용) ──
-        // received/waiting → approved 로 변경될 때, 아직 start_date가 없으면 자동 기입
-        if (status === 'approved' && current.status !== 'approved' && !current.start_date) {
-            // 단지 payment_mode 조회
-            let paymentMode = 'management_fee';
-            if (current.complex_id) {
-                const { data: cxPm } = await sb
-                    .from('complexes')
-                    .select('payment_mode')
-                    .eq('id', current.complex_id)
-                    .single();
-                if (cxPm?.payment_mode) paymentMode = cxPm.payment_mode;
-            }
-            if (paymentMode === 'direct') {
-                // 당월 1일 ~ 말일 기준으로 기입
-                const now = new Date();
-                const y = now.getFullYear();
-                const m = now.getMonth(); // 0-indexed
-                const startDate = new Date(y, m, 1);
-                const expiryDate = new Date(y, m + 1, 0); // 말일
-                updates.start_date  = startDate.toISOString().slice(0, 10);
-                updates.expiry_date = expiryDate.toISOString().slice(0, 10);
-                console.log(`[approval] direct 단지 start/expiry 자동 세팅: ${updates.start_date} ~ ${updates.expiry_date} (app_id=${req.params.id})`);
-            }
-        }
+        // start_date / expiry_date: 관리자가 직접 기입 (direct 결제 단지 전용)
+        if (start_date  !== undefined)        updates.start_date  = start_date  || null;
+        if (expiry_date !== undefined)        updates.expiry_date = expiry_date || null;
 
         // ── cancelled 직접 변경 방어 로직 ─────────────────────────────────────
         // applications 상태를 직접 cancelled로 바꾸려면 반드시 cancellations 테이블에

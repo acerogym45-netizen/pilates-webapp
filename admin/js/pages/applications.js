@@ -673,13 +673,19 @@ ${(() => {
         const a = this.data.find(x => x.id === id);
         if (!a) return;
 
-        // 활성 프로그램 목록 로드 (단지 필터)
+        // 활성 프로그램 목록 + 단지 payment_mode 병렬 로드
         let progList = [];
+        let paymentMode = 'management_fee';
         try {
             const complexId = getEffectiveComplexId();
-            const res = await API.programs.list({ complexId, activeOnly: true, limit: 100 });
-            progList = (res.data || []).filter(p => p.is_active !== false);
+            const [progRes, settingsRes] = await Promise.all([
+                API.programs.list({ complexId, activeOnly: true, limit: 100 }),
+                complexId ? fetch(`/api/complexes/${complexId}/apply-settings`).then(r => r.json()).catch(() => null) : Promise.resolve(null)
+            ]);
+            progList = (progRes.data || []).filter(p => p.is_active !== false);
+            if (settingsRes?.success) paymentMode = settingsRes.complex?.payment_mode || 'management_fee';
         } catch (e) { /* 실패해도 수동 입력 폴백 */ }
+        const isDirectPayment = paymentMode === 'direct';
 
         // 현재 프로그램의 time_slots 찾기
         const curProg = progList.find(p => p.name === a.program_name);
@@ -763,6 +769,22 @@ ${(() => {
                     <input type="number" id="editRemaining" value="${a.remaining_sessions ?? ''}" placeholder="미입력 가능">
                 </div>
             </div>
+            ${isDirectPayment ? `
+            <div style="border:1.5px solid #6366f1;border-radius:10px;padding:12px 14px;background:#f8f7ff;margin-bottom:4px">
+                <div style="font-size:.8rem;font-weight:700;color:#4338ca;margin-bottom:8px">
+                    <i class="fas fa-calendar-alt"></i> 수강 기간 <span style="font-weight:400;color:#6b7280">(계좌/현금 결제 단지)</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <div class="form-group" style="margin:0">
+                        <label style="font-size:.82rem">수강 시작일</label>
+                        <input type="date" id="editStartDate" value="${a.start_date || ''}" style="width:100%;padding:7px;border:1px solid #c7d2fe;border-radius:6px;font-size:.9rem">
+                    </div>
+                    <div class="form-group" style="margin:0">
+                        <label style="font-size:.82rem">수강 만료일</label>
+                        <input type="date" id="editExpiryDate" value="${a.expiry_date || ''}" style="width:100%;padding:7px;border:1px solid #c7d2fe;border-radius:6px;font-size:.9rem">
+                    </div>
+                </div>
+            </div>` : ''}
             <div class="form-group"><label>메모</label><textarea id="editNotes" rows="3">${escHtml(a.notes || '')}</textarea></div>`;
 
         const footerHtml = `
@@ -809,10 +831,12 @@ ${(() => {
 
     async saveEdit(id) {
         try {
-            const monthly_fee     = document.getElementById('editFee')?.value;
-            const total_sessions  = document.getElementById('editTotal')?.value;
+            const monthly_fee        = document.getElementById('editFee')?.value;
+            const total_sessions     = document.getElementById('editTotal')?.value;
             const remaining_sessions = document.getElementById('editRemaining')?.value;
-            await API.applications.update(id, {
+            const startDateEl        = document.getElementById('editStartDate');
+            const expiryDateEl       = document.getElementById('editExpiryDate');
+            const payload = {
                 dong: document.getElementById('editDong').value,
                 ho:   document.getElementById('editHo').value,
                 name: document.getElementById('editName').value,
@@ -824,7 +848,11 @@ ${(() => {
                 monthly_fee:     monthly_fee     ? parseInt(monthly_fee)     : undefined,
                 total_sessions:  total_sessions  ? parseInt(total_sessions)  : undefined,
                 remaining_sessions: remaining_sessions !== '' ? parseInt(remaining_sessions) : undefined
-            });
+            };
+            // 수강 기간 필드 (direct 결제 단지 전용 — 필드가 DOM에 있을 때만 전송)
+            if (startDateEl  !== null) payload.start_date  = startDateEl.value  || null;
+            if (expiryDateEl !== null) payload.expiry_date = expiryDateEl.value || null;
+            await API.applications.update(id, payload);
             closeGlobalModal();
             showToast('저장되었습니다');
             await this.load();
@@ -2931,7 +2959,7 @@ ${(() => {
                 </div>
                 <div id="directPaymentNotice" style="display:${cx.payment_mode === 'direct' ? 'flex' : 'none'};align-items:center;gap:6px;margin-top:8px;padding:8px 10px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;font-size:.78rem;color:#854d0e">
                     <i class="fas fa-info-circle"></i>
-                    계좌/현금 모드: 승인 시 당월 1일~말일로 수강 기간 자동 기입, 만료 2주 전 연장 TM 자동 발송
+                    계좌/현금 모드: 승인 후 수정 폼에서 수강 시작일·만료일 직접 기입 → 만료 2주 전 연장 TM 자동 발송
                 </div>
             </div>
         </div>`;
