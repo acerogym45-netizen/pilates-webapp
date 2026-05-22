@@ -1104,6 +1104,29 @@ router.put('/cancellations/:id', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ─────────────────────────────────────────────────────────
+// DELETE /cancellations/:id  — 중도해지 기록 완전 삭제
+//   정산 화면에서 잘못 등록된 중도해지자 삭제용
+//   ※ 연결된 applications 레코드는 건드리지 않음
+//     (이미 cancelled 처리된 경우 관리자가 별도로 복구)
+// ─────────────────────────────────────────────────────────
+router.delete('/cancellations/:id', async (req, res) => {
+    try {
+        const sb = getSupabase();
+        const { id } = req.params;
+
+        // 삭제 전 레코드 확인 (로깅 목적)
+        const { data: existing } = await sb
+            .from('cancellations').select('name, program_name, termination_month').eq('id', id).single();
+        console.log(`[cancellations DELETE] id=${id} name=${existing?.name} prog=${existing?.program_name} month=${existing?.termination_month}`);
+
+        const { error } = await sb.from('cancellations').delete().eq('id', id);
+        if (error) throw error;
+
+        res.json({ success: true, deleted_id: id });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 // ═══════════════════════════════════════════════════════
 // 통계 대시보드
 // ═══════════════════════════════════════════════════════
@@ -1403,6 +1426,7 @@ router.get('/settlement-report', async (req, res) => {
                 name:             c.name,
                 phone:            c.phone,
                 program_name:     c.program_name,
+                preferred_time:   c.preferred_time || null,   // ★ 희망시간 추가
                 termination_date: tDate,
                 // 수강 횟수 / 청구 관련 (DB에 이미 저장된 값 전달)
                 attended_sessions: c.attended_sessions ?? null,

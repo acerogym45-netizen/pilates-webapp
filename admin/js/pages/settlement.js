@@ -322,8 +322,8 @@ const settlement = {
              <small style="font-weight:400;color:#888;font-size:.8rem">(${d.nextKey} 미부과 대상)</small>`,
             '#e67e22', '#fffaf5',
             endCancelRows, d.summary.end_cancel_count,
-            ['dong','ho','name','phone','program_name','termination_date','_last_badge'],
-            ['동','호수','이름','연락처','프로그램','해지일',''],
+            ['dong','ho','name','phone','program_name','preferred_time','termination_date','_last_badge'],
+            ['동','호수','이름','연락처','프로그램','해지 전 시간대','해지일',''],
             { _last_badge: v => v || '' },
             endCancelInfo
         );
@@ -871,6 +871,7 @@ const settlement = {
               <th style="${thStyle}">수강료<br><span style="font-weight:400;font-size:.7rem">×15,000</span></th>
               <th style="${thStyle}">총청구금액</th>
               <th style="${thStyle}">저장</th>
+              <th style="${thStyle}">삭제</th>
             </tr>`;
 
             const tbodyRows = rows.map((r, i) => {
@@ -923,6 +924,13 @@ const settlement = {
                       style="padding:4px 12px;background:#e74c3c;color:#fff;border:none;
                              border-radius:5px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap">
                       <i class="fas fa-save"></i> 저장
+                    </button>
+                  </td>
+                  <td style="${tdS}">
+                    <button onclick="settlement._deleteMidCancel('${id}', '${(r.name||'').replace(/'/g,'')}')" id="del-btn-${id}"
+                      style="padding:4px 10px;background:#fff;color:#c0392b;border:1.5px solid #e74c3c;
+                             border-radius:5px;font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap">
+                      <i class="fas fa-trash"></i>
                     </button>
                   </td>
                 </tr>`;
@@ -995,6 +1003,30 @@ const settlement = {
         if (penEl)    penEl.innerHTML    = calc ? `<span style="color:#e67e22;font-weight:600">${calc.penalty.toLocaleString('ko-KR')}원</span>` : '<span style="color:#ccc">-</span>';
         if (courseEl) courseEl.innerHTML = calc ? `<span style="color:#2980b9;font-weight:600">${calc.courseFee.toLocaleString('ko-KR')}원</span>` : '<span style="color:#ccc">-</span>';
         if (totalEl)  totalEl.innerHTML  = calc ? `<span style="color:#e74c3c;font-weight:700;font-size:.9rem">${calc.total.toLocaleString('ko-KR')}원</span>` : '<span style="color:#ccc">-</span>';
+    },
+
+    async _deleteMidCancel(id, name) {
+        if (!confirm(`"${name}" 중도해지 기록을 삭제하시겠습니까?\n\n⚠️ 이 작업은 cancellations 테이블에서 해당 레코드를 완전히 삭제합니다.`)) return;
+        const btn = document.getElementById(`del-btn-${id}`);
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+        try {
+            const res = await fetch(`/api/cancellations/${id}`, { method: 'DELETE' });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || '삭제 실패');
+            // 로컬 데이터에서도 제거
+            if (this._data?.mid_cancel) {
+                this._data.mid_cancel = this._data.mid_cancel.filter(r => r.id !== id);
+                if (this._data.summary) this._data.summary.mid_cancel_count = this._data.mid_cancel.length;
+            }
+            // 행 제거 (DOM)
+            const row = document.getElementById(`mid-row-${id}`);
+            if (row) row.remove();
+            delete this._midEdits[id];
+            showToast(`${name} 중도해지 기록 삭제 완료`, 'success');
+        } catch(e) {
+            showToast('삭제 오류: ' + e.message, 'error');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash"></i>'; }
+        }
     },
 
     async _saveMidBilling(id) {
