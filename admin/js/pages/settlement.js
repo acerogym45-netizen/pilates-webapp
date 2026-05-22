@@ -318,7 +318,7 @@ const settlement = {
             <div style="font-size:.76rem;color:#1a5c35;line-height:1.8;border-left:2px solid #52be80;padding-left:14px">
               <b>💡 처리 방식</b><br>
               · <b>${d.nextKey ? d.nextKey.replace('-','년 ')+'월' : '다음 달'}부터</b> 수강료 부과 시작<br>
-              · 이번 달 수강료는 미부과 — 정산 내역 상단에 <b>중도합류</b>로 구분 표시됨<br>
+              · 이번 달 수강료 <b>미청구</b> — 위 정산 내역에서 완전 제외됨<br>
               · 위 정산 내역 카드 하단 <b>▼ 신규 수강 예정자</b> 섹션과 동일한 인원
             </div>
           </div>`;
@@ -499,15 +499,14 @@ const settlement = {
             <div style="font-size:.76rem;color:#1a5276;line-height:1.8">
               <b>📋 포함 대상</b><br>
               · <b>자동연장</b>: 이전 달부터 수강 중 (approved_at &lt; 이번달 1일)<br>
-              · <b>중도합류</b>: 이번 달 중 승인된 신규 수강생<br>
               · <b>차월해지</b>: 이번 달 말일 해지 예정자 (요금은 이번 달까지 부과)<br>
               · <b>중도해지</b>: 이번 달 중간 해지자 (요금은 아래 중도해지 섹션에서 별도 계산)
             </div>
             <div style="font-size:.76rem;color:#1a5276;line-height:1.8;border-left:2px solid #aad4f5;padding-left:14px">
               <b>⚠️ 제외 대상</b><br>
               · status = cancelled (접수기간 중 신청 취소자)<br>
-              · 이번 달 신규 접수자 → 아래 <b>▼ 신규 수강 예정자</b> 섹션에 별도 표시<br>
-              · 하단 신규 섹션은 <b>다음 달부터</b> 수강료 부과 대상
+              · <b>이번 달 신규 승인자</b> → 아래 <b>▼ 신규 수강 예정자</b> 섹션에만 표시<br>
+              · 하단 신규 섹션은 <b>다음 달부터</b> 수강료 부과 대상 (이번 달 미청구)
             </div>
           </div>
           ${body}

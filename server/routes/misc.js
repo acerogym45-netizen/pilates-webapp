@@ -1537,12 +1537,19 @@ router.get('/settlement-report', async (req, res) => {
         // 당월 수강생 행 생성 (approved + 해지자 포함)
         const settlementRows = [];
 
-        // approved 목록: 자동연장 / 중도합류 / 차월해지 구분
+        // approved 목록: 자동연장 / 차월해지 / 중도해지 구분
+        // ★ 차월신규(이번 달 승인된 신규 수강생)는 settlementRows에서 완전 제외
+        //   → 해당 인원은 newSectionRows(신규 수강 예정자 섹션)에만 표시됨
+        //   → 중도합류(이번 달 중간부터 수강 시작) 개념 제거: 이번 달 승인 = 다음 달부터 수강
         approvedList.forEach(a => {
             const approvedDate = (a.approved_at || a.created_at || '').slice(0, 10);
-            const isMidJoin = approvedDate >= monthStart && approvedDate <= monthEnd;
+            const isNextNew   = approvedDate >= monthStart && approvedDate <= monthEnd;
             const isEndCancel = endCancelKeySet.has(`${a.dong}_${a.ho}_${a.name}`);
             const isMidCancel = midCancelKeySet.has(`${a.dong}_${a.ho}_${a.name}`);
+
+            // ★ 이번 달 신규 승인자는 정산 내역에서 제외 (신규 섹션에만 표시)
+            //   단, 중도해지/차월해지자는 해지 분류를 위해 그대로 포함
+            if (isNextNew && !isEndCancel && !isMidCancel) return;
 
             let category = '';
             if (isMidCancel) category = '중도해지';
@@ -1550,8 +1557,7 @@ router.get('/settlement-report', async (req, res) => {
                 const nextLabel = `${nextYr}년 ${nextMo}월`;
                 category = `${nextLabel} 수강 해지`;
             }
-            else if (isMidJoin) category = '중도합류';
-            // else: 빈칸 (자동연장)
+            // else: 빈칸 (자동연장 — 이전 달부터 수강 중)
 
             const fee = getFee(a);
             const att = attendanceMap[a.id];
@@ -1577,7 +1583,7 @@ router.get('/settlement-report', async (req, res) => {
                 approved_at:      approvedDate,
                 is_mid_cancel:    isMidCancel,
                 is_end_cancel:    isEndCancel,
-                is_mid_join:      isMidJoin && !isEndCancel && !isMidCancel,
+                is_mid_join:      false, // 중도합류 분류 제거 (차월신규는 정산 제외)
             });
         });
 
