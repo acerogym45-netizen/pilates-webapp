@@ -201,7 +201,7 @@ router.get('/:id/apply-settings', async (req, res) => {
 
         const { data: cx, error: cxErr } = await sb
             .from('complexes')
-            .select('id, name, apply_period_enabled, apply_start, apply_end, waiting_enabled, waiting_timeout_hours, auto_approve')
+            .select('id, name, apply_period_enabled, apply_start, apply_end, waiting_enabled, waiting_timeout_hours, auto_approve, payment_mode')
             .eq('id', cxId)
             .single();
         if (cxErr) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
@@ -271,6 +271,7 @@ router.get('/:id/apply-settings', async (req, res) => {
                 waiting_enabled:       cx.waiting_enabled       || false,
                 waiting_timeout_hours: cx.waiting_timeout_hours || 3,
                 auto_approve:          cx.auto_approve !== false,
+                payment_mode:          cx.payment_mode          || 'management_fee',
             }
         });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
@@ -280,12 +281,13 @@ router.put('/:id/apply-settings', async (req, res) => {
     try {
         const sb   = getSupabase();
         const cxId = req.params.id;
-        const { settings, waiting_enabled, waiting_timeout_hours, auto_approve } = req.body;
+        const { settings, waiting_enabled, waiting_timeout_hours, auto_approve, payment_mode } = req.body;
 
         const cxPatch = {};
         if (waiting_enabled       !== undefined) cxPatch.waiting_enabled       = Boolean(waiting_enabled);
         if (waiting_timeout_hours !== undefined) cxPatch.waiting_timeout_hours = parseInt(waiting_timeout_hours) || 3;
         if (auto_approve          !== undefined) cxPatch.auto_approve          = Boolean(auto_approve);
+        if (payment_mode          !== undefined) cxPatch.payment_mode          = payment_mode === 'direct' ? 'direct' : 'management_fee';
 
         if (Object.keys(cxPatch).length > 0) {
             const { error: cxErr } = await sb.from('complexes').update(cxPatch).eq('id', cxId);

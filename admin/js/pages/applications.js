@@ -435,6 +435,8 @@ const applications = {
                 <div class="detail-row"><label>프로그램</label><span>${a.program_name}</span></div>
                 <div class="detail-row"><label>희망 시간</label><span>${a.preferred_time || '-'}</span></div>
                 ${a.monthly_fee ? `<div class="detail-row"><label>월 수강료</label><span>₩${parseInt(a.monthly_fee).toLocaleString()}</span></div>` : ''}
+                ${a.start_date ? `<div class="detail-row"><label>수강 기간</label><span style="font-weight:600;color:#4338ca">${a.start_date} ~ ${a.expiry_date || '?'}</span></div>` : ''}
+                ${a.renewal_status ? `<div class="detail-row"><label>연장 상태</label><span style="font-weight:600;color:${a.renewal_status==='confirmed'?'#16a34a':a.renewal_status==='declined'?'#dc2626':a.renewal_status==='expired'?'#9ca3af':'#d97706'}">${{'pending':'연장 TM 발송됨','confirmed':'연장 확인','declined':'연장 비희망','expired':'만료 처리'}[a.renewal_status]||a.renewal_status}</span></div>` : ''}
                 ${a.total_sessions != null ? `<div class="detail-row"><label>당월 총 횟수</label><span>${a.total_sessions}회</span></div>` : ''}
                 ${a.remaining_sessions != null ? `<div class="detail-row"><label>잔여 횟수</label><span style="font-weight:600;color:#2980b9">${a.remaining_sessions}회</span></div>` : ''}
                 ${a.transfer_date ? `<div class="detail-row"><label>양도일</label><span>${a.transfer_date}</span></div>` : ''}
@@ -2896,7 +2898,7 @@ ${(() => {
                 <span style="font-size:.8rem;color:#6b7280">이내 미응답 시 다음 순번으로 이동</span>
             </div>
             <!-- 자동 승인 -->
-            <div style="display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
                 <div>
                     <span style="font-weight:600;font-size:.88rem">신규 신청 자동 승인</span>
                     <div style="font-size:.78rem;color:#6b7280">OFF 시 관리자 수동 승인 필요 (received 상태로 접수)</div>
@@ -2908,6 +2910,29 @@ ${(() => {
                         <div id="autoApproveThumb" style="position:absolute;top:2px;left:${cx.auto_approve !== false ? '22px' : '2px'};width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .2s"></div>
                     </div>
                 </label>
+            </div>
+            <!-- 결제 모드 -->
+            <div style="border-top:1px solid #f3f4f6;padding-top:12px">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+                    <div>
+                        <span style="font-weight:600;font-size:.88rem"><i class="fas fa-credit-card" style="color:#6366f1;margin-right:4px"></i>수강료 결제 방식</span>
+                        <div style="font-size:.78rem;color:#6b7280;margin-top:2px">계좌/현금 결제 선택 시 수강 시작일·만료일 자동 기입 + 연장 TM 자동화 활성</div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-shrink:0">
+                        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.82rem;padding:5px 10px;border-radius:8px;border:2px solid ${cx.payment_mode === 'direct' ? '#d1d5db' : '#6366f1'};background:${cx.payment_mode === 'direct' ? '#fff' : '#eef2ff'};font-weight:${cx.payment_mode === 'direct' ? '400' : '700'};color:${cx.payment_mode === 'direct' ? '#6b7280' : '#4338ca'}">
+                            <input type="radio" name="paymentMode" value="management_fee" ${cx.payment_mode !== 'direct' ? 'checked' : ''} onchange="applications._onPaymentModeChange(this.value)" style="display:none">
+                            <i class="fas fa-building"></i> 관리비 청구
+                        </label>
+                        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:.82rem;padding:5px 10px;border-radius:8px;border:2px solid ${cx.payment_mode === 'direct' ? '#6366f1' : '#d1d5db'};background:${cx.payment_mode === 'direct' ? '#eef2ff' : '#fff'};font-weight:${cx.payment_mode === 'direct' ? '700' : '400'};color:${cx.payment_mode === 'direct' ? '#4338ca' : '#6b7280'}">
+                            <input type="radio" name="paymentMode" value="direct" ${cx.payment_mode === 'direct' ? 'checked' : ''} onchange="applications._onPaymentModeChange(this.value)" style="display:none">
+                            <i class="fas fa-university"></i> 계좌/현금
+                        </label>
+                    </div>
+                </div>
+                <div id="directPaymentNotice" style="display:${cx.payment_mode === 'direct' ? 'flex' : 'none'};align-items:center;gap:6px;margin-top:8px;padding:8px 10px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;font-size:.78rem;color:#854d0e">
+                    <i class="fas fa-info-circle"></i>
+                    계좌/현금 모드: 승인 시 당월 1일~말일로 수강 기간 자동 기입, 만료 2주 전 연장 TM 자동 발송
+                </div>
             </div>
         </div>`;
 
@@ -3050,15 +3075,17 @@ ${(() => {
         const waitingTrack = document.getElementById('waitingEnabledTrack');
         const autoTrack    = document.getElementById('autoApproveTrack');
         const timeoutSel   = document.getElementById('waitingTimeoutSel');
+        const pmRadio      = document.querySelector('input[name="paymentMode"]:checked');
         const waiting_enabled       = waitingTrack ? (waitingTrack.dataset.on === '1' || waitingTrack.style.background === 'rgb(16, 185, 129)') : false;
         const auto_approve          = autoTrack    ? (autoTrack.dataset.on    === '1' || autoTrack.style.background    === 'rgb(16, 185, 129)') : true;
         const waiting_timeout_hours = timeoutSel   ? parseInt(timeoutSel.value) : 3;
+        const payment_mode          = pmRadio      ? pmRadio.value : 'management_fee';
 
         try {
             const res = await fetch(`/api/complexes/${complexId}/apply-settings`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings, waiting_enabled, auto_approve, waiting_timeout_hours }),
+                body: JSON.stringify({ settings, waiting_enabled, auto_approve, waiting_timeout_hours, payment_mode }),
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error);
@@ -3066,6 +3093,22 @@ ${(() => {
             showToast('신청 종류 설정이 저장되었습니다', 'success');
             this._refreshApplySettingsBadge(complexId);
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+    },
+
+    // 결제 모드 라디오 변경 시 안내문 토글
+    _onPaymentModeChange(value) {
+        const notice = document.getElementById('directPaymentNotice');
+        const labels = document.querySelectorAll('input[name="paymentMode"]');
+        labels.forEach(inp => {
+            const lbl = inp.closest('label');
+            if (!lbl) return;
+            const isSelected = inp.value === value;
+            lbl.style.borderColor  = isSelected ? '#6366f1' : '#d1d5db';
+            lbl.style.background   = isSelected ? '#eef2ff' : '#fff';
+            lbl.style.fontWeight   = isSelected ? '700' : '400';
+            lbl.style.color        = isSelected ? '#4338ca' : '#6b7280';
+        });
+        if (notice) notice.style.display = value === 'direct' ? 'flex' : 'none';
     },
 
     // 신청 종류 설정 버튼 배지 갱신
