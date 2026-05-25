@@ -757,16 +757,12 @@ ${(() => {
                </select>`
             : `<input type="text" id="editTime" value="${escHtml(a.preferred_time || '')}" placeholder="예: 20:00">`;
 
-        // 프로그램별 time_slots + duration_days 맵 (JS에 인라인으로 주입)
-        const slotsMapJson = JSON.stringify(
-            Object.fromEntries(progList.map(p => [p.name, p.time_slots || []]))
-        );
-        const durationMapJson = JSON.stringify(
-            Object.fromEntries(progList.map(p => [p.name, p.duration_days || null]))
-        );
+        // 프로그램별 time_slots + duration_days 맵 — innerHTML 내 <script>는 브라우저가 실행 안 함
+        // → openGlobalModal 호출 전에 직접 JS 객체로 할당
+        this._editSlotsMap = Object.fromEntries(progList.map(p => [p.name, p.time_slots || []]));
+        this._editDurationMap = Object.fromEntries(progList.map(p => [p.name, p.duration_days || null]));
 
         const bodyHtml = `
-            <script>applications._editSlotsMap = ${slotsMapJson}; applications._editDurationMap = ${durationMapJson};</script>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                 <div class="form-group"><label>동</label><input type="text" id="editDong" value="${escHtml(a.dong)}"></div>
                 <div class="form-group"><label>호수</label><input type="text" id="editHo" value="${escHtml(a.ho)}"></div>
