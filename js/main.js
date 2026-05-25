@@ -1327,13 +1327,8 @@ async function _updateContractPeriodLabels() {
     // 해지 신청 기간
     const cancelPeriodEl = document.getElementById('contractCancelPeriodDate');
     if (cancelPeriodEl) {
-        if (cancelPeriodLabel === '상시 가능') {
-            // 상시 접수 단지: 해지 신청 항목 자체를 숨김 (해지 신청 기간 의미 없음)
-            const cancelItem = cancelPeriodEl.closest('.period-notice-item');
-            if (cancelItem) cancelItem.style.display = 'none';
-        } else {
-            cancelPeriodEl.innerHTML = `매월 <strong>${cancelPeriodLabel}</strong>`;
-        }
+        // 상시 가능 포함 항상 텍스트 표시 (숨김 없음)
+        cancelPeriodEl.innerHTML = `매월 <strong>${cancelPeriodLabel}</strong>`;
     }
 
     // 자동 재등록 안내 줄 — direct(계좌/현금) 방식이면 숨김
@@ -1363,8 +1358,7 @@ async function _updateContractPeriodLabels() {
         if (terms8Direct) terms8Direct.style.display  = '';
         // direct용 기간 텍스트 업데이트
         if (p3Direct) p3Direct.textContent = cancelPeriodLabel;
-        // 동의 문구: ①~⑦ (⑧ 자동연장 항목 제외)
-        if (agreeLabel) agreeLabel.innerHTML = '위 이용약관 전체 (①~⑦)를 모두 읽고 동의합니다 <span class="required">*</span>';
+        // 동의 문구: ①~⑧ 유지 (HTML 기본값 사용)
     } else {
         // management_fee: 자동연장 포함 기존 문구
         if (terms8Mgmt)   terms8Mgmt.style.display   = '';
