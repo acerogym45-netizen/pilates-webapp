@@ -117,6 +117,14 @@ const programs = {
                 <div class="form-group"><label>월 수강료 (원)</label><input type="number" id="pPrice" value="${p?.price||0}"></div>
                 <div class="form-group"><label>정원 (명)</label><input type="number" id="pCapacity" value="${p?.capacity||6}"></div>
             </div>
+            <div class="form-group">
+                <label>수강 기간 <small style="font-weight:normal;color:#888">(일수, 비우면 자동계산 미사용)</small></label>
+                <div style="display:flex;align-items:center;gap:8px">
+                    <input type="number" id="pDurationDays" value="${p?.duration_days||''}" min="1" max="365" placeholder="예: 28" style="width:100px">
+                    <span style="font-size:.82rem;color:#888">일</span>
+                    <span style="font-size:.78rem;color:#aaa;margin-left:4px">주1회×4주=28일 / 주2회×4주=28일 / 주2회×8주=56일 / 주2회×12주=84일</span>
+                </div>
+            </div>
             <div class="form-group"><label>설명</label><textarea id="pDesc" rows="3">${p ? escHtml(p.description||'') : ''}</textarea></div>
             <div class="form-group"><label>표시 순서</label><input type="number" id="pOrder" value="${p?.display_order||0}"></div>
             ${p ? `
@@ -201,13 +209,15 @@ const programs = {
         const time_slots = Array.from(document.querySelectorAll('input[name="pTimeCheck"]:checked'))
             .map(el => el.value).filter(Boolean);
         try {
+            const durationDaysVal = document.getElementById('pDurationDays')?.value;
             const data = {
                 name, type: document.getElementById('pType').value,
                 days,
                 time_slots, price: parseInt(document.getElementById('pPrice').value)||0,
                 capacity: parseInt(document.getElementById('pCapacity').value)||6,
                 description: document.getElementById('pDesc').value,
-                display_order: parseInt(document.getElementById('pOrder').value)||0
+                display_order: parseInt(document.getElementById('pOrder').value)||0,
+                duration_days: durationDaysVal ? parseInt(durationDaysVal) : null,
             };
             if (id) {
                 const activeEl = document.getElementById('pActive');

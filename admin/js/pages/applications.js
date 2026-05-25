@@ -755,13 +755,16 @@ ${(() => {
                </select>`
             : `<input type="text" id="editTime" value="${escHtml(a.preferred_time || '')}" placeholder="예: 20:00">`;
 
-        // 프로그램별 time_slots 맵 (JS에 인라인으로 주입)
+        // 프로그램별 time_slots + duration_days 맵 (JS에 인라인으로 주입)
         const slotsMapJson = JSON.stringify(
             Object.fromEntries(progList.map(p => [p.name, p.time_slots || []]))
         );
+        const durationMapJson = JSON.stringify(
+            Object.fromEntries(progList.map(p => [p.name, p.duration_days || null]))
+        );
 
         const bodyHtml = `
-            <script>applications._editSlotsMap = ${slotsMapJson};</script>
+            <script>applications._editSlotsMap = ${slotsMapJson}; applications._editDurationMap = ${durationMapJson};</script>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
                 <div class="form-group"><label>동</label><input type="text" id="editDong" value="${escHtml(a.dong)}"></div>
                 <div class="form-group"><label>호수</label><input type="text" id="editHo" value="${escHtml(a.ho)}"></div>
@@ -795,19 +798,35 @@ ${(() => {
                 </div>
             </div>
             ${isDirectPayment ? `
-            <div style="border:1.5px solid #6366f1;border-radius:10px;padding:12px 14px;background:#f8f7ff;margin-bottom:4px">
-                <div style="font-size:.8rem;font-weight:700;color:#4338ca;margin-bottom:8px">
-                    <i class="fas fa-calendar-alt"></i> 수강 기간 <span style="font-weight:400;color:#6b7280">(계좌/현금 결제 단지)</span>
+            <div style="border:1.5px solid #6366f1;border-radius:10px;padding:14px 16px;background:#f8f7ff;margin-bottom:4px">
+                <div style="font-size:.8rem;font-weight:700;color:#4338ca;margin-bottom:10px">
+                    <i class="fas fa-calendar-alt"></i> 수강 기간
+                    <span id="autoDurationBadge" style="display:none;margin-left:6px;font-size:.72rem;font-weight:600;color:#fff;background:#4f46e5;padding:2px 8px;border-radius:10px">자동계산</span>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+
+                <!-- 시작일 + 만료일 재그리드 -->
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
                     <div class="form-group" style="margin:0">
-                        <label style="font-size:.82rem">수강 시작일</label>
-                        <input type="date" id="editStartDate" value="${a.start_date || ''}" style="width:100%;padding:7px;border:1px solid #c7d2fe;border-radius:6px;font-size:.9rem">
+                        <label style="font-size:.78rem;color:#6b7280;font-weight:600">수강 시작일</label>
+                        <input type="date" id="editStartDate" value="${a.start_date || ''}"
+                            style="width:100%;padding:7px;border:1px solid #c7d2fe;border-radius:6px;font-size:.9rem"
+                            oninput="applications._onStartDateChange(this.value)">
                     </div>
                     <div class="form-group" style="margin:0">
-                        <label style="font-size:.82rem">수강 만료일</label>
-                        <input type="date" id="editExpiryDate" value="${a.expiry_date || ''}" style="width:100%;padding:7px;border:1px solid #c7d2fe;border-radius:6px;font-size:.9rem">
+                        <label style="font-size:.78rem;color:#6b7280;font-weight:600">수강 만료일</label>
+                        <input type="date" id="editExpiryDate" value="${a.expiry_date || ''}"
+                            style="width:100%;padding:7px;border:1px solid #c7d2fe;border-radius:6px;font-size:.9rem">
                     </div>
+                </div>
+
+                <!-- 공휴일/수업 결실 추가일 보정 -->
+                <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(99,102,241,.07);border-radius:8px">
+                    <i class="fas fa-plus-circle" style="color:#6366f1;font-size:.85rem"></i>
+                    <span style="font-size:.78rem;color:#4338ca;font-weight:600">추가 일수 보정</span>
+                    <input type="number" id="editExtraDays" value="0" min="0" max="60"
+                        style="width:56px;padding:4px 6px;border:1px solid #c7d2fe;border-radius:6px;font-size:.85rem;text-align:center"
+                        oninput="applications._onExtraDaysChange(this.value)">
+                    <span style="font-size:.78rem;color:#6b7280">일 (공휴일 · 결실 보정용)</span>
                 </div>
             </div>` : ''}
             <div class="form-group"><label>메모</label><textarea id="editNotes" rows="3">${escHtml(a.notes || '')}</textarea></div>`;
@@ -852,6 +871,53 @@ ${(() => {
                 timeEl.placeholder = '시간대 없음 또는 직접 입력';
             }
         }
+
+        // 프로그램 변경 시 duration_days에 맞춰 만료일 재계산
+        const startDateEl = document.getElementById('editStartDate');
+        if (startDateEl?.value) {
+            this._onStartDateChange(startDateEl.value);
+        }
+    },
+
+    // ── 수강 시작일 변경 → 만료일 자동 계산 ──────────────────────────────────
+    _onStartDateChange(startDateStr) {
+        if (!startDateStr) return;
+
+        const progEl   = document.getElementById('editProgram');
+        const progName = progEl?.value || '';
+        const durMap   = this._editDurationMap || {};
+        const days     = durMap[progName];
+
+        const badge = document.getElementById('autoDurationBadge');
+
+        if (!days) {
+            // duration_days 미설정 프로그램 → 자동계산 안 함
+            if (badge) badge.style.display = 'none';
+            return;
+        }
+
+        // 시작일 + duration_days + extraDays → 만료일 계산
+        const extra   = parseInt(document.getElementById('editExtraDays')?.value || '0') || 0;
+        const totalDays = days + extra;
+
+        const start = new Date(startDateStr);
+        // 만료일 = 시작일 + (totalDays - 1)일 (시작일 포함 totalDays일 수강)
+        const expiry = new Date(start.getTime() + (totalDays - 1) * 24 * 60 * 60 * 1000);
+        const expiryStr = expiry.toISOString().slice(0, 10);
+
+        const expiryEl = document.getElementById('editExpiryDate');
+        if (expiryEl) expiryEl.value = expiryStr;
+
+        if (badge) {
+            badge.style.display = 'inline';
+            badge.textContent = `자동계산 ${days}일${extra ? `+${extra}일` : ''}`;
+        }
+    },
+
+    // ── 추가 일수 보정 변경 → 만료일 재계산 ──────────────────────────────────
+    _onExtraDaysChange(extraStr) {
+        const startEl = document.getElementById('editStartDate');
+        if (startEl?.value) this._onStartDateChange(startEl.value);
     },
 
     async saveEdit(id) {

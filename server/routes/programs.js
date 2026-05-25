@@ -140,7 +140,7 @@ router.get('/:id', async (req, res) => {
 // ── 프로그램 생성 ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
     try {
-        const { complex_id, name, type, description, days, time_slots, price, capacity, display_order, show_on_inactive } = req.body;
+        const { complex_id, name, type, description, days, time_slots, price, capacity, display_order, show_on_inactive, duration_days } = req.body;
         if (!complex_id || !name || !type) return res.status(400).json({ success: false, error: 'complex_id, name, type 필수' });
 
         const sb = getSupabase();
@@ -155,6 +155,8 @@ router.post('/', async (req, res) => {
         };
         // show_on_inactive 컬럼이 있으면 포함
         if (show_on_inactive !== undefined) insertObj.show_on_inactive = Boolean(show_on_inactive);
+        // duration_days: NULL이면 자동계산 미사용
+        if (duration_days !== undefined) insertObj.duration_days = duration_days ? parseInt(duration_days) : null;
 
         let { data, error } = await sb.from('programs').insert(insertObj).select().single();
 
@@ -177,7 +179,7 @@ router.post('/', async (req, res) => {
 // ── 프로그램 수정 ─────────────────────────────────────────────
 router.put('/:id', async (req, res) => {
     try {
-        const { name, type, description, days, time_slots, price, capacity, display_order, is_active, show_on_inactive } = req.body;
+        const { name, type, description, days, time_slots, price, capacity, display_order, is_active, show_on_inactive, duration_days } = req.body;
         const sb = getSupabase();
         const updateObj = {
             name, type, description, days,
@@ -189,6 +191,8 @@ router.put('/:id', async (req, res) => {
         // show_on_inactive: 비활성 상태일 때도 입주민 페이지에 표시할지 여부
         // 컬럼이 DB에 없으면 무시 (에러 방지)
         if (show_on_inactive !== undefined) updateObj.show_on_inactive = Boolean(show_on_inactive);
+        // duration_days: NULL이면 자동계산 미사용
+        if (duration_days !== undefined) updateObj.duration_days = duration_days ? parseInt(duration_days) : null;
 
         // 1차 시도: show_on_inactive 포함
         let { data, error } = await sb
