@@ -162,7 +162,7 @@ async function sendRenewalNoticeSms({ phone, name, complexName, programName, exp
     if (!fromNumber) return { success: false, error: '발신번호가 설정되지 않았습니다' };
 
     const complex = complexName ? `[${complexName}] ` : '';
-    const text = `${complex}${name}님 안녕하세요.\n\n${programName} 수강 만료일이 ${expiryDate}입니다.\n\n연장을 원하시면 아래 링크를 눌러주세요 (3일 이내 응답):\n${renewalUrl}\n\n※ 미응답 시 자동 해지 처리됩니다.`;
+    const text = `${complex}${name}님 안녕하세요.\n\n${programName} 수강 만료일이 ${expiryDate}입니다.\n\n연장 여부 확인을 위해 아래 링크를 눌러주세요:\n${renewalUrl}\n\n※ 3일 이내 미응답 시 자동 비희망 처리되며, 기간 만료 후 차순 대기 입주민께 양도됩니다.`;
 
     try {
         console.log(`[SMS][연장TM] 발송 시도: ${normalizedPhone} (${name})`);

@@ -3,7 +3,7 @@
  *
  * GET  /renew/:token           — 입주민용 연장 의향 페이지 (공개)
  * POST /api/renewal/respond    — 입주민 연장 희망/비희망 응답
- * POST /api/renewal/confirm    — 관리자 결제 확인 → 연장 처리 (Phase 6)
+ * POST /api/renewal/confirm    — 관리자 결제 확인 → 연장 처리
  * POST /api/renewal/send-notice — 관리자가 수동으로 연장 TM 발송
  * GET  /api/renewal/pending    — 관리자: 연장 대기 목록 조회
  */
@@ -39,7 +39,6 @@ function addOneMonth(dateStr) {
     if (!dateStr) return null;
     const d = new Date(dateStr);
     d.setMonth(d.getMonth() + 1);
-    // 말일 보정 (예: 1/31 + 1개월 → 2/28)
     return d.toISOString().slice(0, 10);
 }
 
@@ -131,28 +130,20 @@ router.post('/api/renewal/respond', async (req, res) => {
             return res.status(404).json({ success: false, error: '유효하지 않은 토큰입니다' });
         }
 
-        // 기한 초과 확인
         if (app.renewal_deadline && new Date() > new Date(app.renewal_deadline)) {
             return res.status(400).json({ success: false, error: '응답 기한이 지났습니다' });
         }
 
-        // 이미 응답한 경우
         if (app.renewal_status && app.renewal_status !== 'pending') {
             return res.status(400).json({ success: false, error: '이미 응답이 완료된 요청입니다' });
         }
 
-        // 응답 저장
         const { error: updateErr } = await sb
             .from('applications')
             .update({ renewal_status: response })
             .eq('id', app.id);
 
         if (updateErr) throw updateErr;
-
-        // 비희망 → 만료 예약 처리 (cron에서 expiry_date 이후 처리)
-        if (response === 'declined') {
-            console.log(`[renewal] ${app.name} 연장 비희망 선택 (app_id=${app.id})`);
-        }
 
         console.log(`[renewal] ${app.name} 연장 응답: ${response} (app_id=${app.id})`);
         res.json({ success: true, response });
@@ -163,7 +154,7 @@ router.post('/api/renewal/respond', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// POST /api/renewal/confirm  — 관리자 결제 확인 → 연장 처리 (Phase 6)
+// POST /api/renewal/confirm  — 관리자 결제 확인 → 연장 처리
 // body: { applicationId, paymentMethod: 'transfer'|'cash', memo }
 // ══════════════════════════════════════════════════════════════════════════════
 router.post('/api/renewal/confirm', async (req, res) => {
@@ -189,25 +180,21 @@ router.post('/api/renewal/confirm', async (req, res) => {
             return res.status(400).json({ success: false, error: '만료일이 설정되지 않았습니다' });
         }
 
-        // 1개월 연장
         const newExpiryDate = addOneMonth(app.expiry_date);
-        const newStartDate  = app.expiry_date; // 기존 만료일 다음날이 새 시작일 (간단히 기존 만료일 사용)
 
-        // applications 업데이트
         const { error: updateErr } = await sb
             .from('applications')
             .update({
-                expiry_date:    newExpiryDate,
-                renewal_status: null,          // 다음 연장 사이클을 위해 초기화
-                renewal_token:  null,
-                renewal_deadline: null,
+                expiry_date:         newExpiryDate,
+                renewal_status:      null,
+                renewal_token:       null,
+                renewal_deadline:    null,
                 renewal_notified_at: null,
             })
             .eq('id', applicationId);
 
         if (updateErr) throw updateErr;
 
-        // renewal_payments 기록
         await sb.from('renewal_payments').insert({
             application_id: applicationId,
             amount:         app.monthly_fee || 0,
@@ -215,9 +202,7 @@ router.post('/api/renewal/confirm', async (req, res) => {
             confirmed_by:   'admin',
             memo:           memo || '',
         }).select().maybeSingle();
-        // renewal_payments 테이블 없어도 에러 무시하고 계속 진행
 
-        // 입주민 확인 SMS 발송
         const smsConfig = await getComplexSmsConfig(sb, app.complex_id);
         const smsResult = await sendRenewalConfirmedSms({
             phone:        app.phone,
@@ -229,12 +214,8 @@ router.post('/api/renewal/confirm', async (req, res) => {
             smsEnabled:   smsConfig.smsEnabled,
         });
 
-        console.log(`[renewal] 연장 확인 완료: ${app.name} → 새 만료일 ${newExpiryDate}, SMS: ${smsResult.success ? '성공' : '실패'}`);
-        res.json({
-            success: true,
-            new_expiry_date: newExpiryDate,
-            sms: smsResult,
-        });
+        console.log(`[renewal] 연장 확인 완료: ${app.name} → 새 만료일 ${newExpiryDate}`);
+        res.json({ success: true, new_expiry_date: newExpiryDate, sms: smsResult });
     } catch (e) {
         console.error('[renewal] POST /confirm 오류:', e.message);
         res.status(500).json({ success: false, error: e.message });
@@ -268,9 +249,8 @@ router.post('/api/renewal/send-notice', async (req, res) => {
             return res.status(400).json({ success: false, error: '만료일이 설정되지 않은 수강자입니다' });
         }
 
-        // 토큰 생성 + 3일 데드라인 설정
         const token    = crypto.randomUUID();
-        const deadline = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3일 후
+        const deadline = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
 
         const { error: updateErr } = await sb
             .from('applications')
@@ -284,7 +264,6 @@ router.post('/api/renewal/send-notice', async (req, res) => {
 
         if (updateErr) throw updateErr;
 
-        // SMS 발송
         const baseUrl    = process.env.APP_BASE_URL || `https://${req.get('host')}`;
         const renewalUrl = `${baseUrl}/renew/${token}`;
         const smsConfig  = await getComplexSmsConfig(sb, app.complex_id);
@@ -301,13 +280,7 @@ router.post('/api/renewal/send-notice', async (req, res) => {
         });
 
         console.log(`[renewal] 수동 연장TM 발송: ${app.name} (${app.expiry_date}), SMS: ${smsResult.success ? '성공' : '실패/건너뜀'}`);
-        res.json({
-            success: true,
-            token,
-            deadline: deadline.toISOString(),
-            renewal_url: renewalUrl,
-            sms: smsResult,
-        });
+        res.json({ success: true, token, deadline: deadline.toISOString(), renewal_url: renewalUrl, sms: smsResult });
     } catch (e) {
         console.error('[renewal] POST /send-notice 오류:', e.message);
         res.status(500).json({ success: false, error: e.message });
@@ -315,8 +288,7 @@ router.post('/api/renewal/send-notice', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
-// GET /api/renewal/pending  — 관리자: 연장 대기 목록 (결제 확인 필요)
-// query: ?complexId=...
+// GET /api/renewal/pending  — 관리자: 연장 대기 목록
 // ══════════════════════════════════════════════════════════════════════════════
 router.get('/api/renewal/pending', async (req, res) => {
     try {
@@ -350,63 +322,124 @@ function renewPageHtml({ error, done, type, token, name, programName, expiryDate
     complexName, accountBank, accountNumber, accountHolder } = {}) {
 
     const deadlineStr = deadline
-        ? new Date(deadline).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        ? new Date(deadline).toLocaleString('ko-KR', {
+            timeZone: 'Asia/Seoul',
+            month: 'numeric', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+          })
         : '';
 
+    // ── 오류 페이지 ──────────────────────────────────────────────────────────
     if (error) {
         return baseHtml(`
-            <div class="card error-card">
-                <div class="icon">⚠️</div>
-                <h2>링크 오류</h2>
-                <p>${error}</p>
+            <div class="card">
+                <div class="status-icon error-icon">⚠</div>
+                <h2 class="card-title">링크 오류</h2>
+                <p class="card-desc">${error}</p>
             </div>`);
     }
 
+    // ── 이미 응답 완료 페이지 ────────────────────────────────────────────────
     if (done) {
-        const msg = type === 'confirmed'
-            ? `<p><strong>${name}</strong>님의 <strong>${programName}</strong> 수강 연장 희망이 접수되었습니다.</p><p class="sub">담당자가 결제를 확인한 후 연장이 완료됩니다.<br>계좌 입금 후 잠시 기다려 주세요.</p>`
-            : `<p><strong>${name}</strong>님의 연장 비희망이 접수되었습니다.</p><p class="sub">수강 만료 후 자동 처리됩니다.<br>재등록을 원하시면 접수 페이지를 이용해 주세요.</p>`;
-        return baseHtml(`
-            <div class="card done-card">
-                <div class="icon">${type === 'confirmed' ? '✅' : '👋'}</div>
-                <h2>응답 완료</h2>
-                ${msg}
-            </div>`);
+        if (type === 'confirmed') {
+            return baseHtml(`
+                <div class="card">
+                    <div class="status-icon confirmed-icon">✓</div>
+                    <h2 class="card-title">연장 희망 접수 완료</h2>
+                    <p class="card-desc">결제 후 담당자 확인이 완료되면<br>연장 완료 문자를 발송해드립니다.</p>
+                </div>`);
+        } else {
+            return baseHtml(`
+                <div class="card">
+                    <div class="status-icon declined-icon">✕</div>
+                    <h2 class="card-title">연장 비희망 접수 완료</h2>
+                    <p class="card-desc">수강 만료 후 자동 처리됩니다.<br>재등록을 원하시면 접수 페이지를 이용해 주세요.</p>
+                </div>`);
+        }
     }
 
-    const accountSection = (accountBank && accountNumber) ? `
-        <div class="account-box" id="accountBox" style="display:none">
-            <div class="account-title">💳 결제 계좌 안내</div>
-            <div class="account-row"><span>은행</span><strong>${accountBank}</strong></div>
-            <div class="account-row"><span>계좌번호</span><strong class="account-num">${accountNumber}</strong></div>
-            <div class="account-row"><span>예금주</span><strong>${accountHolder || ''}</strong></div>
-            <div class="account-row"><span>금액</span><strong class="amount-hint">담당자 확인 후 안내</strong></div>
-            <p class="account-note">※ 입금 후 별도 연락 불필요합니다.<br>담당자가 확인 후 연장 완료 문자를 발송해드립니다.</p>
+    // ── 계좌 안내 섹션 (연장 희망 클릭 후 항상 노출) ────────────────────────
+    const hasAccount = accountBank && accountNumber;
+    const accountHtml = hasAccount ? `
+        <div class="account-box" id="accountBox">
+            <div class="account-header">
+                <span class="account-icon">🏦</span>
+                <span class="account-title">수강료 입금 안내</span>
+            </div>
+            <div class="account-row">
+                <span class="account-label">은행</span>
+                <span class="account-value">${accountBank}</span>
+            </div>
+            <div class="account-row">
+                <span class="account-label">계좌번호</span>
+                <span class="account-value account-num">${accountNumber}</span>
+            </div>
+            ${accountHolder ? `
+            <div class="account-row">
+                <span class="account-label">예금주</span>
+                <span class="account-value">${accountHolder}</span>
+            </div>` : ''}
+            <p class="account-note">입금 후 별도 연락 불필요합니다.<br>담당자 확인 후 연장 완료 문자를 발송해드립니다.</p>
         </div>` : '';
 
+    // ── 연장 의향 선택 메인 페이지 ──────────────────────────────────────────
     return baseHtml(`
-        <div class="card">
-            <div class="complex-name">${complexName || '필라테스'}</div>
-            <h2>수강 연장 안내</h2>
-            <div class="info-row"><span class="label">수강생</span><span class="value"><strong>${name}</strong>님</span></div>
-            <div class="info-row"><span class="label">프로그램</span><span class="value">${programName || ''}</span></div>
-            <div class="info-row"><span class="label">만료일</span><span class="value expiry">${expiryDate || ''}</span></div>
-            ${deadlineStr ? `<div class="deadline-notice">⏰ 응답 기한: ${deadlineStr}까지</div>` : ''}
-            <div class="btn-group">
-                <button class="btn btn-confirm" onclick="respond('confirmed')">
-                    ✅ 연장 희망
+        <div class="card" id="mainCard">
+            <div class="complex-badge">${complexName || '수강 연장 안내'}</div>
+            <h1 class="page-title">수강 연장 안내</h1>
+
+            <div class="info-table">
+                <div class="info-row">
+                    <span class="info-label">수강생</span>
+                    <span class="info-value"><strong>${name}</strong>님</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">프로그램</span>
+                    <span class="info-value">${programName || ''}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">만료일</span>
+                    <span class="info-value expiry-date">${expiryDate || ''}</span>
+                </div>
+            </div>
+
+            ${deadlineStr ? `
+            <div class="deadline-badge">
+                <span class="deadline-clock">⏱</span>
+                응답 기한: ${deadlineStr}까지
+            </div>` : ''}
+
+            <div class="btn-group" id="btnGroup">
+                <button class="btn btn-confirm" id="btnConfirm" onclick="respond('confirmed')">
+                    ✓&ensp;연장 희망
                 </button>
-                <button class="btn btn-decline" onclick="respond('declined')">
-                    ✖ 연장 비희망
+                <button class="btn btn-decline" id="btnDecline" onclick="respond('declined')">
+                    ✕&ensp;연장 비희망
                 </button>
             </div>
-            ${accountSection}
         </div>
+
+        <!-- 계좌 안내 카드 — 연장 희망 클릭 후 노출 -->
+        ${hasAccount ? `<div class="account-card hidden" id="accountCard">${accountHtml}</div>` : ''}
+
+        <!-- 완료 카드 — API 성공 후 mainCard 교체 -->
+        <div class="card hidden" id="doneCard"></div>
+
         <script>
         const TOKEN = '${token}';
+        const HAS_ACCOUNT = ${hasAccount ? 'true' : 'false'};
+
         async function respond(type) {
-            const btns = document.querySelectorAll('.btn');
-            btns.forEach(b => b.disabled = true);
+            const btnConfirm = document.getElementById('btnConfirm');
+            const btnDecline = document.getElementById('btnDecline');
+            btnConfirm.disabled = true;
+            btnDecline.disabled = true;
+
+            // 연장 희망: 계좌 카드 먼저 펼쳐두기 (API 응답 전에 표시)
+            if (type === 'confirmed' && HAS_ACCOUNT) {
+                const ac = document.getElementById('accountCard');
+                if (ac) ac.classList.remove('hidden');
+            }
 
             try {
                 const res = await fetch('/api/renewal/respond', {
@@ -417,111 +450,339 @@ function renewPageHtml({ error, done, type, token, name, programName, expiryDate
                 const json = await res.json();
                 if (!json.success) throw new Error(json.error);
 
+                // 메인 카드를 완료 메시지로 교체
+                const mainCard  = document.getElementById('mainCard');
+                const doneCard  = document.getElementById('doneCard');
+
                 if (type === 'confirmed') {
-                    document.querySelector('.card').innerHTML = \`
-                        <div class="icon">✅</div>
-                        <h2>연장 희망 접수 완료</h2>
-                        <p>결제 후 담당자 확인이 완료되면<br>연장 완료 문자를 발송해드립니다.</p>
-                        \${document.getElementById('accountBox')
-                            ? '<p style="margin-top:16px;font-size:.9rem;color:#4338ca;font-weight:600">아래 계좌로 수강료를 입금해 주세요 👇</p>'
-                            : ''}\`;
-                    const box = document.getElementById('accountBox');
-                    if (box) { box.style.display = 'block'; }
+                    doneCard.innerHTML = \`
+                        <div class="status-icon confirmed-icon">✓</div>
+                        <h2 class="card-title">연장 희망 접수 완료</h2>
+                        <p class="card-desc">결제 후 담당자 확인이 완료되면<br>연장 완료 문자를 발송해드립니다.\${HAS_ACCOUNT ? '<br><span class="account-hint">아래 계좌로 수강료를 입금해 주세요.</span>' : ''}</p>
+                    \`;
                 } else {
-                    document.querySelector('.card').innerHTML = \`
-                        <div class="icon">👋</div>
-                        <h2>연장 비희망 접수 완료</h2>
-                        <p>수강 만료 후 자동 처리됩니다.<br>재등록을 원하시면 접수 페이지를 이용해 주세요.</p>\`;
+                    doneCard.innerHTML = \`
+                        <div class="status-icon declined-icon">✕</div>
+                        <h2 class="card-title">연장 비희망 접수 완료</h2>
+                        <p class="card-desc">수강 만료 후 자동 처리됩니다.<br>재등록을 원하시면 접수 페이지를 이용해 주세요.</p>
+                    \`;
                 }
+
+                mainCard.classList.add('hidden');
+                doneCard.classList.remove('hidden');
+
             } catch(e) {
-                btns.forEach(b => b.disabled = false);
+                btnConfirm.disabled = false;
+                btnDecline.disabled = false;
+                if (type === 'confirmed' && HAS_ACCOUNT) {
+                    const ac = document.getElementById('accountCard');
+                    if (ac) ac.classList.add('hidden');
+                }
                 alert('오류가 발생했습니다: ' + e.message);
             }
         }
-
-        // 연장 희망 클릭 시 계좌 박스 표시 (버튼 클릭 전 미리 보여주기)
-        document.querySelector('.btn-confirm')?.addEventListener('click', () => {
-            const box = document.getElementById('accountBox');
-            if (box) box.style.display = 'block';
-        }, { once: true });
         </script>`);
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// 공통 HTML 레이아웃 — 베이지/브라운/골드 프리미엄 디자인
+// ══════════════════════════════════════════════════════════════════════════════
 function baseHtml(content) {
     return `<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>수강 연장 안내</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+    background: #1a1208;
+    background-image:
+      radial-gradient(ellipse at 20% 20%, rgba(180,140,80,0.18) 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 80%, rgba(120,80,40,0.22) 0%, transparent 55%);
     min-height: 100vh;
-    display: flex; align-items: center; justify-content: center;
-    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px 40px;
+    gap: 14px;
   }
+
+  /* ── 메인 카드 ───────────────────────────────────────────── */
   .card {
-    background: #fff;
-    border-radius: 20px;
-    padding: 32px 28px;
-    max-width: 420px;
+    background: linear-gradient(160deg, #fdf8f0 0%, #f5ead8 100%);
+    border-radius: 22px;
+    padding: 32px 26px 28px;
+    max-width: 400px;
     width: 100%;
-    box-shadow: 0 20px 60px rgba(0,0,0,.2);
-    text-align: center;
+    box-shadow:
+      0 2px 0 rgba(200,160,80,0.35),
+      0 12px 48px rgba(30,15,0,0.45),
+      inset 0 1px 0 rgba(255,255,255,0.8);
+    border: 1px solid rgba(200,160,80,0.3);
+    position: relative;
+    overflow: hidden;
   }
-  .complex-name {
-    font-size: .82rem; color: #8b5cf6; font-weight: 700;
-    letter-spacing: .05em; margin-bottom: 8px;
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #c8a050, #e8c870, #c8a050);
+    border-radius: 22px 22px 0 0;
+  }
+
+  /* ── 단지명 배지 ─────────────────────────────────────────── */
+  .complex-badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #9a7230;
+    background: rgba(200,160,80,0.12);
+    border: 1px solid rgba(200,160,80,0.3);
+    border-radius: 20px;
+    padding: 4px 12px;
+    margin-bottom: 14px;
     text-transform: uppercase;
   }
-  h2 { font-size: 1.4rem; color: #1e1b4b; margin-bottom: 20px; }
-  .icon { font-size: 3rem; margin-bottom: 12px; }
+
+  /* ── 페이지 타이틀 ───────────────────────────────────────── */
+  .page-title {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: #2c1a08;
+    letter-spacing: -0.02em;
+    margin-bottom: 22px;
+    line-height: 1.3;
+  }
+
+  /* ── 정보 테이블 ─────────────────────────────────────────── */
+  .info-table {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
   .info-row {
-    display: flex; justify-content: space-between; align-items: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(200,160,80,0.18);
+    border-radius: 10px;
     padding: 10px 14px;
-    background: #f8f7ff; border-radius: 10px; margin-bottom: 8px;
-    text-align: left;
   }
-  .info-row .label { font-size: .82rem; color: #6b7280; }
-  .info-row .value { font-size: .95rem; color: #1f2937; }
-  .info-row .expiry { font-weight: 700; color: #dc2626; }
-  .deadline-notice {
-    font-size: .82rem; color: #d97706; font-weight: 600;
-    background: #fef9c3; border-radius: 8px; padding: 8px 12px;
-    margin: 12px 0; text-align: center;
+  .info-label {
+    font-size: 0.8rem;
+    color: #8b6a3a;
+    font-weight: 600;
+    letter-spacing: 0.02em;
   }
-  .btn-group { display: flex; flex-direction: column; gap: 12px; margin-top: 24px; }
+  .info-value {
+    font-size: 0.92rem;
+    color: #2c1a08;
+    font-weight: 500;
+  }
+  .info-value strong { font-weight: 700; }
+  .expiry-date {
+    font-weight: 800;
+    color: #b84040;
+    font-size: 1rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── 응답 기한 배지 ──────────────────────────────────────── */
+  .deadline-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #8b5e20;
+    background: rgba(200,160,80,0.12);
+    border: 1px solid rgba(200,160,80,0.25);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 22px;
+  }
+  .deadline-clock { font-size: 1rem; }
+
+  /* ── 버튼 그룹 ───────────────────────────────────────────── */
+  .btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
   .btn {
-    padding: 16px; border: none; border-radius: 12px; font-size: 1rem;
-    font-weight: 700; cursor: pointer; transition: all .15s; letter-spacing: .02em;
+    width: 100%;
+    padding: 16px 20px;
+    border: none;
+    border-radius: 13px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    transition: transform 0.12s, box-shadow 0.12s, opacity 0.12s;
+    position: relative;
+    overflow: hidden;
   }
-  .btn:disabled { opacity: .5; cursor: not-allowed; }
-  .btn-confirm { background: #4f46e5; color: #fff; }
-  .btn-confirm:hover:not(:disabled) { background: #4338ca; transform: translateY(-1px); }
-  .btn-decline { background: #f1f5f9; color: #64748b; border: 1.5px solid #e2e8f0; }
-  .btn-decline:hover:not(:disabled) { background: #e2e8f0; }
-  .account-box {
-    margin-top: 20px; background: #f0fdf4;
-    border: 1.5px solid #86efac; border-radius: 14px; padding: 18px;
-    text-align: left;
+  .btn:active:not(:disabled) { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+  .btn-confirm {
+    background: linear-gradient(135deg, #3d2a0e 0%, #5c3f18 100%);
+    color: #f0d88a;
+    box-shadow: 0 4px 18px rgba(60,35,10,0.4), inset 0 1px 0 rgba(255,220,120,0.2);
+    border: 1px solid rgba(200,160,80,0.4);
   }
-  .account-title { font-weight: 700; color: #166534; margin-bottom: 12px; font-size: .95rem; }
+  .btn-confirm::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,220,100,0.08), transparent);
+    transition: left 0.4s;
+  }
+  .btn-confirm:hover:not(:disabled)::after { left: 150%; }
+  .btn-confirm:hover:not(:disabled) {
+    box-shadow: 0 6px 24px rgba(60,35,10,0.5), inset 0 1px 0 rgba(255,220,120,0.25);
+  }
+
+  .btn-decline {
+    background: rgba(255,255,255,0.45);
+    color: #6b5030;
+    border: 1.5px solid rgba(160,120,60,0.25);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .btn-decline:hover:not(:disabled) {
+    background: rgba(255,255,255,0.65);
+  }
+
+  /* ── 계좌 카드 ───────────────────────────────────────────── */
+  .account-card {
+    background: linear-gradient(160deg, #fdf8f0 0%, #f5ead8 100%);
+    border-radius: 18px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow:
+      0 2px 0 rgba(200,160,80,0.3),
+      0 8px 32px rgba(30,15,0,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.7);
+    border: 1px solid rgba(200,160,80,0.28);
+    overflow: hidden;
+    animation: slideDown 0.3s ease;
+  }
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .account-box { padding: 22px 22px 18px; }
+  .account-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(200,160,80,0.2);
+  }
+  .account-icon { font-size: 1.1rem; }
+  .account-title {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #7a5520;
+    letter-spacing: 0.03em;
+  }
   .account-row {
-    display: flex; justify-content: space-between;
-    padding: 6px 0; border-bottom: 1px solid #dcfce7; font-size: .88rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(200,160,80,0.1);
   }
-  .account-row span { color: #6b7280; }
-  .account-row strong { color: #1f2937; }
-  .account-num { font-family: monospace; font-size: 1rem; letter-spacing: .05em; color: #166534 !important; }
+  .account-row:last-of-type { border-bottom: none; }
+  .account-label {
+    font-size: 0.78rem;
+    color: #9a7240;
+    font-weight: 600;
+  }
+  .account-value {
+    font-size: 0.9rem;
+    color: #2c1a08;
+    font-weight: 600;
+  }
+  .account-num {
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 1rem;
+    letter-spacing: 0.06em;
+    color: #7a4a10;
+  }
   .account-note {
-    margin-top: 10px; font-size: .78rem; color: #4b5563; line-height: 1.6;
+    margin-top: 14px;
+    font-size: 0.76rem;
+    color: #8b6a3a;
+    line-height: 1.65;
+    padding: 10px 12px;
+    background: rgba(200,160,80,0.08);
+    border-radius: 8px;
   }
-  .error-card, .done-card { }
-  p { font-size: .95rem; color: #374151; line-height: 1.6; margin-bottom: 8px; }
-  .sub { font-size: .82rem; color: #9ca3af; }
+  .account-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.82rem;
+    color: #7a5520;
+    font-weight: 600;
+  }
+
+  /* ── 상태 아이콘 (완료/오류 페이지) ─────────────────────── */
+  .status-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.8rem;
+    font-weight: 900;
+    margin: 0 auto 18px;
+  }
+  .confirmed-icon {
+    background: linear-gradient(135deg, #3d2a0e, #6a4020);
+    color: #f0d88a;
+    box-shadow: 0 4px 16px rgba(60,35,10,0.35);
+  }
+  .declined-icon {
+    background: rgba(200,160,80,0.12);
+    color: #7a5030;
+    border: 2px solid rgba(200,160,80,0.25);
+  }
+  .error-icon {
+    background: rgba(180,60,40,0.1);
+    color: #b84040;
+    border: 2px solid rgba(180,60,40,0.2);
+  }
+
+  /* ── 카드 타이틀 / 설명 (완료 페이지) ───────────────────── */
+  .card-title {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #2c1a08;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .card-desc {
+    font-size: 0.88rem;
+    color: #6b5030;
+    line-height: 1.7;
+    text-align: center;
+  }
+
+  /* ── 유틸 ────────────────────────────────────────────────── */
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
