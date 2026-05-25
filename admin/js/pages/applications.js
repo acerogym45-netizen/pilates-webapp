@@ -825,7 +825,8 @@ ${(() => {
                     <span style="font-size:.78rem;color:#4338ca;font-weight:600">추가 일수 보정</span>
                     <input type="number" id="editExtraDays" value="0" min="0" max="60"
                         style="width:56px;padding:4px 6px;border:1px solid #c7d2fe;border-radius:6px;font-size:.85rem;text-align:center"
-                        oninput="applications._onExtraDaysChange(this.value)">
+                        oninput="applications._onExtraDaysChange(this.value)"
+                        onchange="applications._onExtraDaysChange(this.value)">
                     <span style="font-size:.78rem;color:#6b7280">일 (공휴일 · 결실 보정용)</span>
                 </div>
             </div>` : ''}
@@ -916,6 +917,11 @@ ${(() => {
 
     // ── 추가 일수 보정 변경 → 만료일 재계산 ──────────────────────────────────
     _onExtraDaysChange(extraStr) {
+        // 음수 방지
+        const val = Math.max(0, parseInt(extraStr) || 0);
+        const el = document.getElementById('editExtraDays');
+        if (el && parseInt(el.value) !== val) el.value = val;
+
         const startEl = document.getElementById('editStartDate');
         if (startEl?.value) this._onStartDateChange(startEl.value);
     },
