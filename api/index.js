@@ -25,6 +25,7 @@ const programsRouter     = require('../server/routes/programs');
 const applicationsRouter = require('../server/routes/applications');
 const miscRouter         = require('../server/routes/misc');
 const uploadRouter       = require('../server/routes/upload');
+const renewalRouter      = require('../server/routes/renewal');
 
 const app = express();
 
@@ -137,6 +138,10 @@ app.use('/api/complexes',    complexesRouter);
 app.use('/api/programs',     programsRouter);
 app.use('/api/applications', applicationsRouter);
 app.use('/api',              miscRouter);          // ← 와일드카드 마지막
+
+// ── 연장 라우터 (GET /renew/:token + POST /api/renewal/*) ─────────────────────
+// SPA 폴백보다 앞에 위치해야 /renew/:token HTML이 정상 응답됨
+app.use('/',                 renewalRouter);
 
 // ── 나머지 정적파일 (express.static) ─────────────────────────────────────────
 app.use(express.static(ROOT_DIR, { index: false, dotfiles: 'ignore' }));
