@@ -1301,35 +1301,77 @@ async function _getManagePeriodSetting() {
 
 /* ═══════════════════════════════════════════════════════════════
    계약서 페이지 · 레슨 해지 모달 내 하드코딩 기간 텍스트 동적 업데이트
-   ─ 서버 apply-settings + apply-period 기반으로 실시간 반영
+   ─ 서버 apply-settings + apply-period + payment_mode 기반으로 실시간 반영
    ═══════════════════════════════════════════════════════════════ */
 async function _updateContractPeriodLabels() {
     const { periodLabel, cancelPeriodLabel, globalLabel, newSetting, cancelSetting } = await _getManagePeriodSetting();
 
-    // 계약서 상단 "신청·해지 기간 필수 안내" 섹션
+    // ── payment_mode 조회 (direct 여부 판단) ──────────────────────────────
+    let isDirectPayment = false;
+    const complexId = complexContext?.getComplexId?.();
+    if (complexId) {
+        try {
+            const res  = await fetch(`/api/complexes/${complexId}/apply-settings`);
+            const json = await res.json();
+            if (json.success && json.complex) {
+                isDirectPayment = json.complex.payment_mode === 'direct';
+            }
+        } catch(_) { /* 폴백: management_fee 취급 */ }
+    }
+
+    // ── 계약서 상단 "신청·해지 기간 필수 안내" 섹션 ─────────────────────────
     // 등록 접수 기간
     const newPeriodEl = document.getElementById('contractNewPeriodDate');
     if (newPeriodEl) newPeriodEl.innerHTML = `매월 <strong>${periodLabel}</strong>`;
 
     // 해지 신청 기간
     const cancelPeriodEl = document.getElementById('contractCancelPeriodDate');
-    if (cancelPeriodEl) cancelPeriodEl.innerHTML = `매월 <strong>${cancelPeriodLabel}</strong>`;
+    if (cancelPeriodEl) {
+        if (cancelPeriodLabel === '상시 가능') {
+            // 상시 접수 단지: 해지 신청 항목 자체를 숨김 (해지 신청 기간 의미 없음)
+            const cancelItem = cancelPeriodEl.closest('.period-notice-item');
+            if (cancelItem) cancelItem.style.display = 'none';
+        } else {
+            cancelPeriodEl.innerHTML = `매월 <strong>${cancelPeriodLabel}</strong>`;
+        }
+    }
 
-    // 자동 재등록 안내 텍스트 내 기간
+    // 자동 재등록 안내 줄 — direct(계좌/현금) 방식이면 숨김
+    const autoRenewRow = document.getElementById('contractAutoRenewRow');
+    if (autoRenewRow) autoRenewRow.style.display = isDirectPayment ? 'none' : '';
     const autoRenewEl = document.getElementById('contractAutoRenewPeriod');
     if (autoRenewEl) autoRenewEl.textContent = cancelPeriodLabel;
 
-    // 해지 및 환불 규정 → "해지 신청 기간" (strong#policyHaejiPeriod1)
+    // ── 해지 및 환불 규정 > "해지 신청 기간" 텍스트 ───────────────────────────
     const p1 = document.getElementById('policyHaejiPeriod1');
     if (p1) p1.textContent = cancelPeriodLabel;
 
-    // 이용약관 ② 환불 규정 내 (span#policyHaejiPeriod2)
+    // 이용약관 ② 환불 규정 내 기간 텍스트
     const p2 = document.getElementById('policyHaejiPeriod2');
     if (p2) p2.textContent = cancelPeriodLabel;
 
-    // 이용약관 ⑧ 자동 연장 및 해지 신청 (strong#policyHaejiPeriod3)
-    const p3 = document.getElementById('policyHaejiPeriod3');
-    if (p3) p3.textContent = cancelPeriodLabel;
+    // ── 이용약관 ⑧항 — payment_mode에 따라 조건부 표시 ──────────────────────
+    const terms8Mgmt   = document.getElementById('terms8ManagementFee');
+    const terms8Direct = document.getElementById('terms8Direct');
+    const p3           = document.getElementById('policyHaejiPeriod3');
+    const p3Direct     = document.getElementById('policyHaejiPeriod3Direct');
+    const agreeLabel   = document.getElementById('termsAgreeLabel');
+
+    if (isDirectPayment) {
+        // direct: 자동연장 문구 제거, 해지 신청 기간만 표시
+        if (terms8Mgmt)   terms8Mgmt.style.display   = 'none';
+        if (terms8Direct) terms8Direct.style.display  = '';
+        // direct용 기간 텍스트 업데이트
+        if (p3Direct) p3Direct.textContent = cancelPeriodLabel;
+        // 동의 문구: ①~⑦ (⑧ 자동연장 항목 제외)
+        if (agreeLabel) agreeLabel.innerHTML = '위 이용약관 전체 (①~⑦)를 모두 읽고 동의합니다 <span class="required">*</span>';
+    } else {
+        // management_fee: 자동연장 포함 기존 문구
+        if (terms8Mgmt)   terms8Mgmt.style.display   = '';
+        if (terms8Direct) terms8Direct.style.display  = 'none';
+        if (p3) p3.textContent = cancelPeriodLabel;
+        if (agreeLabel) agreeLabel.innerHTML = '위 이용약관 전체 (①~⑧)를 모두 읽고 동의합니다 <span class="required">*</span>';
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════

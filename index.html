@@ -265,7 +265,8 @@
                             <span class="period-desc">당월 수강 후 익월부터 해지</span>
                         </div>
                     </div>
-                    <div class="period-notice-auto">
+                    <!-- payment_mode=direct 이면 JS로 숨김 처리 -->
+                    <div class="period-notice-auto" id="contractAutoRenewRow">
                         <i class="fas fa-sync-alt"></i>
                         <strong>자동 재등록 안내:</strong> <span id="contractAutoRenewPeriod">매월 22일 09시~26일 09시</span> 사이에 해지 신청을 하지 않으면 <strong>다음 달 수강료가 자동 청구</strong>되며 수업이 자동 연장됩니다.
                     </div>
@@ -353,19 +354,29 @@
                         <strong>⑦ 양도·양수</strong>
                         <p>지인에게 상품 재판매 혹은 양도 시, 다음 회차에 바로 이어서 하지 않으시는 경우 횟수는 차감됩니다.</p>
                     </div>
-                    <div class="terms-section terms-section-highlight">
+                    <!-- ⑧항: payment_mode에 따라 JS로 내용 교체 -->
+                    <div class="terms-section terms-section-highlight" id="terms8Section">
                         <strong>⑧ 자동 연장 및 해지 신청</strong>
-                        <p>신청서는 최초 1회 작성 후 <strong style="color:#e53e3e">해지 신청서를 제출하지 않으시면 자동 연장</strong>됩니다.<br>
-                        해지를 원하시면 <strong style="color:#e53e3e" id="policyHaejiPeriod3">해지 신청 기간</strong> 사이에 반드시 해지 신청을 완료해주세요.<br>
-                        해지 신청 접수 즉시 자동 승인되며, <strong>당월은 정상 수강 후 익월부터 해지</strong>가 적용됩니다.<br>
-                        해지 신청 후 번복이 불가하며, 기간 이외에는 접수가 불가합니다.</p>
+                        <!-- management_fee(관리비) 방식: 자동연장 안내 포함 -->
+                        <p id="terms8ManagementFee">
+                            신청서는 최초 1회 작성 후 <strong style="color:#e53e3e">해지 신청서를 제출하지 않으시면 자동 연장</strong>됩니다.<br>
+                            해지를 원하시면 <strong style="color:#e53e3e" id="policyHaejiPeriod3">해지 신청 기간</strong> 사이에 반드시 해지 신청을 완료해주세요.<br>
+                            해지 신청 접수 즉시 자동 승인되며, <strong>당월은 정상 수강 후 익월부터 해지</strong>가 적용됩니다.<br>
+                            해지 신청 후 번복이 불가하며, 기간 이외에는 접수가 불가합니다.
+                        </p>
+                        <!-- direct(계좌/현금) 방식: 자동연장 문구 없이 해지 신청 기간만 표시 -->
+                        <p id="terms8Direct" style="display:none">
+                            <strong style="color:#e53e3e" id="policyHaejiPeriod3Direct">해지 신청 기간</strong>에 해지 신청을 완료해주세요.<br>
+                            해지 신청 접수 즉시 자동 승인되며, <strong>당월은 정상 수강 후 익월부터 해지</strong>가 적용됩니다.<br>
+                            해지 신청 후 번복이 불가하며, 차순에 접수해주세요.
+                        </p>
                     </div>
                 </div>
 
                 <div class="consent-group">
                     <label class="checkbox-label">
                         <input type="checkbox" id="termsAgreement" required>
-                        <span>위 이용약관 전체 (①~⑧)를 모두 읽고 동의합니다 <span class="required">*</span></span>
+                        <span id="termsAgreeLabel">위 이용약관 전체 (①~⑧)를 모두 읽고 동의합니다 <span class="required">*</span></span>
                     </label>
                 </div>
 
