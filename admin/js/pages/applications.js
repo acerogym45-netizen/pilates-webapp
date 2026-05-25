@@ -704,10 +704,12 @@ ${(() => {
         try {
             const complexId = getEffectiveComplexId();
             const [progRes, settingsRes] = await Promise.all([
-                API.programs.list({ complexId, activeOnly: true, limit: 100 }),
+                // includeInactive: true → 비접수 기간(is_active=false)인 프로그램도 포함
+                // → duration_days 맵 누락 방지 + 현재 수강 중인 프로그램 드롭다운 정상 표시
+                API.programs.list({ complexId, includeInactive: true, limit: 100 }),
                 complexId ? fetch(`/api/complexes/${complexId}/apply-settings`).then(r => r.json()).catch(() => null) : Promise.resolve(null)
             ]);
-            progList = (progRes.data || []).filter(p => p.is_active !== false);
+            progList = progRes.data || [];
             if (settingsRes?.success) paymentMode = settingsRes.complex?.payment_mode || 'management_fee';
         } catch (e) { /* 실패해도 수동 입력 폴백 */ }
         const isDirectPayment = paymentMode === 'direct';
