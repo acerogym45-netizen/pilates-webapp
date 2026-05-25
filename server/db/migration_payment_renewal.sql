@@ -52,3 +52,30 @@ FROM information_schema.columns
 WHERE table_name = 'applications'
   AND column_name IN ('start_date','expiry_date','renewal_status','renewal_token','renewal_deadline','renewal_notified_at')
 ORDER BY column_name;
+
+-- ============================================================
+-- Phase 3 추가 마이그레이션
+-- ============================================================
+
+-- [4] complexes 테이블에 계좌 안내 정보 추가
+ALTER TABLE complexes
+ADD COLUMN IF NOT EXISTS renewal_account_bank   TEXT,
+ADD COLUMN IF NOT EXISTS renewal_account_number TEXT,
+ADD COLUMN IF NOT EXISTS renewal_account_holder TEXT;
+
+COMMENT ON COLUMN complexes.renewal_account_bank   IS '연장 결제 안내 계좌 - 은행명';
+COMMENT ON COLUMN complexes.renewal_account_number IS '연장 결제 안내 계좌 - 계좌번호';
+COMMENT ON COLUMN complexes.renewal_account_holder IS '연장 결제 안내 계좌 - 예금주';
+
+-- [5] renewal_payments 결제 확인 기록 테이블
+CREATE TABLE IF NOT EXISTS renewal_payments (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID REFERENCES applications(id) ON DELETE CASCADE,
+    amount         INTEGER NOT NULL DEFAULT 0,
+    payment_method TEXT CHECK (payment_method IN ('transfer', 'cash')),
+    confirmed_by   TEXT DEFAULT 'admin',
+    confirmed_at   TIMESTAMPTZ DEFAULT NOW(),
+    memo           TEXT
+);
+
+COMMENT ON TABLE renewal_payments IS '수강 연장 결제 확인 기록';

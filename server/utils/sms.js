@@ -136,8 +136,113 @@ function getSmsStatus() {
     };
 }
 
+/**
+ * 연장 TM SMS 발송 (만료 2주 전 — 입주민에게 연장 의향 링크 포함)
+ * @param {Object} p
+ * @param {string} p.phone        - 수신 전화번호
+ * @param {string} p.name         - 수강생 이름
+ * @param {string} p.complexName  - 단지명
+ * @param {string} p.programName  - 프로그램명
+ * @param {string} p.expiryDate   - 만료일 (YYYY-MM-DD)
+ * @param {string} p.renewalUrl   - 연장 의향 링크 URL
+ * @param {string} p.sender       - 발신번호 (단지 DB)
+ * @param {boolean} p.smsEnabled  - 단지 SMS 활성 여부
+ */
+async function sendRenewalNoticeSms({ phone, name, complexName, programName, expiryDate, renewalUrl, sender, smsEnabled }) {
+    if (!isSmsEnabled()) return { success: false, skipped: true, reason: 'SMS 전역 비활성화' };
+    if (smsEnabled === false) return { success: false, skipped: true, reason: '해당 단지 SMS 비활성화' };
+
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return { success: false, error: '유효하지 않은 전화번호' };
+
+    const service = getSolapiService();
+    if (!service) return { success: false, error: '솔라피 서비스 초기화 실패' };
+
+    const fromNumber = (sender && sender.trim()) || process.env.SOLAPI_SENDER;
+    if (!fromNumber) return { success: false, error: '발신번호가 설정되지 않았습니다' };
+
+    const complex = complexName ? `[${complexName}] ` : '';
+    const text = `${complex}${name}님 안녕하세요.\n\n${programName} 수강 만료일이 ${expiryDate}입니다.\n\n연장을 원하시면 아래 링크를 눌러주세요 (3일 이내 응답):\n${renewalUrl}\n\n※ 미응답 시 자동 해지 처리됩니다.`;
+
+    try {
+        console.log(`[SMS][연장TM] 발송 시도: ${normalizedPhone} (${name})`);
+        const result = await service.send({ to: normalizedPhone, from: fromNumber, text });
+        const failed = result?.failedMessageList?.length || 0;
+        if (failed > 0) {
+            const reason = result.failedMessageList[0]?.reason || '알 수 없는 오류';
+            return { success: false, error: reason };
+        }
+        return { success: true, messageId: result?.groupInfo?.id || 'sent' };
+    } catch (err) {
+        console.error('[SMS][연장TM] 발송 실패:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * 연장 확인 SMS 발송 (관리자 결제 확인 후 입주민에게)
+ */
+async function sendRenewalConfirmedSms({ phone, name, complexName, programName, newExpiryDate, sender, smsEnabled }) {
+    if (!isSmsEnabled()) return { success: false, skipped: true, reason: 'SMS 전역 비활성화' };
+    if (smsEnabled === false) return { success: false, skipped: true, reason: '해당 단지 SMS 비활성화' };
+
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return { success: false, error: '유효하지 않은 전화번호' };
+
+    const service = getSolapiService();
+    if (!service) return { success: false, error: '솔라피 서비스 초기화 실패' };
+
+    const fromNumber = (sender && sender.trim()) || process.env.SOLAPI_SENDER;
+    if (!fromNumber) return { success: false, error: '발신번호가 설정되지 않았습니다' };
+
+    const complex = complexName ? `[${complexName}] ` : '';
+    const text = `${complex}${name}님,\n\n${programName} 수강 연장이 완료되었습니다. ✅\n\n새 만료일: ${newExpiryDate}\n\n앞으로도 즐거운 수업 되세요!`;
+
+    try {
+        console.log(`[SMS][연장확인] 발송 시도: ${normalizedPhone} (${name})`);
+        const result = await service.send({ to: normalizedPhone, from: fromNumber, text });
+        const failed = result?.failedMessageList?.length || 0;
+        if (failed > 0) return { success: false, error: result.failedMessageList[0]?.reason };
+        return { success: true, messageId: result?.groupInfo?.id || 'sent' };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * 연장 비희망/만료 해지 알림 SMS (입주민에게)
+ */
+async function sendRenewalExpiredSms({ phone, name, complexName, programName, sender, smsEnabled }) {
+    if (!isSmsEnabled()) return { success: false, skipped: true, reason: 'SMS 전역 비활성화' };
+    if (smsEnabled === false) return { success: false, skipped: true, reason: '해당 단지 SMS 비활성화' };
+
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return { success: false, error: '유효하지 않은 전화번호' };
+
+    const service = getSolapiService();
+    if (!service) return { success: false, error: '솔라피 서비스 초기화 실패' };
+
+    const fromNumber = (sender && sender.trim()) || process.env.SOLAPI_SENDER;
+    if (!fromNumber) return { success: false, error: '발신번호가 설정되지 않았습니다' };
+
+    const complex = complexName ? `[${complexName}] ` : '';
+    const text = `${complex}${name}님,\n\n${programName} 수강이 만료 처리되었습니다.\n\n재등록을 원하시면 접수 페이지에서 신청해 주세요.`;
+
+    try {
+        const result = await service.send({ to: normalizedPhone, from: fromNumber, text });
+        const failed = result?.failedMessageList?.length || 0;
+        if (failed > 0) return { success: false, error: result.failedMessageList[0]?.reason };
+        return { success: true, messageId: result?.groupInfo?.id || 'sent' };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+}
+
 module.exports = {
     sendInquiryAnswerSms,
+    sendRenewalNoticeSms,
+    sendRenewalConfirmedSms,
+    sendRenewalExpiredSms,
     isSmsEnabled,
     isSmsConfigured,
     getSmsStatus,

@@ -435,8 +435,33 @@ const applications = {
                 <div class="detail-row"><label>프로그램</label><span>${a.program_name}</span></div>
                 <div class="detail-row"><label>희망 시간</label><span>${a.preferred_time || '-'}</span></div>
                 ${a.monthly_fee ? `<div class="detail-row"><label>월 수강료</label><span>₩${parseInt(a.monthly_fee).toLocaleString()}</span></div>` : ''}
-                ${a.start_date ? `<div class="detail-row"><label>수강 기간</label><span style="font-weight:600;color:#4338ca">${a.start_date} ~ ${a.expiry_date || '?'}</span></div>` : ''}
-                ${a.renewal_status ? `<div class="detail-row"><label>연장 상태</label><span style="font-weight:600;color:${a.renewal_status==='confirmed'?'#16a34a':a.renewal_status==='declined'?'#dc2626':a.renewal_status==='expired'?'#9ca3af':'#d97706'}">${{'pending':'연장 TM 발송됨','confirmed':'연장 확인','declined':'연장 비희망','expired':'만료 처리'}[a.renewal_status]||a.renewal_status}</span></div>` : ''}
+                ${a.start_date ? `
+                <div class="detail-row">
+                    <label>수강 기간</label>
+                    <span style="font-weight:600;color:#4338ca">${a.start_date} ~ ${a.expiry_date || '?'}</span>
+                </div>
+                <div class="detail-row" style="border:none;padding-top:2px">
+                    <label>연장 TM</label>
+                    <span>
+                        ${a.renewal_status === 'confirmed'
+                            ? `<span style="color:#16a34a;font-weight:600">✅ 연장 희망</span>
+                               <button onclick="applications.confirmRenewal('${a.id}')"
+                                style="margin-left:8px;padding:3px 10px;background:#166534;color:#fff;border:none;border-radius:6px;font-size:.75rem;cursor:pointer;font-weight:600">
+                                결제 확인 완료
+                               </button>`
+                            : a.renewal_status === 'pending'
+                            ? `<span style="color:#d97706;font-weight:600">⏳ TM 발송됨</span>`
+                            : a.renewal_status === 'declined'
+                            ? `<span style="color:#dc2626;font-weight:600">✖ 연장 비희망</span>`
+                            : a.renewal_status === 'expired'
+                            ? `<span style="color:#9ca3af;font-weight:600">만료 처리됨</span>`
+                            : `<button onclick="applications.sendRenewalNotice('${a.id}')"
+                                style="padding:4px 12px;background:#4f46e5;color:#fff;border:none;border-radius:6px;font-size:.78rem;cursor:pointer;font-weight:600">
+                                <i class='fas fa-paper-plane'></i> TM 발송
+                               </button>`
+                        }
+                    </span>
+                </div>` : ''}
                 ${a.total_sessions != null ? `<div class="detail-row"><label>당월 총 횟수</label><span>${a.total_sessions}회</span></div>` : ''}
                 ${a.remaining_sessions != null ? `<div class="detail-row"><label>잔여 횟수</label><span style="font-weight:600;color:#2980b9">${a.remaining_sessions}회</span></div>` : ''}
                 ${a.transfer_date ? `<div class="detail-row"><label>양도일</label><span>${a.transfer_date}</span></div>` : ''}
@@ -857,6 +882,57 @@ ${(() => {
             showToast('저장되었습니다');
             await this.load();
         } catch (e) { showToast('저장 실패: ' + e.message, 'error'); }
+    },
+
+    // ── 연장 TM 수동 발송 ────────────────────────────────────────────────────
+    async sendRenewalNotice(applicationId) {
+        const a = this.data.find(x => x.id === applicationId);
+        if (!a) return;
+        if (!a.expiry_date) {
+            showToast('수강 만료일을 먼저 설정해주세요', 'error'); return;
+        }
+        if (!confirm(`${a.name}님 (만료일: ${a.expiry_date})\n\n연장 의향 TM을 발송하시겠습니까?\n\n링크 유효기간: 3일`)) return;
+
+        try {
+            const res = await fetch('/api/renewal/send-notice', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ applicationId })
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error);
+            const smsOk = json.sms?.success;
+            showToast(
+                smsOk
+                    ? `✅ ${a.name}님께 연장 TM 발송 완료`
+                    : `⚠️ TM 토큰 생성 완료 (SMS 발송 실패: ${json.sms?.reason || json.sms?.error || '설정 확인 필요'})`,
+                smsOk ? 'success' : 'warning'
+            );
+            await this.load();
+        } catch(e) { showToast('TM 발송 실패: ' + e.message, 'error'); }
+    },
+
+    // ── 관리자 결제 확인 → 연장 처리 ─────────────────────────────────────────
+    async confirmRenewal(applicationId) {
+        const a = this.data.find(x => x.id === applicationId);
+        if (!a) return;
+        const method = prompt(
+            `${a.name}님 결제 확인\n\n결제 방식을 입력하세요:\n  transfer = 계좌이체\n  cash = 현금`,
+            'transfer'
+        );
+        if (!method) return;
+        if (!['transfer', 'cash'].includes(method)) {
+            showToast('transfer 또는 cash 중 입력하세요', 'error'); return;
+        }
+        try {
+            const res = await fetch('/api/renewal/confirm', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ applicationId, paymentMethod: method })
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error);
+            showToast(`✅ ${a.name}님 연장 완료! 새 만료일: ${json.new_expiry_date}`, 'success');
+            await this.load();
+        } catch(e) { showToast('연장 처리 실패: ' + e.message, 'error'); }
     },
 
     async changeStatus(id, status) {
@@ -2957,9 +3033,34 @@ ${(() => {
                         </label>
                     </div>
                 </div>
-                <div id="directPaymentNotice" style="display:${cx.payment_mode === 'direct' ? 'flex' : 'none'};align-items:center;gap:6px;margin-top:8px;padding:8px 10px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;font-size:.78rem;color:#854d0e">
-                    <i class="fas fa-info-circle"></i>
-                    계좌/현금 모드: 승인 후 수정 폼에서 수강 시작일·만료일 직접 기입 → 만료 2주 전 연장 TM 자동 발송
+                <div id="directPaymentNotice" style="display:${cx.payment_mode === 'direct' ? 'block' : 'none'};margin-top:10px">
+                    <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#fef9c3;border:1px solid #fde047;border-radius:8px;font-size:.78rem;color:#854d0e;margin-bottom:10px">
+                        <i class="fas fa-info-circle"></i>
+                        계좌/현금 모드: 승인 후 수정 폼에서 수강 시작일·만료일 직접 기입 → 만료 2주 전 연장 TM 자동 발송
+                    </div>
+                    <!-- 결제 안내 계좌 설정 -->
+                    <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px 14px">
+                        <div style="font-size:.8rem;font-weight:700;color:#166534;margin-bottom:8px">
+                            <i class="fas fa-university"></i> 연장 TM 계좌 안내 (입주민에게 표시)
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+                            <div>
+                                <label style="font-size:.75rem;color:#6b7280;display:block;margin-bottom:3px">은행명</label>
+                                <input type="text" id="renewalBank" value="${cx.renewal_account_bank||''}" placeholder="예: 우리은행"
+                                    style="width:100%;padding:6px 8px;border:1px solid #bbf7d0;border-radius:6px;font-size:.83rem">
+                            </div>
+                            <div>
+                                <label style="font-size:.75rem;color:#6b7280;display:block;margin-bottom:3px">계좌번호</label>
+                                <input type="text" id="renewalAccount" value="${cx.renewal_account_number||''}" placeholder="예: 1002-123-456789"
+                                    style="width:100%;padding:6px 8px;border:1px solid #bbf7d0;border-radius:6px;font-size:.83rem">
+                            </div>
+                            <div>
+                                <label style="font-size:.75rem;color:#6b7280;display:block;margin-bottom:3px">예금주</label>
+                                <input type="text" id="renewalHolder" value="${cx.renewal_account_holder||''}" placeholder="예: (주)필라테스"
+                                    style="width:100%;padding:6px 8px;border:1px solid #bbf7d0;border-radius:6px;font-size:.83rem">
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>`;
@@ -3108,12 +3209,18 @@ ${(() => {
         const auto_approve          = autoTrack    ? (autoTrack.dataset.on    === '1' || autoTrack.style.background    === 'rgb(16, 185, 129)') : true;
         const waiting_timeout_hours = timeoutSel   ? parseInt(timeoutSel.value) : 3;
         const payment_mode          = pmRadio      ? pmRadio.value : 'management_fee';
+        const renewal_account_bank   = document.getElementById('renewalBank')?.value?.trim()   || null;
+        const renewal_account_number = document.getElementById('renewalAccount')?.value?.trim() || null;
+        const renewal_account_holder = document.getElementById('renewalHolder')?.value?.trim()  || null;
 
         try {
             const res = await fetch(`/api/complexes/${complexId}/apply-settings`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings, waiting_enabled, auto_approve, waiting_timeout_hours, payment_mode }),
+                body: JSON.stringify({
+                    settings, waiting_enabled, auto_approve, waiting_timeout_hours, payment_mode,
+                    renewal_account_bank, renewal_account_number, renewal_account_holder
+                }),
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error);
@@ -3123,7 +3230,7 @@ ${(() => {
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
     },
 
-    // 결제 모드 라디오 변경 시 안내문 토글
+    // 결제 모드 라디오 변경 시 안내문 + 계좌 섹션 토글
     _onPaymentModeChange(value) {
         const notice = document.getElementById('directPaymentNotice');
         const labels = document.querySelectorAll('input[name="paymentMode"]');
@@ -3136,7 +3243,7 @@ ${(() => {
             lbl.style.fontWeight   = isSelected ? '700' : '400';
             lbl.style.color        = isSelected ? '#4338ca' : '#6b7280';
         });
-        if (notice) notice.style.display = value === 'direct' ? 'flex' : 'none';
+        if (notice) notice.style.display = value === 'direct' ? 'block' : 'none';
     },
 
     // 신청 종류 설정 버튼 배지 갱신
