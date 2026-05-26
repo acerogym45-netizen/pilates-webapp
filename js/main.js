@@ -2553,50 +2553,79 @@ async function loadNotices() {
     }
 }
 
-// Display notices
+// Display notices — 2열 카드 그리드
 function displayNotices(notices) {
-    const section = document.getElementById('noticesSection');
+    const section   = document.getElementById('noticesSection');
     const container = document.getElementById('noticesContainer');
-    
+
     if (notices.length === 0) {
         section.style.display = 'none';
         return;
     }
-    
+
     section.style.display = 'block';
-    
-    container.innerHTML = notices.map(notice => {
-        const category = notice.category || (notice.is_pinned ? '중요' : '일반');
-        const categoryClass = category === '중요' ? 'important' : 
-                             category === '이벤트' ? 'event' : 'general';
-        
+
+    // 중요(pinned) 먼저, 나머지는 최신순 유지
+    const sorted = [...notices].sort((a, b) => {
+        if (a.is_pinned && !b.is_pinned) return -1;
+        if (!a.is_pinned && b.is_pinned) return 1;
+        return 0;
+    });
+
+    const cards = sorted.map((notice, idx) => {
+        const category      = notice.category || (notice.is_pinned ? '중요' : '일반');
+        const categoryClass = category === '중요' ? 'important' :
+                              category === '이벤트' ? 'event' : 'general';
+        const icon          = notice.is_pinned
+            ? '<i class="fas fa-exclamation-circle"></i>'
+            : category === '이벤트'
+                ? '<i class="fas fa-star"></i>'
+                : '<i class="fas fa-info-circle"></i>';
+        const contentId = `noticeContent_${idx}`;
+        const safeImg   = notice.image_url
+            ? notice.image_url.replace(/'/g, '%27')
+            : '';
+
         return `
-            <div class="notice-item ${categoryClass}">
-                <div class="notice-header">
-                    <div class="notice-title">
-                        ${notice.is_pinned ? '<i class="fas fa-exclamation-circle"></i>' : 
-                          '<i class="fas fa-info-circle"></i>'}
-                        ${escapeHtml(notice.title || '')}
-                    </div>
-                    <span class="notice-category ${categoryClass.toLowerCase()}">
-                        ${escapeHtml(category)}
-                    </span>
+        <div class="notice-card ${categoryClass}${notice.is_pinned ? ' pinned' : ''}">
+            <div class="notice-card-header">
+                <div class="notice-card-title">
+                    ${icon}
+                    ${escapeHtml(notice.title || '')}
                 </div>
-                <div class="notice-content">
-                    ${escapeHtml(notice.content || '').replace(/\n/g, '<br>')}
-                </div>
-                ${notice.image_url ? `
-                <div class="notice-image">
-                    <img src="${notice.image_url}" alt="공지 이미지"
-                         onclick="notices_openImageModal('${notice.image_url}')"
-                         style="max-width:100%;border-radius:8px;cursor:pointer;margin-top:8px">
-                </div>` : ''}
-                <div class="notice-date">
-                    <i class="fas fa-calendar"></i> ${kstDateStr(notice.created_at)}
-                </div>
+                <span class="notice-category ${categoryClass}">
+                    ${escapeHtml(category)}
+                </span>
             </div>
-        `;
+            ${notice.image_url ? `
+            <div class="notice-card-image">
+                <img src="${escapeHtml(notice.image_url)}" alt="공지 이미지"
+                     onclick="notices_openImageModal('${safeImg}')">
+            </div>` : ''}
+            <div class="notice-card-content" id="${contentId}">
+                ${escapeHtml(notice.content || '').replace(/\n/g, '<br>')}
+            </div>
+            <div class="notice-card-footer">
+                <span class="notice-card-date">
+                    <i class="fas fa-calendar-alt"></i>
+                    ${kstDateStr(notice.created_at)}
+                </span>
+                <button class="notice-expand-btn" onclick="notices_toggleExpand('${contentId}', this)">
+                    더보기
+                </button>
+            </div>
+        </div>`;
     }).join('');
+
+    container.innerHTML = `<div class="notices-grid">${cards}</div>`;
+}
+
+// 공지 본문 펼치기/접기
+function notices_toggleExpand(contentId, btn) {
+    const el = document.getElementById(contentId);
+    if (!el) return;
+    const expanded = el.classList.toggle('expanded');
+    btn.textContent = expanded ? '접기' : '더보기';
 }
 
 // 공지 이미지 클릭 시 전체화면 뷰어 (index.html imageModal 재사용)

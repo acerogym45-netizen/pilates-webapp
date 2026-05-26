@@ -561,26 +561,140 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 }
 
 /* ════════════════════════════════════════════════
-   공지사항
+   공지사항 — 2열 카드 그리드
 ════════════════════════════════════════════════ */
-.notice-item {
-    padding: 13px 18px; border-bottom: 1px solid var(--border);
-    transition: background var(--tr);
+.notices-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 4px 2px;
 }
-.notice-item:last-child { border-bottom: none; }
-.notice-item:hover { background: var(--surface2); }
-.notice-item.pinned { background: #fffdf0; }
+/* 모바일: 1열 */
+@media (max-width: 480px) {
+    .notices-grid { grid-template-columns: 1fr; }
+}
+/* 중요 공지(pinned)는 전체 너비 */
+.notice-card.pinned {
+    grid-column: 1 / -1;
+}
+.notice-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: box-shadow var(--tr), transform var(--tr);
+    cursor: default;
+}
+.notice-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,.09);
+    transform: translateY(-2px);
+}
+.notice-card.pinned {
+    background: #fffbea;
+    border-color: #f6c90e;
+    border-left: 4px solid #f6c90e;
+}
+.notice-card.event {
+    border-left: 4px solid #3b82f6;
+}
+.notice-card.general {
+    border-left: 4px solid var(--border);
+}
+.notice-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+}
+.notice-card-title {
+    font-size: .9rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+}
+.notice-card-title i {
+    flex-shrink: 0;
+    margin-top: 2px;
+    font-size: .85rem;
+}
+.notice-card-title i.fa-exclamation-circle { color: #e67e22; }
+.notice-card-title i.fa-info-circle        { color: #3b82f6; }
+.notice-card-title i.fa-star               { color: #8b5cf6; }
+.notice-category {
+    font-size: .68rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.notice-category.important { background: #fff3cd; color: #b45309; }
+.notice-category.event     { background: #dbeafe; color: #1d4ed8; }
+.notice-category.general   { background: #f1f5f9; color: #475569; }
+.notice-card-content {
+    font-size: .82rem;
+    color: var(--text-sub);
+    line-height: 1.7;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+    /* 긴 공지는 3줄 말줄임 */
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.notice-card-content.expanded {
+    display: block;
+    -webkit-line-clamp: unset;
+}
+.notice-card-image img {
+    width: 100%;
+    border-radius: 8px;
+    cursor: pointer;
+    object-fit: cover;
+    max-height: 200px;
+    transition: opacity .2s;
+}
+.notice-card-image img:hover { opacity: .9; }
+.notice-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: auto;
+}
+.notice-card-date {
+    font-size: .72rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.notice-expand-btn {
+    font-size: .72rem;
+    color: var(--primary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-weight: 600;
+}
+/* 기존 호환용 */
+.notice-item { padding: 0; border: none; }
+.notice-content {
+    font-size: .85rem; color: var(--text-sub); line-height: 1.75;
+    margin: 6px 0 4px; word-break: keep-all; overflow-wrap: break-word;
+}
 .pin-badge {
     display: inline-flex; align-items: center; gap: 4px;
     font-size: .69rem; color: var(--warning); font-weight: 700;
     margin-bottom: 4px;
-}
-.notice-item h4 { font-size: .9rem; font-weight: 700; margin-bottom: 4px; color: var(--text); }
-.notice-item p  { font-size: .82rem; color: var(--text-sub); white-space: pre-line; line-height: 1.6; }
-.notice-item small { font-size: .72rem; color: var(--text-muted); margin-top: 5px; display: block; }
-.notice-content {
-    font-size: .85rem; color: var(--text-sub); line-height: 1.75;
-    margin: 6px 0 4px; word-break: keep-all; overflow-wrap: break-word;
 }
 
 /* ════════════════════════════════════════════════
