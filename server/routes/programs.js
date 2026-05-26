@@ -367,19 +367,21 @@ router.get('/:id/capacity', async (req, res) => {
         const timeSlots = Array.isArray(program.time_slots) ? program.time_slots
             : (program.time_slots ? JSON.parse(program.time_slots) : []);
         const capacity = program.capacity || 6;
+        const complexId = program.complex_id;
 
         const capacityData = await Promise.all(timeSlots.map(async (slot) => {
+            // 단지 + 시간대 기준 합산 (프로그램명 무관 — 같은 시간대 프로모션 공유)
             const { count: approvedCnt } = await sb
                 .from('applications')
                 .select('*', { count: 'exact', head: true })
-                .eq('program_id', req.params.id)
+                .eq('complex_id', complexId)
                 .eq('preferred_time', slot)
                 .eq('status', 'approved');
 
             const { count: waitingCnt } = await sb
                 .from('applications')
                 .select('*', { count: 'exact', head: true })
-                .eq('program_id', req.params.id)
+                .eq('complex_id', complexId)
                 .eq('preferred_time', slot)
                 .eq('status', 'waiting');
 

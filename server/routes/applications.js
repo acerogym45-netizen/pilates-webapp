@@ -574,17 +574,15 @@ router.post('/', async (req, res) => {
             }
 
             if (program && program.type === 'group') {
-                // 반드시 같은 단지(complex_id) 내에서만 카운트 — 다른 단지 데이터 섞임 방지
-                const countQuery = sb
+                // ── 단지 + 시간대 기준 합산 카운트 ──────────────────────────
+                // 같은 단지의 같은 시간대라면 프로그램명(회권 종류)에 무관하게 합산
+                // → 8회권/12회권/24회권 등 프로모션이 여러 개여도 자리를 공유
+                const { count: approvedCnt } = await sb
                     .from('applications')
                     .select('*', { count: 'exact', head: true })
                     .eq('complex_id', program.complex_id)
                     .eq('preferred_time', preferred_time)
                     .eq('status', 'approved');
-
-                const { count: approvedCnt } = program_id
-                    ? await countQuery.eq('program_id', program.id)
-                    : await countQuery.ilike('program_name', program_name);
 
                 if ((approvedCnt || 0) >= program.capacity) {
                     // 대기 시스템 활성 여부에 따라 대기 등록 or 차단
@@ -597,7 +595,7 @@ router.post('/', async (req, res) => {
                                 error: `선택한 시간대(${preferred_time})는 정원이 마감되었습니다. 대기 신청도 현재 받지 않습니다.`
                             });
                         }
-                        // 대기 순번 계산
+                        // 대기 순번 — 단지+시간대 기준 합산
                         const { count: waitingCnt } = await sb
                             .from('applications')
                             .select('*', { count: 'exact', head: true })
@@ -1204,24 +1202,14 @@ router.post('/:id/change-time', async (req, res) => {
             return res.status(400).json({ success: false, error: '해당 프로그램에 없는 시간대입니다' });
         }
 
-        // 정원 확인: program_id 기반 카운트 + program_name 기반 카운트 (null program_id 대비)
-        // 같은 단지(complex_id) 내 정원 확인 — 다른 단지 데이터가 섞이지 않도록 반드시 complex_id 필터 포함
-        const { count: cntById } = await sb
+        // 정원 확인: 단지 + 시간대 기준 합산 (프로그램명 무관)
+        // → 8회권/12회권/24회권 등 같은 시간대 프로모션이 자리를 공유
+        const { count: approvedCnt } = await sb
             .from('applications')
             .select('*', { count: 'exact', head: true })
             .eq('complex_id', targetProgram.complex_id)
-            .eq('program_id', targetProgramId)
             .eq('preferred_time', new_preferred_time)
             .eq('status', 'approved');
-        const { count: cntByName } = await sb
-            .from('applications')
-            .select('*', { count: 'exact', head: true })
-            .eq('complex_id', targetProgram.complex_id)
-            .is('program_id', null)
-            .ilike('program_name', targetProgram.name)
-            .eq('preferred_time', new_preferred_time)
-            .eq('status', 'approved');
-        const approvedCnt = (cntById || 0) + (cntByName || 0);
 
         const capacity = targetProgram.capacity || 1;
         if ((approvedCnt || 0) >= capacity) {
@@ -1448,24 +1436,26 @@ async function promoteWaitingApplicant(sb, programId, preferredTime) {
 
     const { data: program } = await sb
         .from('programs')
-        .select('capacity')
+        .select('capacity, complex_id')
         .eq('id', programId)
         .single();
 
     if (!program) return;
 
+    // 단지 + 시간대 기준 합산 카운트 (프로그램 무관)
     const { count: approvedCnt } = await sb
         .from('applications')
         .select('*', { count: 'exact', head: true })
-        .eq('program_id', programId)
+        .eq('complex_id', program.complex_id)
         .eq('preferred_time', preferredTime)
         .eq('status', 'approved');
 
     if ((approvedCnt || 0) < program.capacity) {
+        // 대기자도 단지 + 시간대 기준으로 조회 (프로그램 무관, 순번 순)
         const { data: nextWaiting } = await sb
             .from('applications')
             .select('*')
-            .eq('program_id', programId)
+            .eq('complex_id', program.complex_id)
             .eq('preferred_time', preferredTime)
             .eq('status', 'waiting')
             .order('waiting_order', { ascending: true })
