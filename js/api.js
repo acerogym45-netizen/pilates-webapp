@@ -40,7 +40,8 @@ const API = (() => {
             selfUpdate:     (id, d)  => req('PUT',  `/complexes/${id}/self`, d),
             patchFlags:     (id, d)  => req('PATCH', `/complexes/${id}/flags`, d),
             delete:         (id)     => req('DELETE',`/complexes/${id}`),
-            verifyPassword: (code, pw) => req('POST', '/complexes/verify-password', { complexCode: code, password: pw }),
+            verifyPassword:   (code, pw) => req('POST', '/complexes/verify-password', { complexCode: code, password: pw }),
+            updateTimetable:  (id, d)   => req('PUT',  `/complexes/${id}/timetable`, d),
         },
 
         // ─── 프로그램 ────────────────────────────────────

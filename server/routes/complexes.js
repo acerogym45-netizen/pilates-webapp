@@ -112,6 +112,23 @@ router.get('/timetable', async (req, res) => {
     }
 });
 
+// ── 시간표 업데이트 (관리자용) ────────────────────────────────────────────
+// PUT /api/complexes/:id/timetable   { timetable_url }
+router.put('/:id/timetable', async (req, res) => {
+    try {
+        const sb = getSupabase();
+        const { timetable_url } = req.body;
+        const { error } = await sb
+            .from('complexes')
+            .update({ timetable_url: timetable_url || null })
+            .eq('id', req.params.id);
+        if (error) return res.status(500).json({ success: false, error: error.message });
+        res.json({ success: true });
+    } catch(e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // ═══════════════════════════════════════════════════════
 // 신청기간 설정 (단지별 커스텀)
 // ─────────────────────────────────────────────────────

@@ -770,3 +770,148 @@ const curricula = {
         });
     }
 };
+
+/** 시간표 관리 */
+const timetables = {
+    async render() {
+        const complexId = getEffectiveComplexId();
+        document.getElementById('pageContent').innerHTML = `
+            <div class="page-header">
+                <h2><i class="fas fa-table"></i> 시간표 관리</h2>
+            </div>
+            <div class="card" style="padding:24px;max-width:640px">
+                <p style="color:#888;margin-bottom:20px;font-size:.92rem">
+                    입주민 페이지의 <strong>"시간표"</strong> 버튼을 눌렀을 때 표시되는 이미지입니다.<br>
+                    이미지 파일을 업로드하거나 외부 URL을 직접 입력하세요.
+                </p>
+
+                <div id="timetablePreviewWrap" style="margin-bottom:20px;display:none">
+                    <p style="font-size:.85rem;color:#666;margin-bottom:8px">현재 등록된 시간표:</p>
+                    <img id="timetablePreviewImg" src="" alt="시간표"
+                         style="max-width:100%;border-radius:8px;border:1px solid #e2e8f0;cursor:pointer"
+                         onclick="notices_openImageModal(this.src)">
+                    <div style="margin-top:10px">
+                        <button class="btn-ghost dark btn-sm" onclick="timetables.clearTimetable()">
+                            <i class="fas fa-trash"></i> 시간표 삭제
+                        </button>
+                    </div>
+                </div>
+                <div id="timetableEmptyHint" style="margin-bottom:20px;display:none">
+                    <p style="color:#aaa;font-size:.9rem"><i class="fas fa-image"></i> 등록된 시간표가 없습니다.</p>
+                </div>
+
+                <div class="form-group" style="margin-bottom:16px">
+                    <label style="font-weight:600">이미지 파일 업로드</label>
+                    <input type="file" id="timetableFile" accept="image/*" style="margin-top:6px">
+                    <small style="color:#888">JPG, PNG, GIF — 파일 업로드 시 기존 시간표가 교체됩니다.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom:20px">
+                    <label style="font-weight:600">또는 이미지 URL 직접 입력</label>
+                    <input type="text" id="timetableUrl" placeholder="https://..." style="margin-top:6px;width:100%">
+                </div>
+
+                <div style="display:flex;gap:10px">
+                    <button class="btn-primary" onclick="timetables.save()">
+                        <i class="fas fa-save"></i> 저장
+                    </button>
+                </div>
+            </div>`;
+
+        await this.loadPreview(complexId);
+    },
+
+    async loadPreview(complexId) {
+        if (!complexId) return;
+        try {
+            const res  = await fetch(`/api/complexes/timetable?id=${complexId}`);
+            const json = await res.json();
+            const url  = json.timetable_url;
+            const previewWrap  = document.getElementById('timetablePreviewWrap');
+            const emptyHint    = document.getElementById('timetableEmptyHint');
+            const previewImg   = document.getElementById('timetablePreviewImg');
+            const urlInput     = document.getElementById('timetableUrl');
+            if (url) {
+                previewImg.src      = url;
+                if (urlInput) urlInput.value = url;
+                previewWrap.style.display = '';
+                emptyHint.style.display   = 'none';
+            } else {
+                previewWrap.style.display = 'none';
+                emptyHint.style.display   = '';
+            }
+        } catch(e) {
+            console.error('[timetables] loadPreview 오류:', e);
+        }
+    },
+
+    async save() {
+        const complexId = getEffectiveComplexId();
+        if (!complexId) {
+            showToast('단지를 먼저 선택하세요', 'error');
+            return;
+        }
+
+        const saveBtn = document.querySelector('#pageContent .btn-primary');
+        if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 저장 중...'; }
+
+        try {
+            let timetableUrl = (document.getElementById('timetableUrl')?.value || '').trim();
+            const fileInput  = document.getElementById('timetableFile');
+
+            // 파일 업로드 우선
+            if (fileInput && fileInput.files && fileInput.files[0]) {
+                const origFile = fileInput.files[0];
+                let uploadFile = origFile;
+
+                // Canvas 리사이즈 (instructors._resizeImage 재사용)
+                try {
+                    const blob = await instructors._resizeImage(origFile);
+                    if (blob) uploadFile = new File([blob], 'timetable.jpg', { type: 'image/jpeg' });
+                } catch(e) { /* 리사이즈 실패 시 원본 사용 */ }
+
+                const fd = new FormData();
+                fd.append('image', uploadFile);
+                const upRes    = await fetch('/api/upload/image', { method: 'POST', body: fd });
+                const upJson   = await upRes.json().catch(() => ({ success: false, error: 'HTTP ' + upRes.status }));
+                if (!upRes.ok || !upJson.success || !upJson.url) {
+                    throw new Error(upJson.error || '이미지 업로드 실패');
+                }
+                timetableUrl = upJson.url;
+            }
+
+            if (!timetableUrl) {
+                showToast('이미지 파일을 업로드하거나 URL을 입력하세요', 'error');
+                if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+                return;
+            }
+
+            await API.complexes.updateTimetable(complexId, { timetable_url: timetableUrl });
+            showToast('시간표가 저장되었습니다');
+            await this.loadPreview(complexId);
+        } catch(e) {
+            console.error('[timetables] save 오류:', e);
+            showToast('저장 실패: ' + e.message, 'error');
+        } finally {
+            if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+        }
+    },
+
+    async clearTimetable() {
+        const complexId = getEffectiveComplexId();
+        if (!complexId) return;
+        showConfirm('삭제 확인', '시간표 이미지를 삭제하시겠습니까?', async () => {
+            try {
+                await API.complexes.updateTimetable(complexId, { timetable_url: null });
+                showToast('시간표가 삭제되었습니다');
+                await this.loadPreview(complexId);
+                const urlInput = document.getElementById('timetableUrl');
+                if (urlInput) urlInput.value = '';
+                const fileInput = document.getElementById('timetableFile');
+                if (fileInput) fileInput.value = '';
+            } catch(e) {
+                showToast('삭제 실패: ' + e.message, 'error');
+            }
+        });
+    }
+};
