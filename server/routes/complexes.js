@@ -218,7 +218,7 @@ router.get('/:id/apply-settings', async (req, res) => {
 
         const { data: cx, error: cxErr } = await sb
             .from('complexes')
-            .select('id, name, apply_period_enabled, apply_start, apply_end, waiting_enabled, waiting_timeout_hours, auto_approve, payment_mode, renewal_account_bank, renewal_account_number, renewal_account_holder')
+            .select('id, name, apply_period_enabled, apply_start, apply_end, waiting_enabled, waiting_timeout_hours, auto_approve, payment_mode, renewal_account_bank, renewal_account_number, renewal_account_holder, share_timeslot_capacity')
             .eq('id', cxId)
             .single();
         if (cxErr) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
@@ -285,13 +285,14 @@ router.get('/:id/apply-settings', async (req, res) => {
             success: true,
             data: settings,
             complex: {
-                waiting_enabled:         cx.waiting_enabled         || false,
-                waiting_timeout_hours:   cx.waiting_timeout_hours   || 3,
-                auto_approve:            cx.auto_approve !== false,
-                payment_mode:            cx.payment_mode            || 'management_fee',
-                renewal_account_bank:    cx.renewal_account_bank    || '',
-                renewal_account_number:  cx.renewal_account_number  || '',
-                renewal_account_holder:  cx.renewal_account_holder  || '',
+                waiting_enabled:           cx.waiting_enabled           || false,
+                waiting_timeout_hours:     cx.waiting_timeout_hours     || 3,
+                auto_approve:              cx.auto_approve !== false,
+                payment_mode:              cx.payment_mode              || 'management_fee',
+                renewal_account_bank:      cx.renewal_account_bank      || '',
+                renewal_account_number:    cx.renewal_account_number    || '',
+                renewal_account_holder:    cx.renewal_account_holder    || '',
+                share_timeslot_capacity:   cx.share_timeslot_capacity   || false,
             }
         });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
@@ -302,7 +303,8 @@ router.put('/:id/apply-settings', async (req, res) => {
         const sb   = getSupabase();
         const cxId = req.params.id;
         const { settings, waiting_enabled, waiting_timeout_hours, auto_approve, payment_mode,
-                renewal_account_bank, renewal_account_number, renewal_account_holder } = req.body;
+                renewal_account_bank, renewal_account_number, renewal_account_holder,
+                share_timeslot_capacity } = req.body;
 
         const cxPatch = {};
         if (waiting_enabled           !== undefined) cxPatch.waiting_enabled           = Boolean(waiting_enabled);
@@ -311,7 +313,8 @@ router.put('/:id/apply-settings', async (req, res) => {
         if (payment_mode              !== undefined) cxPatch.payment_mode              = payment_mode === 'direct' ? 'direct' : 'management_fee';
         if (renewal_account_bank      !== undefined) cxPatch.renewal_account_bank      = renewal_account_bank      || null;
         if (renewal_account_number    !== undefined) cxPatch.renewal_account_number    = renewal_account_number    || null;
-        if (renewal_account_holder    !== undefined) cxPatch.renewal_account_holder    = renewal_account_holder    || null;
+        if (renewal_account_holder        !== undefined) cxPatch.renewal_account_holder        = renewal_account_holder    || null;
+        if (share_timeslot_capacity       !== undefined) cxPatch.share_timeslot_capacity       = Boolean(share_timeslot_capacity);
 
         if (Object.keys(cxPatch).length > 0) {
             const { error: cxErr } = await sb.from('complexes').update(cxPatch).eq('id', cxId);
@@ -440,7 +443,7 @@ router.delete('/:id', async (req, res) => {
 router.patch('/:id/flags', async (req, res) => {
     try {
         const sb = getSupabase();
-        const allowed = ['show_inquiry']; // 허용 플래그 목록
+        const allowed = ['show_inquiry', 'share_timeslot_capacity']; // 허용 플래그 목록
         const patch = {};
         for (const key of allowed) {
             if (req.body[key] !== undefined) patch[key] = Boolean(req.body[key]);

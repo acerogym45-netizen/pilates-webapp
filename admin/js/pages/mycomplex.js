@@ -453,6 +453,48 @@ const mycomplex = {
                 </div>
             </div>
 
+            <!-- 시간대 정원 공유 설정 카드 -->
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <i class="fas fa-users"></i> 시간대 정원 공유 설정
+                </div>
+                <div class="settings-card-body">
+                    <p style="font-size:.875rem;color:#666;margin-bottom:16px;line-height:1.6">
+                        <i class="fas fa-info-circle" style="color:#3498db"></i>
+                        <strong>켜기</strong>: 같은 시간대에 프로그램이 여러 개(8회권, 12회권 등)여도 <strong>자리를 공유</strong>합니다.<br>
+                        예) 월수금 09:00 정원 6명 → 8회권·12회권·24회권 신청자 합산 6명이 차면 마감<br>
+                        <strong>끄기</strong>: 프로그램별로 정원을 독립 관리합니다 (기존 방식).
+                    </p>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8f9fa;border-radius:10px;border:1px solid #e9ecef">
+                        <div>
+                            <div style="font-weight:600;font-size:.95rem;color:#2c3e50">
+                                <i class="fas fa-share-alt" style="color:#8e44ad;margin-right:6px"></i>
+                                시간대별 정원 통합 관리
+                            </div>
+                            <div style="font-size:.8rem;color:#888;margin-top:3px">
+                                같은 시간대 프로모션(회권 종류)끼리 정원 공유
+                            </div>
+                        </div>
+                        <label style="position:relative;display:inline-block;width:52px;height:28px;cursor:pointer;flex-shrink:0">
+                            <input type="checkbox" id="shareCapacityToggle"
+                                   ${cx.share_timeslot_capacity ? 'checked' : ''}
+                                   style="opacity:0;width:0;height:0"
+                                   onchange="mycomplex._saveShareCapacity(this.checked)">
+                            <span style="position:absolute;inset:0;background:${cx.share_timeslot_capacity ? '#8e44ad' : '#ccc'};border-radius:28px;transition:.3s"
+                                  id="shareCapacityTrack">
+                                <span style="position:absolute;top:3px;left:${cx.share_timeslot_capacity ? '27px' : '3px'};width:22px;height:22px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2)"
+                                      id="shareCapacityThumb"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <p id="shareCapacityHint" style="margin-top:10px;font-size:.8rem;color:${cx.share_timeslot_capacity ? '#8e44ad' : '#e74c3c'}">
+                        ${cx.share_timeslot_capacity
+                            ? '<i class="fas fa-check-circle"></i> 시간대 정원 공유 ON — 같은 시간대 프로모션이 자리를 함께 씁니다'
+                            : '<i class="fas fa-times-circle"></i> 시간대 정원 공유 OFF — 프로그램별 독립 정원 (기존 방식)'}
+                    </p>
+                </div>
+            </div>
+
             <!-- SMS 알림 설정 카드 -->
             <div class="settings-card" id="smsSettingsCard">
                 <div class="settings-card-header">
@@ -563,6 +605,32 @@ const mycomplex = {
             document.getElementById('sidebarComplexName').textContent = Admin.complex.name;
             mycomplex._renderAdmin();
         } catch(e) {
+            showToast('저장 실패: ' + e.message, 'error');
+        }
+    },
+
+    async _saveShareCapacity(checked) {
+        const track = document.getElementById('shareCapacityTrack');
+        const thumb = document.getElementById('shareCapacityThumb');
+        const hint  = document.getElementById('shareCapacityHint');
+        if (track) track.style.background = checked ? '#8e44ad' : '#ccc';
+        if (thumb) thumb.style.left = checked ? '27px' : '3px';
+        if (hint) {
+            hint.style.color = checked ? '#8e44ad' : '#e74c3c';
+            hint.innerHTML = checked
+                ? '<i class="fas fa-check-circle"></i> 시간대 정원 공유 ON — 같은 시간대 프로모션이 자리를 함께 씁니다'
+                : '<i class="fas fa-times-circle"></i> 시간대 정원 공유 OFF — 프로그램별 독립 정원 (기존 방식)';
+        }
+        try {
+            const res = await API.complexes.patchFlags(Admin.complex.id, { share_timeslot_capacity: checked });
+            Admin.complex = res.data;
+            sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
+            showToast(checked ? '시간대 정원 공유가 켜졌습니다' : '시간대 정원 공유가 꺼졌습니다');
+        } catch(e) {
+            const toggle = document.getElementById('shareCapacityToggle');
+            if (toggle) toggle.checked = !checked;
+            if (track) track.style.background = !checked ? '#8e44ad' : '#ccc';
+            if (thumb) thumb.style.left = !checked ? '27px' : '3px';
             showToast('저장 실패: ' + e.message, 'error');
         }
     },

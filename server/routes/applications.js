@@ -537,12 +537,12 @@ router.post('/', async (req, res) => {
             }
         }
 
-        // ── 단지 설정 조회 (auto_approve, waiting_enabled) ───────────────────
-        let complexSettings = { auto_approve: true, waiting_enabled: false };
+        // ── 단지 설정 조회 (auto_approve, waiting_enabled, share_timeslot_capacity) ─
+        let complexSettings = { auto_approve: true, waiting_enabled: false, share_timeslot_capacity: false };
         if (complex_id) {
             const { data: cxData } = await sb
                 .from('complexes')
-                .select('auto_approve, waiting_enabled')
+                .select('auto_approve, waiting_enabled, share_timeslot_capacity')
                 .eq('id', complex_id)
                 .single();
             if (cxData) complexSettings = cxData;
@@ -574,15 +574,22 @@ router.post('/', async (req, res) => {
             }
 
             if (program && program.type === 'group') {
-                // ── 단지 + 시간대 기준 합산 카운트 ──────────────────────────
-                // 같은 단지의 같은 시간대라면 프로그램명(회권 종류)에 무관하게 합산
-                // → 8회권/12회권/24회권 등 프로모션이 여러 개여도 자리를 공유
-                const { count: approvedCnt } = await sb
+                // ── 정원 카운트 — share_timeslot_capacity 설정에 따라 분기 ──
+                // ON : 단지+시간대 합산 (같은 시간대 프로모션 자리 공유)
+                // OFF: 프로그램별 독립 카운트 (기존 방식)
+                let approvedCntQuery = sb
                     .from('applications')
                     .select('*', { count: 'exact', head: true })
                     .eq('complex_id', program.complex_id)
                     .eq('preferred_time', preferred_time)
                     .eq('status', 'approved');
+                if (!complexSettings.share_timeslot_capacity) {
+                    // OFF: 해당 프로그램 건만 카운트
+                    approvedCntQuery = program_id
+                        ? approvedCntQuery.eq('program_id', program.id)
+                        : approvedCntQuery.ilike('program_name', program_name);
+                }
+                const { count: approvedCnt } = await approvedCntQuery;
 
                 if ((approvedCnt || 0) >= program.capacity) {
                     // 대기 시스템 활성 여부에 따라 대기 등록 or 차단
@@ -595,14 +602,20 @@ router.post('/', async (req, res) => {
                                 error: `선택한 시간대(${preferred_time})는 정원이 마감되었습니다. 대기 신청도 현재 받지 않습니다.`
                             });
                         }
-                        // 대기 순번 — 단지+시간대 기준 합산
-                        const { count: waitingCnt } = await sb
+                        // 대기 순번 — share_timeslot_capacity에 따라 분기
+                        let waitingCntQuery = sb
                             .from('applications')
                             .select('*', { count: 'exact', head: true })
                             .eq('complex_id', program.complex_id)
                             .eq('preferred_time', preferred_time)
                             .eq('status', 'waiting')
                             .eq('apply_type', 'waiting');
+                        if (!complexSettings.share_timeslot_capacity) {
+                            waitingCntQuery = program_id
+                                ? waitingCntQuery.eq('program_id', program.id)
+                                : waitingCntQuery.ilike('program_name', program_name);
+                        }
+                        const { count: waitingCnt } = await waitingCntQuery;
                         waitingOrder = (waitingCnt || 0) + 1;
                         status    = 'waiting';
                         applyType = 'waiting';
@@ -1202,14 +1215,25 @@ router.post('/:id/change-time', async (req, res) => {
             return res.status(400).json({ success: false, error: '해당 프로그램에 없는 시간대입니다' });
         }
 
-        // 정원 확인: 단지 + 시간대 기준 합산 (프로그램명 무관)
-        // → 8회권/12회권/24회권 등 같은 시간대 프로모션이 자리를 공유
-        const { count: approvedCnt } = await sb
+        // 정원 확인: share_timeslot_capacity 설정에 따라 분기
+        const { data: changeCxData } = await sb
+            .from('complexes')
+            .select('share_timeslot_capacity')
+            .eq('id', targetProgram.complex_id)
+            .single();
+        const shareCapacity = changeCxData?.share_timeslot_capacity || false;
+
+        let changeApprovedQuery = sb
             .from('applications')
             .select('*', { count: 'exact', head: true })
             .eq('complex_id', targetProgram.complex_id)
             .eq('preferred_time', new_preferred_time)
             .eq('status', 'approved');
+        if (!shareCapacity) {
+            // OFF: 해당 프로그램 건만 카운트 (기존 방식)
+            changeApprovedQuery = changeApprovedQuery.eq('program_id', targetProgramId);
+        }
+        const { count: approvedCnt } = await changeApprovedQuery;
 
         const capacity = targetProgram.capacity || 1;
         if ((approvedCnt || 0) >= capacity) {
@@ -1442,17 +1466,29 @@ async function promoteWaitingApplicant(sb, programId, preferredTime) {
 
     if (!program) return;
 
-    // 단지 + 시간대 기준 합산 카운트 (프로그램 무관)
-    const { count: approvedCnt } = await sb
+    // 단지 share_timeslot_capacity 설정 조회
+    const { data: promoCxData } = await sb
+        .from('complexes')
+        .select('share_timeslot_capacity')
+        .eq('id', program.complex_id)
+        .single();
+    const shareCapacity = promoCxData?.share_timeslot_capacity || false;
+
+    // 승인 카운트 — 설정에 따라 분기
+    let approvedQuery = sb
         .from('applications')
         .select('*', { count: 'exact', head: true })
         .eq('complex_id', program.complex_id)
         .eq('preferred_time', preferredTime)
         .eq('status', 'approved');
+    if (!shareCapacity) {
+        approvedQuery = approvedQuery.eq('program_id', programId);
+    }
+    const { count: approvedCnt } = await approvedQuery;
 
     if ((approvedCnt || 0) < program.capacity) {
-        // 대기자도 단지 + 시간대 기준으로 조회 (프로그램 무관, 순번 순)
-        const { data: nextWaiting } = await sb
+        // 대기자 조회 — 설정에 따라 분기
+        let waitingQuery = sb
             .from('applications')
             .select('*')
             .eq('complex_id', program.complex_id)
@@ -1460,6 +1496,10 @@ async function promoteWaitingApplicant(sb, programId, preferredTime) {
             .eq('status', 'waiting')
             .order('waiting_order', { ascending: true })
             .limit(1);
+        if (!shareCapacity) {
+            waitingQuery = waitingQuery.eq('program_id', programId);
+        }
+        const { data: nextWaiting } = await waitingQuery;
 
         if (nextWaiting && nextWaiting[0]) {
             await sb

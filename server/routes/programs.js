@@ -366,24 +366,35 @@ router.get('/:id/capacity', async (req, res) => {
 
         const timeSlots = Array.isArray(program.time_slots) ? program.time_slots
             : (program.time_slots ? JSON.parse(program.time_slots) : []);
-        const capacity = program.capacity || 6;
+        const capacity  = program.capacity || 6;
         const complexId = program.complex_id;
 
+        // 단지 share_timeslot_capacity 설정 조회
+        const { data: capCxData } = await sb
+            .from('complexes')
+            .select('share_timeslot_capacity')
+            .eq('id', complexId)
+            .single();
+        const shareCapacity = capCxData?.share_timeslot_capacity || false;
+
         const capacityData = await Promise.all(timeSlots.map(async (slot) => {
-            // 단지 + 시간대 기준 합산 (프로그램명 무관 — 같은 시간대 프로모션 공유)
-            const { count: approvedCnt } = await sb
-                .from('applications')
+            // share_timeslot_capacity ON: 단지+시간대 합산 / OFF: 프로그램별 독립
+            let approvedQ = sb.from('applications')
                 .select('*', { count: 'exact', head: true })
                 .eq('complex_id', complexId)
                 .eq('preferred_time', slot)
                 .eq('status', 'approved');
-
-            const { count: waitingCnt } = await sb
-                .from('applications')
+            let waitingQ = sb.from('applications')
                 .select('*', { count: 'exact', head: true })
                 .eq('complex_id', complexId)
                 .eq('preferred_time', slot)
                 .eq('status', 'waiting');
+            if (!shareCapacity) {
+                approvedQ = approvedQ.eq('program_id', req.params.id);
+                waitingQ  = waitingQ.eq('program_id', req.params.id);
+            }
+            const { count: approvedCnt } = await approvedQ;
+            const { count: waitingCnt }  = await waitingQ;
 
             return {
                 slot,
