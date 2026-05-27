@@ -654,7 +654,20 @@ async function loadTimeSlotStatus() {
         });
         
         console.log('📈 Final counts by program and time:', programTimeSlots);
-        
+
+        // ── display_approved_count 오버라이드 ─────────────────────────────
+        // display_approved_count가 설정된 프로그램은 해당 값을 모든 슬롯에 균등 적용
+        // (NULL이면 실제 집계값 그대로 사용)
+        // window.programDisplayOverride = { programName: number } 로 보관
+        const programDisplayOverride = {};
+        programs.forEach(p => {
+            const pKey = p.name || p.program_name;
+            if (p.display_approved_count != null && pKey) {
+                programDisplayOverride[pKey] = p.display_approved_count;
+            }
+        });
+        window.programDisplayOverride = programDisplayOverride;
+
         // Store in global variable for later use
         window.programTimeSlots = programTimeSlots;
         
@@ -783,11 +796,18 @@ function updateTimeSlotOptions() {
 
     let optionsHTML = '<option value="">선택하세요</option>';
 
+    // display_approved_count 오버라이드 확인
+    const overrideCount = window.programDisplayOverride && window.programDisplayOverride[selectedProgram] != null
+        ? window.programDisplayOverride[selectedProgram]
+        : null;
+
     availableTimeSlots.forEach(timeCode => {
         // slots 키가 HH:MM 이므로 바로 조회
-        const count = (slots && slots[timeCode] != null) ? slots[timeCode] : 0;
-        const isFull = count >= maxCapacity;
-        const isAlmostFull = !isFull && count >= (maxCapacity - 1);
+        const realCount = (slots && slots[timeCode] != null) ? slots[timeCode] : 0;
+        // display_approved_count가 설정된 경우 표시용으로만 사용 (정원 마감 판단은 실제값)
+        const displayCount = overrideCount != null ? overrideCount : realCount;
+        const isFull = realCount >= maxCapacity;
+        const isAlmostFull = !isFull && realCount >= (maxCapacity - 1);
         const timeDisplay = timeDisplayMap[timeCode] || timeCode;
 
         let status = '모집중';
@@ -797,7 +817,7 @@ function updateTimeSlotOptions() {
         const disabled = isFull ? 'disabled' : '';
         const style   = isFull ? 'style="color:#999"' : '';
         // value는 HH:MM으로 저장 (DB와 일치)
-        optionsHTML += `<option value="${timeCode}" ${disabled} ${style}>${timeDisplay} [${count}/${maxCapacity}명] ${status}</option>`;
+        optionsHTML += `<option value="${timeCode}" ${disabled} ${style}>${timeDisplay} [${displayCount}/${maxCapacity}명] ${status}</option>`;
     });
 
     timeSlotSelect.innerHTML = optionsHTML;

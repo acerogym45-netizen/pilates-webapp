@@ -103,7 +103,7 @@ router.get('/program-summary', async (req, res) => {
         // 전체 프로그램 목록 조회 (활성 + 비활성 모두 — 해지/현황 파악용)
         const { data: rawPrograms, error: progErr } = await sb
             .from('programs')
-            .select('id, name, capacity, time_slots, price, display_order, is_active')
+            .select('id, name, capacity, time_slots, price, display_order, is_active, display_approved_count')
             .eq('complex_id', cxId)          // ← 단지 필터 필수
             .order('display_order')
             .order('name');
@@ -200,16 +200,17 @@ router.get('/program-summary', async (req, res) => {
             });
 
             return {
-                program_id:            prog.id,
-                program_name:          prog.name,
-                program_price:         prog.price || 0,
-                estimated_monthly_fee: prog.price || 0,
-                is_active:             prog.is_active !== false,
+                program_id:             prog.id,
+                program_name:           prog.name,
+                program_price:          prog.price || 0,
+                estimated_monthly_fee:  prog.price || 0,
+                is_active:              prog.is_active !== false,
                 capacity,
-                total_approved:        approved.length,
-                total_waiting:         waiting.length,
-                total_cancelled:       cancelled.length,
-                slot_summary:          slotSummary
+                display_approved_count: prog.display_approved_count ?? null,
+                total_approved:         approved.length,
+                total_waiting:          waiting.length,
+                total_cancelled:        cancelled.length,
+                slot_summary:           slotSummary
             };
         });
 

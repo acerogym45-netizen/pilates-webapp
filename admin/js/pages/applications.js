@@ -218,6 +218,36 @@ const applications = {
                         const inactiveBadge = isInactive
                             ? `<span style="font-size:.72rem;background:#fdecea;color:#c0392b;border-radius:4px;padding:2px 6px;margin-left:6px">비활성</span>`
                             : '';
+                        // 표시 인원 설정 UI
+                        const dispVal = prog.display_approved_count != null ? prog.display_approved_count : '';
+                        const dispInputId = `dispCount_${prog.program_id}`;
+                        const displayCountUI = `
+                            <div style="margin-top:10px;padding-top:9px;border-top:1px dashed #e0e4ea">
+                                <div style="display:flex;align-items:center;gap:6px">
+                                    <label style="font-size:.75rem;color:#7f8c8d;white-space:nowrap;flex-shrink:0">
+                                        <i class="fas fa-eye" style="color:#8e44ad"></i> 표시 인원
+                                    </label>
+                                    <input type="number" id="${dispInputId}"
+                                        value="${dispVal}"
+                                        placeholder="실제값"
+                                        min="0" max="9999"
+                                        style="width:72px;font-size:.8rem;padding:3px 6px;border:1px solid #d0d3d9;border-radius:5px;text-align:center"
+                                        title="입주민에게 표시될 신청자 수 (비워두면 실제값 표시)">
+                                    <button onclick="applications._saveDisplayCount('${prog.program_id}', document.getElementById('${dispInputId}').value)"
+                                        style="font-size:.75rem;padding:3px 9px;background:#8e44ad;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap">
+                                        저장
+                                    </button>
+                                    ${prog.display_approved_count != null
+                                        ? `<button onclick="applications._saveDisplayCount('${prog.program_id}', '')"
+                                                style="font-size:.75rem;padding:3px 7px;background:none;color:#999;border:1px solid #ddd;border-radius:5px;cursor:pointer"
+                                                title="설정값 제거 (실제값으로 복원)">✕</button>`
+                                        : ''}
+                                </div>
+                                ${prog.display_approved_count != null
+                                    ? `<div style="font-size:.72rem;color:#8e44ad;margin-top:3px">현재 표시: <strong>${prog.display_approved_count}명</strong> (실제 ${prog.total_approved}명)</div>`
+                                    : `<div style="font-size:.72rem;color:#aaa;margin-top:3px">현재 표시: 실제값 (${prog.total_approved}명)</div>`
+                                }
+                            </div>`;
                         return `
                             <div style="border:${cardBorder};border-radius:8px;padding:12px;background:${cardBg}">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -233,6 +263,7 @@ const applications = {
                                     ? `<p style="color:#aaa;font-size:.78rem;margin:0">시간대 정보 없음</p>`
                                     : slotRows
                                 }
+                                ${displayCountUI}
                             </div>`;
                     }).join('')}
                 </div>
@@ -246,6 +277,27 @@ const applications = {
         }
     },
 
+
+    /** 프로그램별 마케팅용 표시 인원 저장 */
+    async _saveDisplayCount(programId, rawValue) {
+        if (!programId) return;
+        // 빈 문자열 → null (실제값 복원), 숫자 → 정수
+        const value = rawValue === '' || rawValue == null ? null : parseInt(rawValue, 10);
+        if (value !== null && (isNaN(value) || value < 0)) {
+            alert('0 이상의 숫자를 입력하거나 비워두세요 (비워두면 실제값 표시)'); return;
+        }
+        try {
+            const res = await API.programs.update(programId, { display_approved_count: value });
+            if (!res.success && !res.id) throw new Error(res.error || '저장 실패');
+            // 인풋 값 갱신 + 상태 표시
+            const inp = document.getElementById(`dispCount_${programId}`);
+            if (inp) inp.value = value != null ? value : '';
+            // 패널 새로고침
+            await this.loadProgramStatus();
+        } catch (e) {
+            alert(`표시 인원 저장 실패: ${e.message}`);
+        }
+    },
 
     _buildDetailFilterOptions() {
         const programs = [...new Set(this.data.map(a => a.program_name).filter(Boolean))].sort();
