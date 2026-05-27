@@ -182,20 +182,27 @@ router.get('/program-summary', async (req, res) => {
             const waiting   = progApps.filter(a => a.status === 'waiting');
             const cancelled = progApps.filter(a => a.status === 'cancelled');
 
+            // display_approved_count: JSONB { "HH:MM": N } — 타임별 마케팅 표시값
+            const displayMap = (prog.display_approved_count && typeof prog.display_approved_count === 'object')
+                ? prog.display_approved_count : {};
+
             const slotSummary = slots.map(slot => {
                 const slotApproved = approved.filter(a => a.preferred_time === slot).length;
                 const slotWaiting  = waiting.filter(a => a.preferred_time === slot).length;
                 const exceeded     = slotApproved > capacity;
                 const available    = Math.max(0, capacity - slotApproved);
+                // display_count: 슬롯별 마케팅 표시값 (null이면 실제값)
+                const displayCount = displayMap[slot] != null ? displayMap[slot] : null;
                 return {
                     slot,
-                    approved:    slotApproved,
-                    waiting:     slotWaiting,
+                    approved:      slotApproved,
+                    display_count: displayCount,   // ← 추가: null이면 실제값 그대로
+                    waiting:       slotWaiting,
                     capacity,
                     available,
                     exceeded,
-                    exceeded_by: exceeded ? slotApproved - capacity : 0,
-                    isFull:      slotApproved >= capacity
+                    exceeded_by:   exceeded ? slotApproved - capacity : 0,
+                    isFull:        slotApproved >= capacity
                 };
             });
 
@@ -206,7 +213,7 @@ router.get('/program-summary', async (req, res) => {
                 estimated_monthly_fee:  prog.price || 0,
                 is_active:              prog.is_active !== false,
                 capacity,
-                display_approved_count: prog.display_approved_count ?? null,
+                display_approved_count: prog.display_approved_count ?? null,  // JSONB 원본
                 total_approved:         approved.length,
                 total_waiting:          waiting.length,
                 total_cancelled:        cancelled.length,

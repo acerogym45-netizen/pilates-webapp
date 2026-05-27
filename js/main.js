@@ -656,13 +656,12 @@ async function loadTimeSlotStatus() {
         console.log('📈 Final counts by program and time:', programTimeSlots);
 
         // ── display_approved_count 오버라이드 ─────────────────────────────
-        // display_approved_count가 설정된 프로그램은 해당 값을 모든 슬롯에 균등 적용
-        // (NULL이면 실제 집계값 그대로 사용)
-        // window.programDisplayOverride = { programName: number } 로 보관
+        // JSONB { "HH:MM": N } — 타임별 독립 표시값
+        // window.programDisplayOverride = { programName: { "HH:MM": N, ... } }
         const programDisplayOverride = {};
         programs.forEach(p => {
             const pKey = p.name || p.program_name;
-            if (p.display_approved_count != null && pKey) {
+            if (p.display_approved_count && typeof p.display_approved_count === 'object' && pKey) {
                 programDisplayOverride[pKey] = p.display_approved_count;
             }
         });
@@ -796,16 +795,17 @@ function updateTimeSlotOptions() {
 
     let optionsHTML = '<option value="">선택하세요</option>';
 
-    // display_approved_count 오버라이드 확인
-    const overrideCount = window.programDisplayOverride && window.programDisplayOverride[selectedProgram] != null
-        ? window.programDisplayOverride[selectedProgram]
-        : null;
+    // display_approved_count 오버라이드 맵 { "HH:MM": N } — 타임별 독립
+    const overrideMap = (window.programDisplayOverride && window.programDisplayOverride[selectedProgram])
+        || null;
 
     availableTimeSlots.forEach(timeCode => {
         // slots 키가 HH:MM 이므로 바로 조회
         const realCount = (slots && slots[timeCode] != null) ? slots[timeCode] : 0;
-        // display_approved_count가 설정된 경우 표시용으로만 사용 (정원 마감 판단은 실제값)
-        const displayCount = overrideCount != null ? overrideCount : realCount;
+        // 해당 타임에 display값 있으면 표시용으로만 사용 (정원 마감 판단은 실제값 유지)
+        const displayCount = (overrideMap && overrideMap[timeCode] != null)
+            ? overrideMap[timeCode]
+            : realCount;
         const isFull = realCount >= maxCapacity;
         const isAlmostFull = !isFull && realCount >= (maxCapacity - 1);
         const timeDisplay = timeDisplayMap[timeCode] || timeCode;

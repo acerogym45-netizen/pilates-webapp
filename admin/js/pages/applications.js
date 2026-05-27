@@ -178,6 +178,11 @@ const applications = {
             body.innerHTML = `
                 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
                     ${list.map(prog => {
+                        // display_approved_count JSONB 맵 { "HH:MM": N }
+                        const dispMap = (prog.display_approved_count && typeof prog.display_approved_count === 'object')
+                            ? prog.display_approved_count : {};
+                        const hasAnyDisp = Object.keys(dispMap).length > 0;
+
                         const slotRows = (prog.slot_summary || []).map(s => {
                             // s.capacity를 기준으로 퍼센트 계산 (슬롯별 정원)
                             const cap = s.capacity || prog.capacity || 6;
@@ -191,18 +196,42 @@ const applications = {
                                 : isFull
                                     ? '<span style="color:#e74c3c;font-size:.75rem">마감</span>'
                                     : `<span style="color:#27ae60;font-size:.75rem">여유 ${available}</span>`;
+
+                            // 표시 인원 인풋 (타임별)
+                            const slotDispVal = dispMap[s.slot] != null ? dispMap[s.slot] : '';
+                            const slotInputId = `dispSlot_${prog.program_id}_${s.slot.replace(':','')}`;
+                            const dispBadge = s.display_count != null
+                                ? `<span style="font-size:.7rem;background:#f3e8ff;color:#8e44ad;border-radius:3px;padding:1px 5px;margin-left:3px" title="표시 인원 오버라이드 중">표시 ${s.display_count}</span>`
+                                : '';
+
                             return `
                                 <div style="margin-bottom:8px">
-                                    <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px">
-                                        <span style="color:#555">${s.slot}</span>
-                                        <span style="font-weight:600;color:${barColor}">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;font-size:.8rem;margin-bottom:3px">
+                                        <span style="color:#555;flex-shrink:0">${s.slot}</span>
+                                        <span style="font-weight:600;color:${barColor};display:flex;align-items:center;gap:3px;flex-wrap:wrap;justify-content:flex-end">
                                             ${s.approved}/${cap}
                                             ${statusLabel}
-                                            ${s.waiting > 0 ? ` <span style="color:#f39c12;font-size:.75rem">대기 ${s.waiting}</span>` : ''}
+                                            ${s.waiting > 0 ? `<span style="color:#f39c12;font-size:.75rem">대기 ${s.waiting}</span>` : ''}
+                                            ${dispBadge}
                                         </span>
                                     </div>
-                                    <div style="height:6px;background:#eee;border-radius:3px;overflow:hidden">
+                                    <div style="height:5px;background:#eee;border-radius:3px;overflow:hidden;margin-bottom:5px">
                                         <div style="height:100%;width:${Math.min(pct,100)}%;background:${barColor};border-radius:3px;transition:width .3s"></div>
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:4px">
+                                        <i class="fas fa-eye" style="color:#b39ddb;font-size:.68rem;flex-shrink:0"></i>
+                                        <input type="number" id="${slotInputId}"
+                                            value="${slotDispVal}"
+                                            placeholder="실제값"
+                                            min="0" max="9999"
+                                            style="width:60px;font-size:.75rem;padding:2px 5px;border:1px solid #d8dde4;border-radius:4px;text-align:center;color:#555"
+                                            title="${s.slot} 시간대 표시 인원 (비워두면 실제값)">
+                                        <button onclick="applications._saveDisplayCount('${prog.program_id}','${s.slot}',document.getElementById('${slotInputId}').value)"
+                                            style="font-size:.7rem;padding:2px 7px;background:#8e44ad;color:#fff;border:none;border-radius:4px;cursor:pointer">저장</button>
+                                        ${slotDispVal !== ''
+                                            ? `<button onclick="applications._saveDisplayCount('${prog.program_id}','${s.slot}','')"
+                                                style="font-size:.7rem;padding:2px 5px;background:none;color:#aaa;border:1px solid #e0e0e0;border-radius:4px;cursor:pointer" title="초기화">✕</button>`
+                                            : ''}
                                     </div>
                                 </div>`;
                         }).join('');
@@ -218,52 +247,38 @@ const applications = {
                         const inactiveBadge = isInactive
                             ? `<span style="font-size:.72rem;background:#fdecea;color:#c0392b;border-radius:4px;padding:2px 6px;margin-left:6px">비활성</span>`
                             : '';
-                        // 표시 인원 설정 UI
-                        const dispVal = prog.display_approved_count != null ? prog.display_approved_count : '';
-                        const dispInputId = `dispCount_${prog.program_id}`;
-                        const displayCountUI = `
-                            <div style="margin-top:10px;padding-top:9px;border-top:1px dashed #e0e4ea">
-                                <div style="display:flex;align-items:center;gap:6px">
-                                    <label style="font-size:.75rem;color:#7f8c8d;white-space:nowrap;flex-shrink:0">
-                                        <i class="fas fa-eye" style="color:#8e44ad"></i> 표시 인원
-                                    </label>
-                                    <input type="number" id="${dispInputId}"
-                                        value="${dispVal}"
-                                        placeholder="실제값"
-                                        min="0" max="9999"
-                                        style="width:72px;font-size:.8rem;padding:3px 6px;border:1px solid #d0d3d9;border-radius:5px;text-align:center"
-                                        title="입주민에게 표시될 신청자 수 (비워두면 실제값 표시)">
-                                    <button onclick="applications._saveDisplayCount('${prog.program_id}', document.getElementById('${dispInputId}').value)"
-                                        style="font-size:.75rem;padding:3px 9px;background:#8e44ad;color:#fff;border:none;border-radius:5px;cursor:pointer;white-space:nowrap">
-                                        저장
-                                    </button>
-                                    ${prog.display_approved_count != null
-                                        ? `<button onclick="applications._saveDisplayCount('${prog.program_id}', '')"
-                                                style="font-size:.75rem;padding:3px 7px;background:none;color:#999;border:1px solid #ddd;border-radius:5px;cursor:pointer"
-                                                title="설정값 제거 (실제값으로 복원)">✕</button>`
-                                        : ''}
-                                </div>
-                                ${prog.display_approved_count != null
-                                    ? `<div style="font-size:.72rem;color:#8e44ad;margin-top:3px">현재 표시: <strong>${prog.display_approved_count}명</strong> (실제 ${prog.total_approved}명)</div>`
-                                    : `<div style="font-size:.72rem;color:#aaa;margin-top:3px">현재 표시: 실제값 (${prog.total_approved}명)</div>`
-                                }
-                            </div>`;
+                        // 전체 초기화 버튼 (하나라도 설정돼 있을 때만)
+                        const resetAllBtn = hasAnyDisp
+                            ? `<button onclick="applications._saveDisplayCount('${prog.program_id}',null,null)"
+                                style="font-size:.7rem;padding:2px 8px;background:none;color:#c0392b;border:1px solid #f0c0c0;border-radius:4px;cursor:pointer;margin-left:auto" title="모든 표시 인원 초기화">
+                                <i class="fas fa-undo"></i> 전체 초기화</button>`
+                            : '';
+
                         return `
                             <div style="border:${cardBorder};border-radius:8px;padding:12px;background:${cardBg}">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                                     <span style="font-weight:700;font-size:.88rem;color:#2c3e50">${prog.program_name}${inactiveBadge}</span>
                                     ${feeText}
                                 </div>
-                                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
                                     <span style="font-size:.78rem;background:#e8f4fd;color:#2980b9;border-radius:4px;padding:2px 8px">승인 ${prog.total_approved}</span>
                                     ${prog.total_waiting > 0 ? `<span style="font-size:.78rem;background:#fef9e7;color:#f39c12;border-radius:4px;padding:2px 8px">대기 ${prog.total_waiting}</span>` : ''}
                                     ${prog.total_cancelled > 0 ? `<span style="font-size:.78rem;background:#fdedec;color:#c0392b;border-radius:4px;padding:2px 8px">해지 ${prog.total_cancelled}</span>` : ''}
+                                    ${resetAllBtn}
                                 </div>
                                 ${noSlot
-                                    ? `<p style="color:#aaa;font-size:.78rem;margin:0">시간대 정보 없음</p>`
-                                    : slotRows
+                                    ? `<div style="padding:10px 0">
+                                        <p style="color:#aaa;font-size:.78rem;margin:0 0 6px">시간대 정보 없음</p>
+                                        <p style="font-size:.72rem;color:#bbb;margin:0">프로그램에 시간대를 등록하면 타임별 표시 인원을 설정할 수 있습니다</p>
+                                      </div>`
+                                    : `<div style="border-top:1px solid #f0f2f5;padding-top:8px;margin-top:2px">
+                                        <div style="font-size:.72rem;color:#8e44ad;font-weight:600;margin-bottom:6px">
+                                            <i class="fas fa-eye"></i> 타임별 표시 인원 설정
+                                            <span style="font-weight:400;color:#aaa;margin-left:4px">(비워두면 실제값)</span>
+                                        </div>
+                                        ${slotRows}
+                                      </div>`
                                 }
-                                ${displayCountUI}
                             </div>`;
                     }).join('')}
                 </div>
@@ -278,21 +293,52 @@ const applications = {
     },
 
 
-    /** 프로그램별 마케팅용 표시 인원 저장 */
-    async _saveDisplayCount(programId, rawValue) {
+    /**
+     * 타임별 마케팅용 표시 인원 저장
+     * @param {string} programId  - 프로그램 ID
+     * @param {string|null} slot  - 시간대 "HH:MM", null이면 전체 초기화
+     * @param {string} rawValue   - 입력값 ('' = 해당 슬롯 초기화)
+     */
+    async _saveDisplayCount(programId, slot, rawValue) {
         if (!programId) return;
-        // 빈 문자열 → null (실제값 복원), 숫자 → 정수
-        const value = rawValue === '' || rawValue == null ? null : parseInt(rawValue, 10);
-        if (value !== null && (isNaN(value) || value < 0)) {
-            alert('0 이상의 숫자를 입력하거나 비워두세요 (비워두면 실제값 표시)'); return;
-        }
         try {
-            const res = await API.programs.update(programId, { display_approved_count: value });
-            if (!res.success && !res.id) throw new Error(res.error || '저장 실패');
-            // 인풋 값 갱신 + 상태 표시
-            const inp = document.getElementById(`dispCount_${programId}`);
-            if (inp) inp.value = value != null ? value : '';
-            // 패널 새로고침
+            // ── 전체 초기화: slot === null ──────────────────────────────
+            if (slot === null) {
+                const res = await API.programs.update(programId, { display_approved_count: null });
+                if (res.error) throw new Error(res.error);
+                await this.loadProgramStatus();
+                return;
+            }
+
+            // ── 기존 JSONB 맵 읽기 ─────────────────────────────────────
+            // 현재 패널 DOM에서 이미 렌더된 다른 슬롯 인풋값을 수집하여 기존 맵 유지
+            // (서버에서 현재값 재조회하지 않고 DOM 기반으로 병합)
+            const newMap = {};
+            // 같은 프로그램의 모든 슬롯 인풋 수집 (dispSlot_<id>_<slot_no_colon>)
+            document.querySelectorAll(`input[id^="dispSlot_${programId}_"]`).forEach(inp => {
+                // id 예: dispSlot_abc123_0900  → slot: 09:00
+                const raw = inp.id.replace(`dispSlot_${programId}_`, '');
+                const slotKey = raw.slice(0, 2) + ':' + raw.slice(2); // "0900" → "09:00"
+                const v = inp.value.trim();
+                if (v !== '') {
+                    const n = parseInt(v, 10);
+                    if (!isNaN(n) && n >= 0) newMap[slotKey] = n;
+                }
+            });
+
+            // 현재 저장하려는 슬롯 덮어쓰기
+            const trimmed = (rawValue ?? '').toString().trim();
+            if (trimmed === '') {
+                delete newMap[slot]; // 해당 슬롯 초기화
+            } else {
+                const n = parseInt(trimmed, 10);
+                if (isNaN(n) || n < 0) { alert('0 이상의 숫자를 입력하거나 비워두세요'); return; }
+                newMap[slot] = n;
+            }
+
+            const payload = Object.keys(newMap).length ? newMap : null;
+            const res = await API.programs.update(programId, { display_approved_count: payload });
+            if (res.error) throw new Error(res.error);
             await this.loadProgramStatus();
         } catch (e) {
             alert(`표시 인원 저장 실패: ${e.message}`);

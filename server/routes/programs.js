@@ -157,8 +157,20 @@ router.post('/', async (req, res) => {
         if (show_on_inactive !== undefined) insertObj.show_on_inactive = Boolean(show_on_inactive);
         // duration_days: NULL이면 자동계산 미사용
         if (duration_days !== undefined) insertObj.duration_days = duration_days ? parseInt(duration_days) : null;
-        // display_approved_count: NULL이면 실제값 표시 (마케팅용)
-        if (display_approved_count !== undefined) insertObj.display_approved_count = display_approved_count !== null ? parseInt(display_approved_count) : null;
+        // display_approved_count: JSONB { "HH:MM": N, ... } — NULL이면 실제값 표시 (마케팅용)
+        if (display_approved_count !== undefined) {
+            if (display_approved_count === null) {
+                insertObj.display_approved_count = null;
+            } else if (typeof display_approved_count === 'object') {
+                // JSONB 맵: 숫자값만 허용, 빈 객체이면 null
+                const cleaned = {};
+                for (const [k, v] of Object.entries(display_approved_count)) {
+                    const n = parseInt(v, 10);
+                    if (!isNaN(n) && n >= 0) cleaned[k] = n;
+                }
+                insertObj.display_approved_count = Object.keys(cleaned).length ? cleaned : null;
+            }
+        }
 
         let { data, error } = await sb.from('programs').insert(insertObj).select().single();
 
@@ -195,8 +207,19 @@ router.put('/:id', async (req, res) => {
         if (show_on_inactive !== undefined) updateObj.show_on_inactive = Boolean(show_on_inactive);
         // duration_days: NULL이면 자동계산 미사용
         if (duration_days !== undefined) updateObj.duration_days = duration_days ? parseInt(duration_days) : null;
-        // display_approved_count: NULL이면 실제값 표시 (마케팅용)
-        if (display_approved_count !== undefined) updateObj.display_approved_count = display_approved_count !== null ? parseInt(display_approved_count) : null;
+        // display_approved_count: JSONB { "HH:MM": N, ... } — NULL이면 실제값 표시 (마케팅용)
+        if (display_approved_count !== undefined) {
+            if (display_approved_count === null) {
+                updateObj.display_approved_count = null;
+            } else if (typeof display_approved_count === 'object') {
+                const cleaned = {};
+                for (const [k, v] of Object.entries(display_approved_count)) {
+                    const n = parseInt(v, 10);
+                    if (!isNaN(n) && n >= 0) cleaned[k] = n;
+                }
+                updateObj.display_approved_count = Object.keys(cleaned).length ? cleaned : null;
+            }
+        }
 
         // 1차 시도: show_on_inactive 포함
         let { data, error } = await sb
