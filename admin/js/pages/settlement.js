@@ -386,9 +386,11 @@ const settlement = {
                             : i % 2 ? 'background:#fafafa' : '';
                 const tdS = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bgRow}`;
 
-                // 구분 배지: 금월신규만 표시. 차월해지는 차월해지자 섹션에서 별도 표시하므로 소계 테이블에서 제거
+                // 구분 배지: 차월해지(이번달 마지막) + 금월신규 표시
                 let catBadge = '';
-                if (r.category === '금월신규') {
+                if (r.category && r.category.includes('해지')) {
+                    catBadge = `<span style="background:#e67e22;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">이번달 마지막</span>`;
+                } else if (r.category === '금월신규') {
                     catBadge = `<span style="background:#0891b2;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">금월신규</span>`;
                 }
 

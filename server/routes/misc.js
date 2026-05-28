@@ -787,16 +787,20 @@ router.post('/cancellations', async (req, res) => {
             result = data;
         }
 
-        // ── 해지 승인 시 applications 테이블도 자동 cancelled 처리 ────
-        if (result && result.application_id) {
+        // ── 해지 승인 시 applications 테이블 자동 처리 ────
+        // ★ 중도해지(mid_cancel)만 cancelled 처리 — 차월해지(cancel)는 approved 유지
+        const postReqType = insertData.request_type || 'cancel';
+        if (result && result.application_id && postReqType === 'mid_cancel') {
             try {
                 await sb.from('applications')
                     .update({ status: 'cancelled' })
                     .eq('id', result.application_id);
-                console.log(`[cancellations POST] 자동 승인 → applications(${result.application_id}) cancelled 처리`);
+                console.log(`[cancellations POST] 중도해지 자동 승인 → applications(${result.application_id}) cancelled 처리`);
             } catch (appEx) {
                 console.warn(`[cancellations POST] applications 자동 처리 실패: ${appEx.message}`);
             }
+        } else if (result && result.application_id && postReqType === 'cancel') {
+            console.log(`[cancellations POST] 차월해지 자동 승인 → applications(${result.application_id}) status 유지(이번 달 수강 중)`);
         }
 
         res.status(201).json({ success: true, data: result, auto_approved: true });
@@ -1016,83 +1020,96 @@ router.put('/cancellations/:id', async (req, res) => {
         }
 
         // ── 해지 승인 시 신청 목록(applications) 자동 해지 처리 ─────────────
+        // ★ 중요: request_type 구분
+        //   - mid_cancel(중도해지): applications.status → 'cancelled' (즉시 수강 종료)
+        //   - cancel(차월해지):     applications.status 유지(approved) — 이번 달은 수강 중
+        //     → 다음 달 정산 시 endCancelKeySet으로 필터되어 자동 제외됨
         let appCancelResult = null;
+        const cancelReqType = (updates.request_type || data?.request_type || 'cancel');
+        const shouldCancelApp = (status === 'approved') && (cancelReqType === 'mid_cancel');
+
         if (status === 'approved' && data) {
-            try {
-                let targetAppId = data.application_id || null;
+            if (cancelReqType === 'cancel') {
+                // 차월해지: application은 이번 달 말까지 수강 유지 → status 변경 안 함
+                appCancelResult = { success: true, skipped: true, reason: '차월해지 — application 유지(approved)' };
+                console.log(`[cancellations PUT] 차월해지 승인 → applications status 유지 (이번 달 수강 중)`);
+            } else {
+                // 중도해지 또는 구버전: applications.status → 'cancelled'
+                try {
+                    let targetAppId = data.application_id || null;
 
-                // application_id 없으면 동/호수+프로그램명으로 approved 신청 검색
-                if (!targetAppId && data.complex_id && data.dong && data.ho) {
-                    const normDong = (data.dong || '').replace(/[^0-9]/g, '');
-                    const normHo   = (data.ho   || '').replace(/[^0-9]/g, '');
+                    // application_id 없으면 동/호수+프로그램명으로 approved 신청 검색
+                    if (!targetAppId && data.complex_id && data.dong && data.ho) {
+                        const normDong = (data.dong || '').replace(/[^0-9]/g, '');
+                        const normHo   = (data.ho   || '').replace(/[^0-9]/g, '');
 
-                    const { data: candidates } = await sb
-                        .from('applications')
-                        .select('id, dong, ho, name, phone, program_name, preferred_time, status')
-                        .eq('complex_id', data.complex_id)
-                        .eq('status', 'approved');
+                        const { data: candidates } = await sb
+                            .from('applications')
+                            .select('id, dong, ho, name, phone, program_name, preferred_time, status')
+                            .eq('complex_id', data.complex_id)
+                            .eq('status', 'approved');
 
-                    if (candidates && candidates.length > 0) {
-                        // 1차: 동/호수 + 프로그램명 일치
-                        let found = candidates.find(a => {
-                            const aDong = (a.dong || '').replace(/[^0-9]/g, '');
-                            const aHo   = (a.ho   || '').replace(/[^0-9]/g, '');
-                            const sameAddr = aDong === normDong && aHo === normHo;
-                            if (!sameAddr) return false;
-                            if (!data.program_name) return true; // 주소만으로도 매칭
-                            // 프로그램명 유사 비교 (포함 관계)
-                            const cp = (a.program_name || '').replace(/\s/g,'').toLowerCase();
-                            const dp = (data.program_name || '').replace(/\s/g,'').toLowerCase();
-                            return cp === dp || cp.includes(dp) || dp.includes(cp);
-                        });
-
-                        // 2차: 동/호수만으로 단 1건이면 그것으로 매칭
-                        if (!found) {
-                            const addrOnly = candidates.filter(a => {
+                        if (candidates && candidates.length > 0) {
+                            // 1차: 동/호수 + 프로그램명 일치
+                            let found = candidates.find(a => {
                                 const aDong = (a.dong || '').replace(/[^0-9]/g, '');
                                 const aHo   = (a.ho   || '').replace(/[^0-9]/g, '');
-                                return aDong === normDong && aHo === normHo;
+                                const sameAddr = aDong === normDong && aHo === normHo;
+                                if (!sameAddr) return false;
+                                if (!data.program_name) return true;
+                                const cp = (a.program_name || '').replace(/\s/g,'').toLowerCase();
+                                const dp = (data.program_name || '').replace(/\s/g,'').toLowerCase();
+                                return cp === dp || cp.includes(dp) || dp.includes(cp);
                             });
-                            if (addrOnly.length === 1) found = addrOnly[0];
-                        }
 
-                        if (found) {
-                            targetAppId = found.id;
-                            // cancellations 레코드에 application_id 역기록
-                            await sb.from('cancellations')
-                                .update({ application_id: targetAppId })
-                                .eq('id', req.params.id);
-                            data = { ...data, application_id: targetAppId };
-                            console.log(`[cancellations PUT] application_id 없음 → 동/호수+프로그램명 매칭 성공: applications(${targetAppId})`);
+                            // 2차: 동/호수만으로 단 1건이면 그것으로 매칭
+                            if (!found) {
+                                const addrOnly = candidates.filter(a => {
+                                    const aDong = (a.dong || '').replace(/[^0-9]/g, '');
+                                    const aHo   = (a.ho   || '').replace(/[^0-9]/g, '');
+                                    return aDong === normDong && aHo === normHo;
+                                });
+                                if (addrOnly.length === 1) found = addrOnly[0];
+                            }
+
+                            if (found) {
+                                targetAppId = found.id;
+                                // cancellations 레코드에 application_id 역기록
+                                await sb.from('cancellations')
+                                    .update({ application_id: targetAppId })
+                                    .eq('id', req.params.id);
+                                data = { ...data, application_id: targetAppId };
+                                console.log(`[cancellations PUT] application_id 없음 → 동/호수+프로그램명 매칭 성공: applications(${targetAppId})`);
+                            } else {
+                                console.warn(`[cancellations PUT] 동/호수 매칭 실패: ${data.dong}동 ${data.ho}호 — 자동 해지 처리 불가`);
+                            }
+                        }
+                    }
+
+                    // targetAppId 확정 후 applications 상태 변경 (중도해지만)
+                    if (targetAppId) {
+                        const { data: appData, error: appErr } = await sb
+                            .from('applications')
+                            .update({ status: 'cancelled' })
+                            .eq('id', targetAppId)
+                            .select('id, status, name, program_name')
+                            .single();
+
+                        if (appErr) {
+                            appCancelResult = { success: false, error: appErr.message };
+                            console.warn(`[cancellations PUT] applications 자동 해지 처리 실패: ${appErr.message}`);
                         } else {
-                            console.warn(`[cancellations PUT] 동/호수 매칭 실패: ${data.dong}동 ${data.ho}호 — 자동 해지 처리 불가`);
+                            appCancelResult = { success: true, application_id: targetAppId, new_status: 'cancelled', name: appData?.name };
+                            console.log(`[cancellations PUT] 중도해지 승인 → applications(${targetAppId}) status='cancelled' 완료`);
                         }
-                    }
-                }
-
-                // targetAppId 확정 후 applications 상태 변경
-                if (targetAppId) {
-                    const { data: appData, error: appErr } = await sb
-                        .from('applications')
-                        .update({ status: 'cancelled' })
-                        .eq('id', targetAppId)
-                        .select('id, status, name, program_name')
-                        .single();
-
-                    if (appErr) {
-                        appCancelResult = { success: false, error: appErr.message };
-                        console.warn(`[cancellations PUT] applications 자동 해지 처리 실패: ${appErr.message}`);
                     } else {
-                        appCancelResult = { success: true, application_id: targetAppId, new_status: 'cancelled', name: appData?.name };
-                        console.log(`[cancellations PUT] 해지 승인 → applications(${targetAppId}) status='cancelled' 완료`);
+                        appCancelResult = { success: false, reason: 'application_id 없음 + 매칭 실패' };
                     }
-                } else {
-                    appCancelResult = { success: false, reason: 'application_id 없음 + 매칭 실패' };
+                } catch (appEx) {
+                    // applications 자동 처리 실패는 cancellation 승인 자체를 막지 않음
+                    appCancelResult = { success: false, error: appEx.message };
+                    console.warn(`[cancellations PUT] applications 자동 해지 처리 예외: ${appEx.message}`);
                 }
-            } catch (appEx) {
-                // applications 자동 처리 실패는 cancellation 승인 자체를 막지 않음
-                appCancelResult = { success: false, error: appEx.message };
-                console.warn(`[cancellations PUT] applications 자동 해지 처리 예외: ${appEx.message}`);
             }
 
             // ── 해지 승인 완료 → 대기 SMS 큐 트리거 ──────────────────────────
@@ -1548,7 +1565,9 @@ router.get('/settlement-report', async (req, res) => {
         const parseDong = d => parseInt((d || '').replace(/[^0-9]/g, '')) || 0;
         const parseHo   = h => parseInt((h || '').replace(/[^0-9]/g, '')) || 0;
         // dong/ho 형식 불일치(예: '106동' vs '106') 방지용 정규화 키
-        const normKey = (dong, ho, name) => `${parseDong(dong)}_${parseHo(ho)}_${name}`;
+        // ★ program_name 포함: 동일 세대원이 복수 수강 시 한 프로그램 해지가 다른 프로그램에 오탐되는 것 방지
+        const normKey = (dong, ho, name, prog) =>
+            `${parseDong(dong)}_${parseHo(ho)}_${(name||'').trim()}_${(prog||'').replace(/\s/g,'')}`;
 
         // ────────────────────────────────────────────────
         // E. 시트1: 동호수별 부과 금액 집계
@@ -1557,7 +1576,7 @@ router.get('/settlement-report', async (req, res) => {
         //    정렬: 동(숫자) 오름차순 → 호(숫자) 오름차순
         // ────────────────────────────────────────────────
         // ★ dong/ho 정규화 키 사용 (동 표기 불일치 방지)
-        const midCancelKey = new Set(midCancel.map(r => normKey(r.dong, r.ho, r.name)));
+        const midCancelKey = new Set(midCancel.map(r => normKey(r.dong, r.ho, r.name, r.program_name)));
 
         const donghoMap = new Map();
         approvedList.forEach(a => {
@@ -1574,7 +1593,7 @@ router.get('/settlement-report', async (req, res) => {
             // 전화번호 보완 (첫 번째로 발견된 번호 사용)
             if (!entry.phone && a.phone) entry.phone = a.phone;
 
-            const isMid     = midCancelKey.has(normKey(a.dong, a.ho, a.name));
+            const isMid     = midCancelKey.has(normKey(a.dong, a.ho, a.name, a.program_name));
             const isNextNew = nextNewList.some(n => n.id === a.id);
             const fee       = getFee(a);
 
@@ -1640,8 +1659,8 @@ router.get('/settlement-report', async (req, res) => {
 
         // endCancel / midCancel 키셋
         // ★ dong/ho 정규화 키(normKey) 사용: '106동' vs '106' 같은 형식 불일치 방지
-        const endCancelKeySet = new Set(endCancel.map(r => normKey(r.dong, r.ho, r.name)));
-        const midCancelKeySet = new Set(midCancel.map(r => normKey(r.dong, r.ho, r.name)));
+        const endCancelKeySet = new Set(endCancel.map(r => normKey(r.dong, r.ho, r.name, r.program_name)));
+        const midCancelKeySet = new Set(midCancel.map(r => normKey(r.dong, r.ho, r.name, r.program_name)));
 
         // 당월 수강생 행 생성 (approved + 해지자 포함)
         const settlementRows = [];
@@ -1660,8 +1679,8 @@ router.get('/settlement-report', async (req, res) => {
             const isThisMonthNew = approvedDate >= monthStart && approvedDate <= monthEnd;
             const isCurNew    = curNewKeySet.has(a.id);           // 금월신규 (당월 정산 포함)
             const isNextNew   = isThisMonthNew && !isCurNew;      // 차월신규 (다음달 부과)
-            const isEndCancel = endCancelKeySet.has(normKey(a.dong, a.ho, a.name));
-            const isMidCancel = midCancelKeySet.has(normKey(a.dong, a.ho, a.name));
+            const isEndCancel = endCancelKeySet.has(normKey(a.dong, a.ho, a.name, a.program_name));
+            const isMidCancel = midCancelKeySet.has(normKey(a.dong, a.ho, a.name, a.program_name));
 
             // ★ 중도해지자 — settlementRows 완전 제외 (하단 섹션에만 표시)
             if (isMidCancel) return;

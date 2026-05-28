@@ -1651,17 +1651,18 @@ async function loadMyManageList() {
                     // 변경 가능 슬롯 정보
                     const slotInfo = slotsMap[a.id];
                     const hasAvailSlots = slotInfo && slotInfo.availableCount > 0;
+                    // 시간대 변경 버튼: 여유석 있으면 강조(파란 그라데이션)
                     const changeBtnStyle = !isWaiting
                         ? (hasAvailSlots
-                            ? 'padding:8px;background:#eff6ff;border:1.5px solid #3b82f6;color:#1d4ed8;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer'
-                            : 'padding:8px;background:#f3f4f6;border:1.5px solid #d1d5db;color:#9ca3af;border-radius:8px;font-size:.8rem;font-weight:600;cursor:not-allowed;opacity:.7')
+                            ? 'padding:9px 8px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);border:none;color:#fff;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(59,130,246,.4)'
+                            : 'padding:9px 8px;background:#f3f4f6;border:1.5px solid #d1d5db;color:#9ca3af;border-radius:8px;font-size:.8rem;font-weight:600;cursor:not-allowed;opacity:.7')
                         : '';
                     const changeBtnLabel = !isWaiting
                         ? (slotInfo
                             ? (hasAvailSlots
-                                ? `<i class="fas fa-exchange-alt"></i> 변경 <span style="font-size:.72rem;background:#3b82f6;color:#fff;padding:1px 5px;border-radius:8px;margin-left:2px">${slotInfo.availableCount}석</span>`
+                                ? `<i class="fas fa-exchange-alt"></i> 시간대 변경 <span style="font-size:.72rem;background:rgba(255,255,255,.3);color:#fff;padding:1px 5px;border-radius:8px;margin-left:2px">${slotInfo.availableCount}석 가능</span>`
                                 : '<i class="fas fa-ban"></i> 변경불가 <span style="font-size:.72rem">모두 마감</span>')
-                            : '<i class="fas fa-exchange-alt"></i> 요일·시간 변경')
+                            : '<i class="fas fa-exchange-alt"></i> 시간대 변경')
                         : '';
 
                     return `
@@ -1696,10 +1697,19 @@ async function loadMyManageList() {
                                            color:#ef4444;border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer">
                                 <i class="fas fa-times-circle"></i> ${isWaiting ? '대기 취소' : '신청 철회'}
                             </button>
-                        </div>` : `
+                        </div>
+                        ${!isWaiting ? `
+                        <div style="margin-top:7px;padding:7px 10px;background:#fff7ed;border:1px solid #fed7aa;
+                                    border-radius:7px;font-size:.75rem;color:#92400e;line-height:1.6">
+                            <i class="fas fa-lightbulb" style="color:#f97316"></i>
+                            <strong>시간대만 바꾸고 싶다면?</strong>
+                            위 <span style="background:#1d4ed8;color:#fff;padding:1px 5px;border-radius:4px;font-size:.72rem">시간대 변경</span> 버튼을 이용하세요.<br>
+                            <span style="color:#b45309">⚠️ 신청 철회 후 재접수 시 수강 해지로 처리될 수 있습니다.</span>
+                        </div>` : ''}
+                        ` : `
                         <div style="text-align:center;font-size:.78rem;color:#9ca3af;padding:4px 0">
                             <i class="fas fa-lock"></i> 신청 철회·변경은 ${periodLabel}에 가능합니다<br>
-                            <span style="font-size:.72rem;color:#c0c0c0">※ 익월 해지신청은 <strong>해지 신청 탭</strong>을 통하여 ${cancelPeriodLabel} 해지 신청 기간에 접수하세요</span>
+                            <span style="font-size:.72rem;color:#c0c0c0">※ 시간대 변경은 <strong>내 신청 취소·변경 탭</strong>의 <strong>시간대 변경</strong> 버튼을 이용하세요</span>
                         </div>`}
                     </div>`;
                 }).join('')}
