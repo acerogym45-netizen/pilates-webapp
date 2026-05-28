@@ -798,13 +798,14 @@
     <!-- 이미지 전체화면 모달 -->
     <div id="imageModal" class="image-modal" onclick="closeImageModal(event)">
         <span class="image-modal-close" onclick="closeImageModal()">&times;</span>
+        <button class="imodal-arrow prev" id="imodalPrev" onclick="imodalStep(-1);event.stopPropagation()">
+            <i class="fas fa-chevron-left"></i>
+        </button>
         <img class="image-modal-content" id="modalImage" alt="">
-    </div>
-
-    <!-- 이미지 전체화면 모달 -->
-    <div id="imageModal" class="image-modal" onclick="closeImageModal(event)">
-        <span class="image-modal-close" onclick="closeImageModal()">&times;</span>
-        <img class="image-modal-content" id="modalImage" alt="">
+        <button class="imodal-arrow next" id="imodalNext" onclick="imodalStep(1);event.stopPropagation()">
+            <i class="fas fa-chevron-right"></i>
+        </button>
+        <span class="imodal-counter" id="imodalCounter"></span>
     </div>
 
     <!-- ★ 내 신청 취소/변경 모달 (매월 20~27일) -->

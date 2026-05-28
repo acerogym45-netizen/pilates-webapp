@@ -2615,7 +2615,7 @@ function displayNotices(notices) {
             const slides = imgs.map((url, si) => `
                 <div class="nslide-item${si === 0 ? ' active' : ''}" data-index="${si}">
                     <img src="${escapeHtml(url)}" alt="공지 이미지 ${si+1}"
-                         onclick="notices_openImageModal('${url.replace(/'/g,'%27')}')">
+                         onclick="notices_openImageModal('${url.replace(/'/g,'%27')}','${sliderId}',${si})">
                 </div>`).join('');
 
             const dots = imgs.length > 1
@@ -2714,13 +2714,64 @@ function notices_toggleExpand(contentId, btn) {
 }
 
 // 공지 이미지 클릭 시 전체화면 뷰어 (index.html imageModal 재사용)
-function notices_openImageModal(url) {
+// sliderId: 연결된 슬라이더 id (없으면 단일 이미지), startIdx: 시작 인덱스
+function notices_openImageModal(url, sliderId, startIdx) {
     const modal = document.getElementById('imageModal');
     if (!modal) return;
     const img = document.getElementById('modalImage');
     if (img) img.src = url;
+
+    // 슬라이더 이미지 목록 수집
+    let urls = [url];
+    let curIdx = 0;
+    if (sliderId) {
+        const slider = document.getElementById(sliderId);
+        if (slider) {
+            const items = slider.querySelectorAll('.nslide-item img');
+            if (items.length > 0) {
+                urls = Array.from(items).map(i => i.src);
+                curIdx = (typeof startIdx === 'number') ? startIdx : 0;
+            }
+        }
+    }
+
+    // 모달에 상태 저장
+    modal._imodalUrls  = urls;
+    modal._imodalIdx   = curIdx;
+    _imodalRefresh();
+
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
+}
+
+// 모달 이미지 갱신 (화살표/카운터/숨기기)
+function _imodalRefresh() {
+    const modal = document.getElementById('imageModal');
+    if (!modal) return;
+    const urls   = modal._imodalUrls  || [];
+    const idx    = modal._imodalIdx   || 0;
+    const img    = document.getElementById('modalImage');
+    const prev   = document.getElementById('imodalPrev');
+    const next   = document.getElementById('imodalNext');
+    const counter= document.getElementById('imodalCounter');
+
+    if (img && urls[idx]) img.src = urls[idx];
+    const multi = urls.length > 1;
+    if (prev)    prev.style.display    = multi ? 'flex' : 'none';
+    if (next)    next.style.display    = multi ? 'flex' : 'none';
+    if (counter) {
+        counter.style.display = multi ? 'block' : 'none';
+        counter.textContent   = multi ? `${idx + 1} / ${urls.length}` : '';
+    }
+}
+
+// 모달 내 ±1 이동
+function imodalStep(dir) {
+    const modal = document.getElementById('imageModal');
+    if (!modal || !modal._imodalUrls) return;
+    const len = modal._imodalUrls.length;
+    modal._imodalIdx = (modal._imodalIdx + dir + len) % len;
+    _imodalRefresh();
 }
 
 // ===== LOAD PROGRAMS =====

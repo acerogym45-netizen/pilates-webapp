@@ -926,6 +926,49 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 .image-modal-close:hover { background: rgba(255,255,255,.2); }
 .image-modal-content { max-width: 90vw; max-height: 90vh; border-radius: 8px; object-fit: contain; }
 
+/* 이미지 모달 내 화살표 (다중 이미지) */
+.imodal-arrow {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255,255,255,.15);
+    color: #fff;
+    border: none;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2002;
+    transition: background .2s;
+    -webkit-tap-highlight-color: transparent;
+}
+.imodal-arrow:hover { background: rgba(255,255,255,.35); }
+.imodal-arrow.prev { left: 14px; }
+.imodal-arrow.next { right: 14px; }
+@media (max-width: 480px) {
+    .imodal-arrow { width: 42px; height: 42px; font-size: 1rem; }
+    .imodal-arrow.prev { left: 8px; }
+    .imodal-arrow.next { right: 8px; }
+}
+.imodal-counter {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,.55);
+    color: #fff;
+    font-size: .82rem;
+    padding: 4px 14px;
+    border-radius: 20px;
+    z-index: 2002;
+    pointer-events: none;
+    letter-spacing: .05em;
+}
+
 /* ════════════════════════════════════════════════
    FAB — 해지 신청
 ════════════════════════════════════════════════ */
