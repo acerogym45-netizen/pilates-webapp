@@ -583,7 +583,7 @@ router.post('/', async (req, res) => {
 
             if (program && program.type === 'group') {
                 // ── 정원 카운트 — share_timeslot_capacity 설정에 따라 분기 ──
-                // ON : 단지+시간대 합산 (같은 시간대 프로모션 자리 공유)
+                // ON : 단지 + 동일 days + 시간대 합산 (같은 요일 프로모션 자리 공유)
                 // OFF: 프로그램별 독립 카운트 (기존 방식)
                 let approvedCntQuery = sb
                     .from('applications')
@@ -591,7 +591,21 @@ router.post('/', async (req, res) => {
                     .eq('complex_id', program.complex_id)
                     .eq('preferred_time', preferred_time)
                     .eq('status', 'approved');
-                if (!complexSettings.share_timeslot_capacity) {
+                if (complexSettings.share_timeslot_capacity) {
+                    // ON: 같은 단지 + 같은 days(요일)의 프로그램 ID 목록으로 필터
+                    if (program.days) {
+                        const { data: sameDayProgs } = await sb
+                            .from('programs')
+                            .select('id')
+                            .eq('complex_id', program.complex_id)
+                            .eq('days', program.days);
+                        const sameDayIds = (sameDayProgs || []).map(p => p.id);
+                        if (sameDayIds.length > 0) {
+                            approvedCntQuery = approvedCntQuery.in('program_id', sameDayIds);
+                        }
+                    }
+                    // days가 없는 경우 → 단지+시간대 전체 합산 (기존 동작 유지)
+                } else {
                     // OFF: 해당 프로그램 건만 카운트
                     approvedCntQuery = program_id
                         ? approvedCntQuery.eq('program_id', program.id)
@@ -618,7 +632,20 @@ router.post('/', async (req, res) => {
                             .eq('preferred_time', preferred_time)
                             .eq('status', 'waiting')
                             .eq('apply_type', 'waiting');
-                        if (!complexSettings.share_timeslot_capacity) {
+                        if (complexSettings.share_timeslot_capacity) {
+                            // ON: 같은 days 프로그램들끼리만
+                            if (program.days) {
+                                const { data: sameDayProgs2 } = await sb
+                                    .from('programs')
+                                    .select('id')
+                                    .eq('complex_id', program.complex_id)
+                                    .eq('days', program.days);
+                                const sameDayIds2 = (sameDayProgs2 || []).map(p => p.id);
+                                if (sameDayIds2.length > 0) {
+                                    waitingCntQuery = waitingCntQuery.in('program_id', sameDayIds2);
+                                }
+                            }
+                        } else {
                             waitingCntQuery = program_id
                                 ? waitingCntQuery.eq('program_id', program.id)
                                 : waitingCntQuery.ilike('program_name', program_name);
@@ -1237,7 +1264,20 @@ router.post('/:id/change-time', async (req, res) => {
             .eq('complex_id', targetProgram.complex_id)
             .eq('preferred_time', new_preferred_time)
             .eq('status', 'approved');
-        if (!shareCapacity) {
+        if (shareCapacity) {
+            // ON: 같은 단지 + 같은 days(요일) 프로그램끼리만 합산
+            if (targetProgram.days) {
+                const { data: changeSameDayProgs } = await sb
+                    .from('programs')
+                    .select('id')
+                    .eq('complex_id', targetProgram.complex_id)
+                    .eq('days', targetProgram.days);
+                const changeSameDayIds = (changeSameDayProgs || []).map(p => p.id);
+                if (changeSameDayIds.length > 0) {
+                    changeApprovedQuery = changeApprovedQuery.in('program_id', changeSameDayIds);
+                }
+            }
+        } else {
             // OFF: 해당 프로그램 건만 카운트 (기존 방식)
             changeApprovedQuery = changeApprovedQuery.eq('program_id', targetProgramId);
         }
@@ -1468,7 +1508,7 @@ async function promoteWaitingApplicant(sb, programId, preferredTime) {
 
     const { data: program } = await sb
         .from('programs')
-        .select('capacity, complex_id')
+        .select('capacity, complex_id, days')
         .eq('id', programId)
         .single();
 
@@ -1482,6 +1522,17 @@ async function promoteWaitingApplicant(sb, programId, preferredTime) {
         .single();
     const shareCapacity = promoCxData?.share_timeslot_capacity || false;
 
+    // share ON일 때 같은 days 프로그램 ID 목록 조회
+    let sameDayIdsForPromo = null;
+    if (shareCapacity && program.days) {
+        const { data: promoSameDayProgs } = await sb
+            .from('programs')
+            .select('id')
+            .eq('complex_id', program.complex_id)
+            .eq('days', program.days);
+        sameDayIdsForPromo = (promoSameDayProgs || []).map(p => p.id);
+    }
+
     // 승인 카운트 — 설정에 따라 분기
     let approvedQuery = sb
         .from('applications')
@@ -1489,7 +1540,12 @@ async function promoteWaitingApplicant(sb, programId, preferredTime) {
         .eq('complex_id', program.complex_id)
         .eq('preferred_time', preferredTime)
         .eq('status', 'approved');
-    if (!shareCapacity) {
+    if (shareCapacity) {
+        // ON: 같은 days 프로그램끼리만 합산
+        if (sameDayIdsForPromo && sameDayIdsForPromo.length > 0) {
+            approvedQuery = approvedQuery.in('program_id', sameDayIdsForPromo);
+        }
+    } else {
         approvedQuery = approvedQuery.eq('program_id', programId);
     }
     const { count: approvedCnt } = await approvedQuery;
@@ -1504,7 +1560,12 @@ async function promoteWaitingApplicant(sb, programId, preferredTime) {
             .eq('status', 'waiting')
             .order('waiting_order', { ascending: true })
             .limit(1);
-        if (!shareCapacity) {
+        if (shareCapacity) {
+            // ON: 같은 days 프로그램끼리만
+            if (sameDayIdsForPromo && sameDayIdsForPromo.length > 0) {
+                waitingQuery = waitingQuery.in('program_id', sameDayIdsForPromo);
+            }
+        } else {
             waitingQuery = waitingQuery.eq('program_id', programId);
         }
         const { data: nextWaiting } = await waitingQuery;

@@ -404,8 +404,19 @@ router.get('/:id/capacity', async (req, res) => {
             .single();
         const shareCapacity = capCxData?.share_timeslot_capacity || false;
 
+        // share ON일 때 같은 days 프로그램 ID 목록 미리 조회
+        let sameDayProgramIds = null;
+        if (shareCapacity && program.days) {
+            const { data: sameDayProgs } = await sb
+                .from('programs')
+                .select('id')
+                .eq('complex_id', complexId)
+                .eq('days', program.days);
+            sameDayProgramIds = (sameDayProgs || []).map(p => p.id);
+        }
+
         const capacityData = await Promise.all(timeSlots.map(async (slot) => {
-            // share_timeslot_capacity ON: 단지+시간대 합산 / OFF: 프로그램별 독립
+            // share_timeslot_capacity ON: 같은 단지+같은 days+시간대 합산 / OFF: 프로그램별 독립
             let approvedQ = sb.from('applications')
                 .select('*', { count: 'exact', head: true })
                 .eq('complex_id', complexId)
@@ -416,7 +427,13 @@ router.get('/:id/capacity', async (req, res) => {
                 .eq('complex_id', complexId)
                 .eq('preferred_time', slot)
                 .eq('status', 'waiting');
-            if (!shareCapacity) {
+            if (shareCapacity) {
+                // ON: 같은 days 프로그램들끼리만 합산
+                if (sameDayProgramIds && sameDayProgramIds.length > 0) {
+                    approvedQ = approvedQ.in('program_id', sameDayProgramIds);
+                    waitingQ  = waitingQ.in('program_id', sameDayProgramIds);
+                }
+            } else {
                 approvedQ = approvedQ.eq('program_id', req.params.id);
                 waitingQ  = waitingQ.eq('program_id', req.params.id);
             }
