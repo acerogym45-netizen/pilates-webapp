@@ -56,20 +56,32 @@ router.get('/notices', async (req, res) => {
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /notices');
 
-        const result = (data || []).map(r => ({
-            ...r, complex_code: r.complexes?.code, complex_name: r.complexes?.name
-        }));
+        const result = (data || []).map(r => {
+            // images JSONB 배열 정규화: 없으면 image_url을 단일 배열로 변환
+            const images = Array.isArray(r.images) && r.images.length > 0
+                ? r.images
+                : (r.image_url ? [r.image_url] : []);
+            return { ...r, complex_code: r.complexes?.code, complex_name: r.complexes?.name, images };
+        });
         res.json({ success: true, data: result });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 router.post('/notices', async (req, res) => {
     try {
-        const { complex_id, title, content, is_pinned, image_url } = req.body;
+        const { complex_id, title, content, is_pinned, image_url, images } = req.body;
         if (!complex_id || !title || !content) return res.status(400).json({ success: false, error: '필수 항목 누락' });
         const sb = getSupabase();
         const insertData = { complex_id, title, content, is_pinned: Boolean(is_pinned) };
-        if (image_url !== undefined) insertData.image_url = image_url || null;
+        // images 배열 우선, 없으면 image_url 단일값 처리
+        const imagesArr = Array.isArray(images) ? images.filter(Boolean) : null;
+        if (imagesArr && imagesArr.length > 0) {
+            insertData.images    = imagesArr;
+            insertData.image_url = imagesArr[0]; // 하위호환
+        } else if (image_url !== undefined) {
+            insertData.image_url = image_url || null;
+            insertData.images    = image_url ? [image_url] : null;
+        }
         const { data, error } = await sb
             .from('notices')
             .insert(insertData)
@@ -82,14 +94,22 @@ router.post('/notices', async (req, res) => {
 
 router.put('/notices/:id', async (req, res) => {
     try {
-        const { title, content, is_pinned, is_active, image_url } = req.body;
+        const { title, content, is_pinned, is_active, image_url, images } = req.body;
         const sb = getSupabase();
         const updateData = {
             title, content,
             is_pinned: Boolean(is_pinned),
             is_active: is_active !== undefined ? Boolean(is_active) : true
         };
-        if (image_url !== undefined) updateData.image_url = image_url || null;
+        // images 배열 우선, 없으면 image_url 처리
+        const imagesArr = Array.isArray(images) ? images.filter(Boolean) : null;
+        if (imagesArr !== null) {
+            updateData.images    = imagesArr.length > 0 ? imagesArr : null;
+            updateData.image_url = imagesArr.length > 0 ? imagesArr[0] : null;
+        } else if (image_url !== undefined) {
+            updateData.image_url = image_url || null;
+            updateData.images    = image_url ? [image_url] : null;
+        }
         const { data, error } = await sb
             .from('notices')
             .update(updateData)

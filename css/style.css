@@ -663,6 +663,80 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
     transition: opacity .2s;
 }
 .notice-card-image img:hover { opacity: .9; }
+
+/* ── 공지사항 이미지 슬라이더 ── */
+.notice-slider {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    background: #000;
+}
+.nslide-track { width: 100%; }
+.nslide-item { display: none; }
+.nslide-item.active { display: block; }
+.nslide-item img {
+    width: 100%;
+    max-height: 280px;
+    object-fit: contain;
+    display: block;
+    cursor: pointer;
+    border-radius: 0;
+    transition: opacity .2s;
+}
+.nslide-item img:hover { opacity: .9; }
+.nslide-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0,0,0,.45);
+    color: #fff;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: .9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    transition: background .2s;
+}
+.nslide-arrow:hover { background: rgba(0,0,0,.7); }
+.nslide-arrow.prev { left: 8px; }
+.nslide-arrow.next { right: 8px; }
+.nslide-counter {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    background: rgba(0,0,0,.5);
+    color: #fff;
+    font-size: .72rem;
+    padding: 2px 7px;
+    border-radius: 10px;
+    pointer-events: none;
+}
+.nslide-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 0;
+    background: #f8f9fa;
+    border-radius: 0 0 8px 8px;
+}
+.nslide-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #ccc;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: background .2s;
+}
+.nslide-dot.active { background: #3b82f6; }
 .notice-card-footer {
     display: flex;
     align-items: center;

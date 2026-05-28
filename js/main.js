@@ -2602,9 +2602,48 @@ function displayNotices(notices) {
                 ? '<i class="fas fa-star"></i>'
                 : '<i class="fas fa-info-circle"></i>';
         const contentId = `noticeContent_${idx}`;
-        const safeImg   = notice.image_url
-            ? notice.image_url.replace(/'/g, '%27')
-            : '';
+
+        // 이미지 배열 정규화: images 배열 우선, 없으면 image_url 단일값
+        const imgs = Array.isArray(notice.images) && notice.images.length > 0
+            ? notice.images
+            : (notice.image_url ? [notice.image_url] : []);
+        const sliderId = `noticeSlider_${idx}`;
+
+        // 슬라이더 HTML 생성
+        let sliderHtml = '';
+        if (imgs.length > 0) {
+            const slides = imgs.map((url, si) => `
+                <div class="nslide-item${si === 0 ? ' active' : ''}" data-index="${si}">
+                    <img src="${escapeHtml(url)}" alt="공지 이미지 ${si+1}"
+                         onclick="notices_openImageModal('${url.replace(/'/g,'%27')}')">
+                </div>`).join('');
+
+            const dots = imgs.length > 1
+                ? `<div class="nslide-dots">${imgs.map((_, si) =>
+                    `<button class="nslide-dot${si===0?' active':''}" onclick="notices_slideTo('${sliderId}',${si})"></button>`
+                  ).join('')}</div>`
+                : '';
+
+            const arrows = imgs.length > 1 ? `
+                <button class="nslide-arrow prev" onclick="notices_slideStep('${sliderId}',-1)">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="nslide-arrow next" onclick="notices_slideStep('${sliderId}',1)">
+                    <i class="fas fa-chevron-right"></i>
+                </button>` : '';
+
+            const counter = imgs.length > 1
+                ? `<span class="nslide-counter" id="${sliderId}_counter">1 / ${imgs.length}</span>`
+                : '';
+
+            sliderHtml = `
+            <div class="notice-slider" id="${sliderId}" data-total="${imgs.length}" data-current="0">
+                <div class="nslide-track">${slides}</div>
+                ${arrows}
+                ${counter}
+                ${dots}
+            </div>`;
+        }
 
         return `
         <div class="notice-card ${categoryClass}${notice.is_pinned ? ' pinned' : ''}">
@@ -2617,11 +2656,7 @@ function displayNotices(notices) {
                     ${escapeHtml(category)}
                 </span>
             </div>
-            ${notice.image_url ? `
-            <div class="notice-card-image">
-                <img src="${escapeHtml(notice.image_url)}" alt="공지 이미지"
-                     onclick="notices_openImageModal('${safeImg}')">
-            </div>` : ''}
+            ${sliderHtml}
             <div class="notice-card-content" id="${contentId}">
                 ${escapeHtml(notice.content || '').replace(/\n/g, '<br>')}
             </div>
@@ -2638,6 +2673,36 @@ function displayNotices(notices) {
     }).join('');
 
     container.innerHTML = `<div class="notices-grid">${cards}</div>`;
+}
+
+// ── 슬라이드 이동 (절대 인덱스) ──────────────────────────────
+function notices_slideTo(sliderId, idx) {
+    const slider = document.getElementById(sliderId);
+    if (!slider) return;
+    const total = parseInt(slider.dataset.total || '1');
+    idx = Math.max(0, Math.min(total - 1, idx));
+    slider.dataset.current = idx;
+
+    // 슬라이드 아이템 active 갱신
+    slider.querySelectorAll('.nslide-item').forEach((el, i) => {
+        el.classList.toggle('active', i === idx);
+    });
+    // 도트 active 갱신
+    slider.querySelectorAll('.nslide-dot').forEach((dot, i) => {
+        dot.classList.toggle('active', i === idx);
+    });
+    // 카운터 갱신
+    const counter = document.getElementById(`${sliderId}_counter`);
+    if (counter) counter.textContent = `${idx + 1} / ${total}`;
+}
+
+// ── 슬라이드 이전/다음 ────────────────────────────────────────
+function notices_slideStep(sliderId, dir) {
+    const slider = document.getElementById(sliderId);
+    if (!slider) return;
+    const total   = parseInt(slider.dataset.total || '1');
+    const current = parseInt(slider.dataset.current || '0');
+    notices_slideTo(sliderId, (current + dir + total) % total);
 }
 
 // 공지 본문 펼치기/접기
