@@ -1649,10 +1649,12 @@ router.get('/settlement-report', async (req, res) => {
         // curNewList 키셋 (금월신규 — lesson_start_month = monthKey)
         const curNewKeySet = new Set(curNewList.map(a => a.id));
 
-        // approved 목록: 자동연장 / 차월해지 / 중도해지 / 금월신규 구분
+        // approved 목록: 자동연장 / 차월해지 / 금월신규 구분
         // ★ 차월신규(이번 달 승인, lesson_start_month ≠ monthKey)는 settlementRows 제외
         //   → 해당 인원은 newSectionRows(신규 수강 예정자 섹션)에만 표시됨
         // ★ 금월신규(lesson_start_month = monthKey)는 당월 정산에 포함
+        // ★ 중도해지자(isMidCancel)는 settlementRows에서 완전 제외
+        //   → 하단 mid_cancel_section에서만 표시됨
         approvedList.forEach(a => {
             const approvedDate = (a.approved_at || a.created_at || '').slice(0, 10);
             const isThisMonthNew = approvedDate >= monthStart && approvedDate <= monthEnd;
@@ -1661,19 +1663,17 @@ router.get('/settlement-report', async (req, res) => {
             const isEndCancel = endCancelKeySet.has(normKey(a.dong, a.ho, a.name));
             const isMidCancel = midCancelKeySet.has(normKey(a.dong, a.ho, a.name));
 
-            // ★ 차월신규는 정산 내역에서 제외 (신규 섹션에만)
-            //   단, 중도해지/차월해지자는 해지 분류를 위해 그대로 포함
-            //   금월신규(isCurNew)는 제외하지 않고 정산 포함
-            if (isNextNew && !isEndCancel && !isMidCancel) return;
+            // ★ 중도해지자 — settlementRows 완전 제외 (하단 섹션에만 표시)
+            if (isMidCancel) return;
+            // ★ 차월신규 — settlementRows 제외 (신규 섹션에만)
+            if (isNextNew && !isEndCancel) return;
 
             let category = '';
-            if (isMidCancel) category = '중도해지';
-            else if (isEndCancel) {
+            if (isEndCancel) {
                 const nextLabel = `${nextYr}년 ${nextMo}월`;
                 category = `${nextLabel} 수강 해지`;
-            }
-            // 금월신규 표시 (이번 달 수강 시작 — 개인/듀엣 상시접수)
-            else if (isCurNew) {
+            } else if (isCurNew) {
+                // 금월신규 표시 (이번 달 수강 시작 — 개인/듀엣 상시접수)
                 category = '금월신규';
             }
             // else: 빈칸 (자동연장 — 이전 달부터 수강 중)
@@ -1681,9 +1681,9 @@ router.get('/settlement-report', async (req, res) => {
             const fee = getFee(a);
             const att = attendanceMap[a.id];
             const attendedSessions = att?.attended ?? null;
-            // 최종부과액: 출석횟수 × 15,000 (중도해지는 별도)
+            // 최종부과액: 출석횟수 × 15,000
             let finalCharge = null;
-            if (!isMidCancel && attendedSessions !== null) {
+            if (attendedSessions !== null) {
                 finalCharge = attendedSessions * SESSION_FEE;
             }
 
@@ -1695,43 +1695,37 @@ router.get('/settlement-report', async (req, res) => {
                 phone:            a.phone,
                 program_name:     a.program_name,
                 preferred_time:   a.preferred_time,
-                // ★ 중도해지자는 monthly_fee=null (소계/합계 합산 제외)
-                //   → 중도해지 섹션에서 billing_amount 기반으로 별도 표시
-                monthly_fee:      isMidCancel ? null : (fee || null),
+                monthly_fee:      fee || null,
                 category,
                 attended_sessions: attendedSessions,
                 final_charge:     finalCharge,
                 approved_at:      approvedDate,
-                is_mid_cancel:    isMidCancel,
+                is_mid_cancel:    false,   // 중도해지자는 이 루프에서 제외됨
                 is_end_cancel:    isEndCancel,
                 is_cur_new:       isCurNew,  // 금월신규 플래그
                 is_mid_join:      false,
             });
         });
 
-        // 중도해지자는 cancellations 테이블 데이터로 별도 행 추가
-        // (approved 목록에 없는 경우 대비)
-        midCancel.forEach(c => {
-            const alreadyIn = settlementRows.some(r => r.dong === c.dong && r.ho === c.ho && r.name === c.name);
-            if (!alreadyIn) {
-                settlementRows.push({
-                    id:               c.id,
-                    dong:             c.dong,
-                    ho:               c.ho,
-                    name:             c.name,
-                    phone:            c.phone,
-                    program_name:     c.program_name,
-                    preferred_time:   '',
-                    monthly_fee:      c.monthly_fee || null,
-                    category:         '중도해지',
-                    attended_sessions: null,
-                    final_charge:     c.billing_amount || null,
-                    approved_at:      '',
-                    is_mid_cancel:    true,
-                    is_end_cancel:    false,
-                    is_mid_join:      false,
-                });
-            }
+        // ★ 중도해지자는 settlementRows에 넣지 않고 mid_cancel_section으로 별도 관리
+        //   → UI에서 하단 섹션에만 표시됨 (소계/합계에 영향 없음)
+        const midCancelSection = midCancel.map(c => ({
+            id:               c.id,
+            dong:             c.dong,
+            ho:               c.ho,
+            name:             c.name,
+            phone:            c.phone,
+            program_name:     c.program_name,
+            preferred_time:   c.preferred_time || '',
+            monthly_fee:      progPriceMap[c.program_name] || null,  // 월 정가 (참고용)
+            attended_sessions: c.attended_sessions ?? null,
+            billing_amount:   c.billing_amount ?? null,              // 실 청구액
+            termination_date: c.termination_date || null,
+            note:             c.termination_date ? `${c.termination_date.slice(0,10)} 중도해지` : '중도해지(날짜미상)',
+        })).sort((a, b) => {
+            if ((a.program_name||'') < (b.program_name||'')) return -1;
+            if ((a.program_name||'') > (b.program_name||'')) return 1;
+            return parseDong(a.dong) - parseDong(b.dong);
         });
 
         // 정렬: 프로그램 → 시간대 → 동(숫자) → 호수(숫자)
@@ -1797,12 +1791,7 @@ router.get('/settlement-report', async (req, res) => {
         settlementRows.forEach(r => {
             // 최종부과액이 null인 경우 일단 포함 (출석미입력), 0원은 제외
             if (r.final_charge === 0) return;
-            // 중도해지는 billing_amount가 있으면 final_charge로 사용
-            let fc = r.final_charge;
-            if (r.is_mid_cancel && !fc) {
-                const mc = midCancel.find(c => c.dong === r.dong && c.ho === r.ho && c.name === r.name);
-                if (mc) fc = mc.billing_amount || null;
-            }
+            const fc = r.final_charge;
             if (fc === 0) return;
 
             const key = `${parseDong(r.dong)}_${parseHo(r.ho)}`;
@@ -1862,13 +1851,9 @@ router.get('/settlement-report', async (req, res) => {
         // 요약 계산 (새 기준)
         // ────────────────────────────────────────────────
         const totalFeeSum    = settlementRows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
-        const totalFinalSum  = settlementRows.reduce((s, r) => {
-            const fc = r.is_mid_cancel
-                ? (midCancel.find(c => c.dong === r.dong && c.ho === r.ho && c.name === r.name)?.billing_amount || 0)
-                : (r.final_charge || 0);
-            return s + fc;
-        }, 0);
-        const cancelCount = settlementRows.filter(r => r.is_end_cancel || r.is_mid_cancel).length;
+        const totalFinalSum  = settlementRows.reduce((s, r) => s + (r.final_charge || 0), 0);
+        // cancelCount: 소계 테이블의 차월해지자 + 별도 섹션의 중도해지자
+        const cancelCount = settlementRows.filter(r => r.is_end_cancel).length + midCancelSection.length;
 
         res.json({
             success:  true,
@@ -1924,6 +1909,7 @@ router.get('/settlement-report', async (req, res) => {
             }),
             // ── 새 3시트용 데이터 ──
             settlement_rows:        settlementRows,       // 정산 내역 시트 (상단)
+            mid_cancel_section:     midCancelSection,     // 중도해지자 별도 섹션
             new_section_rows:       newSectionRows,       // 정산 내역 시트 (하단 신규)
             dongho_settlement_rows: donghoSettlementRows, // 동호수계 시트
             enrollment_rows:        enrollmentRows,       // 수강신청 내역 시트

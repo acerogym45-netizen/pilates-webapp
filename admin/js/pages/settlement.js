@@ -292,8 +292,11 @@ const settlement = {
         // ── 1. 정산 내역 (당월 수강생)
         html += this._settlementCard(d);
 
-        // ── 2. 중도해지 특수 카드 (기존 기능 유지)
-        html += this._midCancelCard(d.mid_cancel || [], d.summary.mid_cancel_count);
+        // ── 2. 중도해지 특수 카드
+        // mid_cancel_section: 정산 분리된 중도해지자 목록 (settlementRows에서 제외됨)
+        // mid_cancel: 원본 cancellations 데이터 (fallback)
+        const midCancelRows = d.mid_cancel_section || d.mid_cancel || [];
+        html += this._midCancelCard(midCancelRows, midCancelRows.length);
 
         // ── 3. 차월해지자
         const endCancelInfo = `
@@ -345,7 +348,8 @@ const settlement = {
         const yr = d.year, mo = d.month;
         const nextLbl = d.nextKey ? d.nextKey.replace('-', '년 ') + '월' : '차월';
         const totalRows  = rows.length;
-        const cancelRows = rows.filter(r => r.is_end_cancel || r.is_mid_cancel).length;
+        // settlementRows에 is_mid_cancel 행 없음 — is_end_cancel만 카운트
+        const cancelRows = rows.filter(r => r.is_end_cancel).length;
 
         const badge = `<span style="background:#2980b9;color:#fff;font-size:.72rem;font-weight:700;
           padding:2px 9px;border-radius:20px;margin-left:8px;vertical-align:middle">${totalRows}명</span>`;
@@ -378,18 +382,13 @@ const settlement = {
             const items = progMap[prog];
             items.forEach((r, i) => {
                 const id = r.id;
-                const bgRow = r.is_mid_cancel ? 'background:#fff5f5'
-                            : r.is_end_cancel  ? 'background:#fffaf0'
+                const bgRow = r.is_end_cancel  ? 'background:#fffaf0'
                             : i % 2 ? 'background:#fafafa' : '';
                 const tdS = `padding:6px 8px;border:1px solid #eee;font-size:.82rem;text-align:center;${bgRow}`;
 
-                // 구분 배지 (중도합류 분류 제거됨 — 이번달 승인자는 settlement_rows에 미포함)
+                // 구분 배지: 금월신규만 표시. 차월해지는 차월해지자 섹션에서 별도 표시하므로 소계 테이블에서 제거
                 let catBadge = '';
-                if (r.category === '중도해지') {
-                    catBadge = `<span style="background:#e74c3c;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">중도해지</span>`;
-                } else if (r.category && r.category.includes('해지')) {
-                    catBadge = `<span style="background:#e67e22;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">${r.category}</span>`;
-                } else if (r.category === '금월신규') {
+                if (r.category === '금월신규') {
                     catBadge = `<span style="background:#0891b2;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">금월신규</span>`;
                 }
 
@@ -405,8 +404,8 @@ const settlement = {
                 </tr>`;
             });
 
-            // 소계 행 — 중도해지자(is_mid_cancel) 제외
-            const subFeeSum = items.reduce((s, r) => r.is_mid_cancel ? s : s + (Number(r.monthly_fee) || 0), 0);
+            // 소계 행 — settlementRows에 중도해지자 없으므로 전체 합산
+            const subFeeSum = items.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
             tbodyRows += `<tr style="background:#e8f4fd">
               <td colspan="6" style="padding:5px 8px;border:1px solid #ddd;font-size:.8rem;font-weight:700;color:#1a5276;text-align:right">
                 ${prog} 소계</td>
@@ -416,8 +415,8 @@ const settlement = {
             </tr>`;
         });
 
-        // 합계 행 (강조 강화) — 중도해지자 제외
-        const totalFeeSum = rows.reduce((s, r) => r.is_mid_cancel ? s : s + (Number(r.monthly_fee) || 0), 0);
+        // 합계 행 (강조 강화)
+        const totalFeeSum = rows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
         tbodyRows += `<tr style="background:#1a5276">
           <td colspan="6" style="padding:9px 10px;border:1px solid #0d3349;font-size:.87rem;font-weight:700;color:#aed6f1;text-align:right">
             등록세대 <strong style="color:#fff">${totalRows}</strong>명 &nbsp;/&nbsp; 해지 <strong style="color:#f1948a">${cancelRows}</strong>명</td>
@@ -961,7 +960,7 @@ const settlement = {
             </div>
             <div style="font-size:.76rem;color:#7b241c;line-height:1.8;border-left:2px solid #f5b7b1;padding-left:14px">
               <b>💡 처리 방식</b><br>
-              · 정산 내역 상단에도 <b>중도해지</b> 구분으로 함께 표시됨<br>
+              · 정산 내역 소계에서 <b>제외</b>됨 (별도 후청구 처리)<br>
               · 요금은 정액 부과 없이 <b>관리비 후청구</b> (수강횟수 직접 입력 후 저장)<br>
               · 청구액 = 위약금(월수강료 × 10%) + 수강료(출석횟수 × 15,000원)
             </div>
@@ -1197,7 +1196,8 @@ const settlement = {
                 });
 
                 const totalFee    = settlementRows.reduce((s,r) => s+(Number(r.monthly_fee)||0), 0);
-                const cancelCount = settlementRows.filter(r => r.is_end_cancel||r.is_mid_cancel).length;
+                // settlementRows에 is_mid_cancel 행 없음 — is_end_cancel만 카운트
+                const cancelCount = settlementRows.filter(r => r.is_end_cancel).length;
                 s1.push([]);
                 s1.push([`등록 ${settlementRows.length}명`,'','',`해지 ${cancelCount}명`,'','', totalFee,'합계']);
 
@@ -1737,7 +1737,7 @@ const settlement = {
                 // 데이터 수집
                 const newRows  = (d.next_new       || []).map(r => ({ ...r, _cat: '신규',   _catOrd: 0 }));
                 const keepRows = (d.settlement_rows || [])
-                    .filter(r => !r.is_end_cancel && !r.is_mid_cancel)
+                    .filter(r => !r.is_end_cancel)  // settlementRows에 is_mid_cancel 행 없음
                     .map(r => ({ ...r, _cat: '', _catOrd: 1 }));
                 const termRows = [
                     ...(d.end_cancel || []).map(r => ({ ...r, _cat: '차월해지', _catOrd: 2 })),
@@ -1824,7 +1824,7 @@ const settlement = {
                 // settlement_rows 기준: 중도해지 제외 → 월수강료 합산
                 const dhMap = new Map(); // "동_호" → { dong, ho, totalFee }
                 (d.settlement_rows || []).forEach(r => {
-                    if (r.is_mid_cancel) return; // 중도해지 제외
+                    // settlementRows에 is_mid_cancel 행 없으므로 별도 필터 불필요
                     const fee = Number(r.monthly_fee) || 0;
                     if (!fee) return;
                     const key = `${r.dong}_${r.ho}`;
@@ -1893,10 +1893,9 @@ const settlement = {
         const prevYr    = moNum === 1 ? yr - 1 : yr;
         const prevMoStr = String(prevMo).padStart(2,'0');
 
-        // 프로그램별 집계 (중도해지 제외)
+        // 프로그램별 집계 (settlementRows에 중도해지 행 없음)
         const progMap = {};
         (d.settlement_rows || []).forEach(r => {
-            if (r.is_mid_cancel) return;
             const p = r.program_name || '미분류';
             if (!progMap[p]) progMap[p] = { fee: 0, count: 0 };
             progMap[p].count++;
