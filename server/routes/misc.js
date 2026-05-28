@@ -1270,6 +1270,7 @@ router.get('/settlement-report', async (req, res) => {
         // 0. 프로그램 가격 매핑 + 월별 수업횟수 매핑
         // ────────────────────────────────────────────────
         const progPriceMap   = {}; // { program_name: price }
+        const progTypeMap    = {}; // { program_name: type } — 'personal'/'duet' 은 session 계산 제외
         const progIdMap      = {}; // { program_name: program_id }
         // progSessionMap:     { program_name: { time_slot: count, ... } }  ← 이번 달 타임별 수업횟수
         // nextProgSessionMap: { program_name: { time_slot: count, ... } }  ← 다음 달 타임별 수업횟수
@@ -1281,11 +1282,12 @@ router.get('/settlement-report', async (req, res) => {
         {
             const { data: progs } = await sb
                 .from('programs')
-                .select('id, name, price, description, time_slots')
+                .select('id, name, type, price, description, time_slots')
                 .eq('complex_id', cid);
             (progs || []).forEach(p => {
                 if (p.name) {
                     progPriceMap[p.name] = p.price || 0;
+                    progTypeMap[p.name]  = p.type  || '';
                     progIdMap[p.name]    = p.id;
                     try {
                         const raw  = p.description;
@@ -1341,6 +1343,12 @@ router.get('/settlement-report', async (req, res) => {
         const getFee = (app) => {
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
+            // 개인/듀엣 레슨은 session 횟수 × 15,000 계산 제외 → programs.price 직접 사용
+            // (monthly_fee로 개별 설정하지 않은 경우 기본가 적용)
+            const pType = progTypeMap[app.program_name] || '';
+            if (pType === 'personal' || pType === 'duet') {
+                return progPriceMap[app.program_name] || 0;
+            }
             // 당월 수업횟수 기반 요금 (preferred_time 해당 슬롯 or 전체 합계)
             const slotMap = progSessionMap[app.program_name];
             if (slotMap) {
@@ -1356,6 +1364,11 @@ router.get('/settlement-report', async (req, res) => {
         const getNextFee = (app) => {
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
+            // 개인/듀엣 레슨은 session 계산 제외 → programs.price 직접 사용
+            const pType = progTypeMap[app.program_name] || '';
+            if (pType === 'personal' || pType === 'duet') {
+                return progPriceMap[app.program_name] || 0;
+            }
             // 차월 수업횟수 기반 요금
             const slotMap = nextProgSessionMap[app.program_name];
             if (slotMap) {
@@ -1534,6 +1547,8 @@ router.get('/settlement-report', async (req, res) => {
         // ────────────────────────────────────────────────
         const parseDong = d => parseInt((d || '').replace(/[^0-9]/g, '')) || 0;
         const parseHo   = h => parseInt((h || '').replace(/[^0-9]/g, '')) || 0;
+        // dong/ho 형식 불일치(예: '106동' vs '106') 방지용 정규화 키
+        const normKey = (dong, ho, name) => `${parseDong(dong)}_${parseHo(ho)}_${name}`;
 
         // ────────────────────────────────────────────────
         // E. 시트1: 동호수별 부과 금액 집계
@@ -1541,7 +1556,8 @@ router.get('/settlement-report', async (req, res) => {
         //    중도해지자는 별도 표시 (금액은 후청구 방식이므로 참고용)
         //    정렬: 동(숫자) 오름차순 → 호(숫자) 오름차순
         // ────────────────────────────────────────────────
-        const midCancelKey = new Set(midCancel.map(r => `${r.dong}_${r.ho}_${r.name}`));
+        // ★ dong/ho 정규화 키 사용 (동 표기 불일치 방지)
+        const midCancelKey = new Set(midCancel.map(r => normKey(r.dong, r.ho, r.name)));
 
         const donghoMap = new Map();
         approvedList.forEach(a => {
@@ -1558,7 +1574,7 @@ router.get('/settlement-report', async (req, res) => {
             // 전화번호 보완 (첫 번째로 발견된 번호 사용)
             if (!entry.phone && a.phone) entry.phone = a.phone;
 
-            const isMid     = midCancelKey.has(`${a.dong}_${a.ho}_${a.name}`);
+            const isMid     = midCancelKey.has(normKey(a.dong, a.ho, a.name));
             const isNextNew = nextNewList.some(n => n.id === a.id);
             const fee       = getFee(a);
 
@@ -1622,9 +1638,10 @@ router.get('/settlement-report', async (req, res) => {
         // ────────────────────────────────────────────────
         const SESSION_FEE = 15000;
 
-        // endCancel 키셋 (dong_ho_name 기준으로 approved 목록에서 구분)
-        const endCancelKeySet = new Set(endCancel.map(r => `${r.dong}_${r.ho}_${r.name}`));
-        const midCancelKeySet = new Set(midCancel.map(r => `${r.dong}_${r.ho}_${r.name}`));
+        // endCancel / midCancel 키셋
+        // ★ dong/ho 정규화 키(normKey) 사용: '106동' vs '106' 같은 형식 불일치 방지
+        const endCancelKeySet = new Set(endCancel.map(r => normKey(r.dong, r.ho, r.name)));
+        const midCancelKeySet = new Set(midCancel.map(r => normKey(r.dong, r.ho, r.name)));
 
         // 당월 수강생 행 생성 (approved + 해지자 포함)
         const settlementRows = [];
@@ -1641,8 +1658,8 @@ router.get('/settlement-report', async (req, res) => {
             const isThisMonthNew = approvedDate >= monthStart && approvedDate <= monthEnd;
             const isCurNew    = curNewKeySet.has(a.id);           // 금월신규 (당월 정산 포함)
             const isNextNew   = isThisMonthNew && !isCurNew;      // 차월신규 (다음달 부과)
-            const isEndCancel = endCancelKeySet.has(`${a.dong}_${a.ho}_${a.name}`);
-            const isMidCancel = midCancelKeySet.has(`${a.dong}_${a.ho}_${a.name}`);
+            const isEndCancel = endCancelKeySet.has(normKey(a.dong, a.ho, a.name));
+            const isMidCancel = midCancelKeySet.has(normKey(a.dong, a.ho, a.name));
 
             // ★ 차월신규는 정산 내역에서 제외 (신규 섹션에만)
             //   단, 중도해지/차월해지자는 해지 분류를 위해 그대로 포함
@@ -1678,7 +1695,9 @@ router.get('/settlement-report', async (req, res) => {
                 phone:            a.phone,
                 program_name:     a.program_name,
                 preferred_time:   a.preferred_time,
-                monthly_fee:      fee || null,
+                // ★ 중도해지자는 monthly_fee=null (소계/합계 합산 제외)
+                //   → 중도해지 섹션에서 billing_amount 기반으로 별도 표시
+                monthly_fee:      isMidCancel ? null : (fee || null),
                 category,
                 attended_sessions: attendedSessions,
                 final_charge:     finalCharge,

@@ -405,8 +405,8 @@ const settlement = {
                 </tr>`;
             });
 
-            // 소계 행
-            const subFeeSum = items.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
+            // 소계 행 — 중도해지자(is_mid_cancel) 제외
+            const subFeeSum = items.reduce((s, r) => r.is_mid_cancel ? s : s + (Number(r.monthly_fee) || 0), 0);
             tbodyRows += `<tr style="background:#e8f4fd">
               <td colspan="6" style="padding:5px 8px;border:1px solid #ddd;font-size:.8rem;font-weight:700;color:#1a5276;text-align:right">
                 ${prog} 소계</td>
@@ -416,8 +416,8 @@ const settlement = {
             </tr>`;
         });
 
-        // 합계 행 (강조 강화)
-        const totalFeeSum = rows.reduce((s, r) => s + (Number(r.monthly_fee) || 0), 0);
+        // 합계 행 (강조 강화) — 중도해지자 제외
+        const totalFeeSum = rows.reduce((s, r) => r.is_mid_cancel ? s : s + (Number(r.monthly_fee) || 0), 0);
         tbodyRows += `<tr style="background:#1a5276">
           <td colspan="6" style="padding:9px 10px;border:1px solid #0d3349;font-size:.87rem;font-weight:700;color:#aed6f1;text-align:right">
             등록세대 <strong style="color:#fff">${totalRows}</strong>명 &nbsp;/&nbsp; 해지 <strong style="color:#f1948a">${cancelRows}</strong>명</td>
