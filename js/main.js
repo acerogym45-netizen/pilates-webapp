@@ -718,14 +718,21 @@ async function _fillInstructorOptions(selectEl, programId) {
             _instructorCache = { _code: complexCode, list: j.data || [] };
         }
         // assigned_programs 배열에 해당 programId가 포함된 강사만 필터
-        // (assigned_programs가 비어있거나 없는 강사는 전원 노출)
+        // assigned_programs 구조: 객체 배열 [{program_id, program_name, ...}]
+        //   또는 구형 문자열 배열 ["프로그램명", ...]
+        // 빈 배열이거나 없는 강사 → 모든 프로그램 담당 가능 → 항상 표시
         let list = _instructorCache.list;
         if (programId) {
-            const filtered = list.filter(ins =>
-                !ins.assigned_programs ||
-                ins.assigned_programs.length === 0 ||
-                ins.assigned_programs.includes(programId)
-            );
+            const filtered = list.filter(ins => {
+                const ap = ins.assigned_programs;
+                if (!ap || ap.length === 0) return true; // 담당 미지정 → 전체 노출
+                // 신형: 객체 배열 → program_id 필드로 비교
+                if (typeof ap[0] === 'object' && ap[0] !== null) {
+                    return ap.some(a => a.program_id === programId);
+                }
+                // 구형: 문자열 배열 (하위호환)
+                return ap.includes(programId);
+            });
             if (filtered.length > 0) list = filtered;
         }
         selectEl.innerHTML = '<option value="">-- 강사를 선택해주세요 --</option>';
