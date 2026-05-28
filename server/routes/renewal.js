@@ -506,6 +506,311 @@ function escXml(str) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Phase 2 — 강사 레슨 일정조율 처리 페이지
+// GET  /lesson-confirm/:token  — 강사용 처리 페이지 (HTML)
+// POST /api/lesson/respond     — 강사 응답 처리 (confirm/reject)
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.get('/lesson-confirm/:token', async (req, res) => {
+    const sb = getSupabase();
+    const { token } = req.params;
+    try {
+        const { data: app, error } = await sb
+            .from('applications')
+            .select('id, name, phone, program_name, preferred_time, status, instructor_id, lesson_confirm_token, complex_id, created_at')
+            .eq('lesson_confirm_token', token)
+            .single();
+
+        if (error || !app) {
+            return res.send(lessonConfirmHtml({ error: '유효하지 않은 링크이거나 만료된 링크입니다.' }));
+        }
+
+        // 이미 처리된 경우
+        if (app.status === 'approved') {
+            return res.send(lessonConfirmHtml({ done: true, type: 'approved', name: app.name, programName: app.program_name }));
+        }
+        if (app.status === 'rejected') {
+            return res.send(lessonConfirmHtml({ done: true, type: 'rejected', name: app.name }));
+        }
+
+        // 단지명 조회
+        const { data: cx } = await sb.from('complexes').select('name').eq('id', app.complex_id).single();
+
+        return res.send(lessonConfirmHtml({
+            token,
+            applicantName:  app.name,
+            applicantPhone: app.phone,
+            programName:    app.program_name,
+            preferredTime:  app.preferred_time || '미입력',
+            complexName:    cx?.name || '',
+            appliedAt:      app.created_at,
+        }));
+    } catch(e) {
+        console.error('[lesson-confirm] 오류:', e.message);
+        return res.send(lessonConfirmHtml({ error: '서버 오류가 발생했습니다.' }));
+    }
+});
+
+// POST /api/lesson/respond — 강사 일정조율 응답
+router.post('/api/lesson/respond', async (req, res) => {
+    const sb = getSupabase();
+    const { token, action, scheduled_date, scheduled_time, scheduled_days, memo } = req.body;
+    // action: 'confirm' | 'reject'
+
+    if (!token || !action) {
+        return res.status(400).json({ success: false, error: 'token과 action은 필수입니다.' });
+    }
+    if (!['confirm', 'reject'].includes(action)) {
+        return res.status(400).json({ success: false, error: 'action은 confirm 또는 reject 이어야 합니다.' });
+    }
+    if (action === 'confirm' && (!scheduled_date || !scheduled_time)) {
+        return res.status(400).json({ success: false, error: '확정 시 시작일과 시간을 입력해주세요.' });
+    }
+
+    try {
+        const { data: app, error } = await sb
+            .from('applications')
+            .select('id, name, phone, program_name, preferred_time, status, instructor_id, complex_id')
+            .eq('lesson_confirm_token', token)
+            .single();
+
+        if (error || !app) return res.status(404).json({ success: false, error: '신청 정보를 찾을 수 없습니다.' });
+        if (app.status !== 'waiting') {
+            return res.status(409).json({ success: false, error: `이미 처리된 신청입니다. (현재 상태: ${app.status})` });
+        }
+
+        const newStatus = action === 'confirm' ? 'approved' : 'rejected';
+
+        // 확정 시 preferred_time을 "시작일 + 확정시간"으로 업데이트
+        const updatePayload = {
+            status: newStatus,
+            lesson_confirm_token: null,  // 사용된 토큰 무효화
+        };
+        if (action === 'confirm') {
+            // notes에 일정 조율 결과 기록
+            const scheduleNote = `[강사 확정] 시작일: ${scheduled_date}, 시간: ${scheduled_time}${scheduled_days ? ', 요일: ' + scheduled_days : ''}${memo ? ', 메모: ' + memo : ''}`;
+            updatePayload.preferred_time = scheduled_time;
+            updatePayload.notes = scheduleNote;
+        } else {
+            const rejectNote = `[강사 거절]${memo ? ' 사유: ' + memo : ''}`;
+            updatePayload.notes = rejectNote;
+        }
+
+        const { error: updErr } = await sb
+            .from('applications')
+            .update(updatePayload)
+            .eq('id', app.id);
+
+        if (updErr) throw updErr;
+
+        console.log(`[lesson/respond] ${app.name} 신청 → ${newStatus} (강사 처리)`);
+        return res.json({ success: true, status: newStatus });
+
+    } catch(e) {
+        console.error('[lesson/respond] 오류:', e.message);
+        return res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 강사 처리 페이지 HTML 생성 ────────────────────────────────────────────────
+function lessonConfirmHtml({ error, done, type, token, applicantName, applicantPhone,
+    programName, preferredTime, complexName, appliedAt } = {}) {
+
+    function fmtKst(iso) {
+        if (!iso) return '—';
+        return new Date(iso).toLocaleString('ko-KR', {
+            timeZone: 'Asia/Seoul', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+    }
+
+    const wordmark = `<div style="font-size:1rem;font-weight:800;letter-spacing:.12em;color:#4f46e5;margin-bottom:24px;text-align:center">${complexName ? escXml(complexName) : 'PILATES'}</div>`;
+
+    const base = (body) => `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>레슨 일정조율 — 강사 처리 페이지</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f1f5f9;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px}
+.card{background:#fff;border-radius:20px;box-shadow:0 4px 24px rgba(0,0,0,.10);width:100%;max-width:480px;overflow:hidden}
+.card-header{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:24px 24px 20px}
+.card-header h1{font-size:1.15rem;font-weight:700;margin-bottom:4px}
+.card-header p{font-size:.83rem;opacity:.85}
+.card-body{padding:20px 24px}
+.info-row{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f1f5f9;gap:12px}
+.info-row:last-child{border-bottom:none}
+.info-label{font-size:.78rem;color:#64748b;font-weight:500;white-space:nowrap;min-width:70px}
+.info-value{font-size:.88rem;color:#0f172a;font-weight:600;text-align:right;word-break:break-all}
+.section-title{font-size:.78rem;font-weight:700;color:#4f46e5;letter-spacing:.06em;text-transform:uppercase;margin:20px 0 12px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:.78rem;color:#64748b;font-weight:600;margin-bottom:6px}
+.form-group input,.form-group textarea,.form-group select{width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:.9rem;color:#0f172a;background:#f8fafc;transition:border-color .2s}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{outline:none;border-color:#4f46e5;background:#fff}
+.btn-row{display:flex;gap:10px;margin-top:20px}
+.btn{flex:1;padding:13px;border:none;border-radius:12px;font-size:.93rem;font-weight:700;cursor:pointer;transition:opacity .2s,transform .1s}
+.btn:active{transform:scale(.97)}
+.btn-confirm{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff}
+.btn-reject{background:#f1f5f9;color:#64748b;border:1.5px solid #e2e8f0}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.status-box{text-align:center;padding:32px 24px}
+.status-icon{font-size:3rem;margin-bottom:12px}
+.status-title{font-size:1.1rem;font-weight:700;color:#0f172a;margin-bottom:8px}
+.status-sub{font-size:.85rem;color:#64748b;line-height:1.6}
+.alert{padding:12px 14px;border-radius:10px;font-size:.83rem;margin-bottom:16px;display:none}
+.alert-err{background:#fef2f2;border:1px solid #fecaca;color:#dc2626}
+.alert-ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d}
+.tag-pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:.75rem;font-weight:700;background:#ede9fe;color:#4f46e5;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div style="width:100%;max-width:480px">
+  ${wordmark}
+  ${body}
+</div>
+</body>
+</html>`;
+
+    // ── 오류 ──
+    if (error) {
+        return base(`<div class="card"><div class="status-box">
+            <div class="status-icon">⚠️</div>
+            <div class="status-title">링크 오류</div>
+            <div class="status-sub">${escXml(error)}</div>
+        </div></div>`);
+    }
+
+    // ── 완료 ──
+    if (done) {
+        const icon  = type === 'approved' ? '✅' : '❌';
+        const title = type === 'approved' ? '일정 확정 완료' : '거절 처리 완료';
+        const sub   = type === 'approved'
+            ? `${escXml(applicantName || '')}님의 레슨 일정이 확정되었습니다.<br>수강생에게 별도 안내 부탁드립니다.`
+            : `거절 처리가 완료되었습니다.<br>관리자가 확인 후 수강생에게 안내합니다.`;
+        return base(`<div class="card"><div class="status-box">
+            <div class="status-icon">${icon}</div>
+            <div class="status-title">${title}</div>
+            <div class="status-sub">${sub}</div>
+        </div></div>`);
+    }
+
+    // ── 메인 처리 폼 ──
+    const appliedAtStr = fmtKst(appliedAt);
+    return base(`
+<div class="card">
+  <div class="card-header">
+    <div class="tag-pill" style="background:rgba(255,255,255,.2);color:#fff">강사 처리 페이지</div>
+    <h1>새 레슨 신청이 접수되었습니다</h1>
+    <p>아래 신청 정보를 확인하고 일정 조율 결과를 입력해주세요</p>
+  </div>
+  <div class="card-body">
+
+    <!-- 신청자 정보 -->
+    <div class="section-title">📋 신청 정보</div>
+    <div class="info-row"><span class="info-label">수강생</span><span class="info-value">${escXml(applicantName || '')}</span></div>
+    <div class="info-row"><span class="info-label">연락처</span><span class="info-value">${escXml(applicantPhone || '')}</span></div>
+    <div class="info-row"><span class="info-label">프로그램</span><span class="info-value">${escXml(programName || '')}</span></div>
+    <div class="info-row"><span class="info-label">희망 시간</span><span class="info-value">${escXml(preferredTime || '미입력')}</span></div>
+    <div class="info-row"><span class="info-label">신청일시</span><span class="info-value">${escXml(appliedAtStr)}</span></div>
+
+    <!-- 알림 -->
+    <div class="alert alert-err" id="errAlert"></div>
+    <div class="alert alert-ok"  id="okAlert"></div>
+
+    <!-- 확정 폼 -->
+    <div id="confirmForm">
+      <div class="section-title">📅 일정 확정</div>
+      <div class="form-group">
+        <label>수업 시작일 <span style="color:#ef4444">*</span></label>
+        <input type="date" id="scheduledDate" min="${new Date().toISOString().slice(0,10)}">
+      </div>
+      <div class="form-group">
+        <label>수업 시간 <span style="color:#ef4444">*</span></label>
+        <input type="time" id="scheduledTime">
+      </div>
+      <div class="form-group">
+        <label>수업 요일 <small style="color:#94a3b8">(예: 월, 수, 금)</small></label>
+        <input type="text" id="scheduledDays" placeholder="예: 월수금 / 화목">
+      </div>
+      <div class="form-group">
+        <label>메모 <small style="color:#94a3b8">(선택)</small></label>
+        <textarea id="memoField" rows="3" placeholder="수강생에게 전달할 내용이 있으면 입력해주세요"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-reject" id="btnReject" onclick="respond('reject')">거절</button>
+        <button class="btn btn-confirm" id="btnConfirm" onclick="respond('confirm')">일정 확정</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+async function respond(action) {
+  const btnC = document.getElementById('btnConfirm');
+  const btnR = document.getElementById('btnReject');
+  const errEl = document.getElementById('errAlert');
+  const okEl  = document.getElementById('okAlert');
+  errEl.style.display = 'none';
+  okEl.style.display  = 'none';
+
+  if (action === 'confirm') {
+    const d = document.getElementById('scheduledDate').value;
+    const t = document.getElementById('scheduledTime').value;
+    if (!d || !t) {
+      errEl.textContent = '시작일과 수업 시간을 입력해주세요.';
+      errEl.style.display = 'block';
+      return;
+    }
+  }
+
+  if (action === 'reject') {
+    if (!confirm('정말 이 신청을 거절하시겠습니까?')) return;
+  }
+
+  btnC.disabled = btnR.disabled = true;
+  btnC.textContent = '처리 중...';
+
+  const payload = {
+    token: '${escXml(token)}',
+    action,
+    scheduled_date: document.getElementById('scheduledDate').value,
+    scheduled_time: document.getElementById('scheduledTime').value,
+    scheduled_days: document.getElementById('scheduledDays').value,
+    memo: document.getElementById('memoField').value,
+  };
+
+  try {
+    const r = await fetch('/api/lesson/respond', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || '처리 실패');
+
+    // 성공: 페이지 전체를 완료 화면으로 교체
+    document.querySelector('.card').innerHTML = \`
+      <div class="status-box">
+        <div class="status-icon">\${action === 'confirm' ? '✅' : '❌'}</div>
+        <div class="status-title">\${action === 'confirm' ? '일정 확정 완료!' : '거절 처리 완료'}</div>
+        <div class="status-sub">\${action === 'confirm'
+          ? '수강생에게 개별 연락 후 수업을 진행해주세요.<br>확정 내용은 관리자 페이지에서도 확인 가능합니다.'
+          : '거절 처리가 완료되었습니다.<br>관리자가 확인 후 수강생에게 안내합니다.'}</div>
+      </div>\`;
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+    btnC.disabled = btnR.disabled = false;
+    btnC.textContent = '일정 확정';
+  }
+}
+</script>`);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // 공통 HTML 레이아웃 — 프리미엄 필라테스 디자인 v3
 // ══════════════════════════════════════════════════════════════════════════════
 function baseHtml(content) {

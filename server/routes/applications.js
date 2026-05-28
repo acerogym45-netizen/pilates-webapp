@@ -6,7 +6,8 @@
  * - 관리비 계산
  */
 const express = require('express');
-const router = express.Router();
+const crypto  = require('crypto');
+const router  = express.Router();
 const { getSupabase, sbErr } = require('../db-supabase');
 const { triggerWaitingQueue, checkApplyTypeSetting } = require('../utils/waiting');
 const { sendLessonRequestSms } = require('../utils/sms');
@@ -695,10 +696,12 @@ router.post('/', async (req, res) => {
         }
 
         // ── 개인/듀엣 상시접수: status 강제 대기 ────────────────────────────
+        let lessonToken = null;  // Phase 2: 강사 일정조율 토큰
         if (isLessonAlwaysOpen) {
             status    = 'waiting';
             applyType = 'new';
             waitingOrder = null; // 레슨 대기는 순번 없음 (강사 배정 기반)
+            lessonToken  = crypto.randomUUID(); // 강사용 처리 링크 토큰
         }
 
         const insertPayload = {
@@ -714,8 +717,9 @@ router.post('/', async (req, res) => {
             terms_agreement: Boolean(terms_agreement),
             notes: notes || ''
         };
-        // instructor_id: 컬럼이 없으면 무시되도록 undefined 대신 조건부 추가
-        if (instructor_id) insertPayload.instructor_id = instructor_id;
+        // instructor_id / lesson_confirm_token: 컬럼이 없으면 무시되도록 조건부 추가
+        if (instructor_id) insertPayload.instructor_id         = instructor_id;
+        if (lessonToken)   insertPayload.lesson_confirm_token  = lessonToken;
 
         const { data: created, error } = await sb
             .from('applications')
@@ -737,6 +741,10 @@ router.post('/', async (req, res) => {
 
                 if (instructor?.phone) {
                     const cx = lessonProgram?.complexes;
+                    // Phase 2: 강사 일정조율 페이지 URL
+                    const confirmUrl = lessonToken
+                        ? `${req.protocol}://${req.get('host')}/lesson-confirm/${lessonToken}`
+                        : null;
                     const smsResult = await sendLessonRequestSms({
                         instructorPhone: instructor.phone,
                         instructorName:  instructor.name || '강사',
@@ -746,7 +754,7 @@ router.post('/', async (req, res) => {
                         preferredTime:   preferred_time || '미입력',
                         complexName:     cx?.name || '',
                         applicationId:   created.id,
-                        confirmUrl:      null, // Phase 2에서 추가
+                        confirmUrl,
                         sender:          cx?.sms_sender || null,
                         smsEnabled:      cx?.sms_enabled != null ? Boolean(cx.sms_enabled) : null
                     });
