@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>필라테스 레슨 이용계약서 (지류용)</title>
+<style>
+/* ── 전체 리셋 & 인쇄 기반 ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: '맑은 고딕', 'Malgun Gothic', 'Apple SD Gothic Neo', 'NanumGothic', sans-serif;
+    font-size: 10pt;
+    color: #111;
+    background: #e8e8e8;
+    padding: 20px;
+}
+
+/* ── 용지 한 장 (A4) ── */
+.page {
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+    margin: 0 auto 24px;
+    padding: 16mm 16mm 14mm;
+    box-shadow: 0 2px 16px rgba(0,0,0,.18);
+    position: relative;
+    page-break-after: always;
+}
+.page:last-child { page-break-after: auto; }
+
+/* ── 인쇄 시 배경·그림자 제거 ── */
+@media print {
+    body { background: none; padding: 0; }
+    .page {
+        box-shadow: none;
+        margin: 0;
+        padding: 14mm 14mm 12mm;
+        width: 100%;
+        min-height: auto;
+    }
+    .no-print { display: none !important; }
+}
+
+/* ── 워터마크 (선택) ── */
+.watermark {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%) rotate(-40deg);
+    font-size: 72pt;
+    font-weight: 900;
+    color: rgba(0,0,0,.04);
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 0;
+    letter-spacing: .1em;
+}
+
+/* ── 제목 헤더 ── */
+.doc-header {
+    text-align: center;
+    border-bottom: 3px double #1a1a2e;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+}
+.doc-header .center-name {
+    font-size: 8pt;
+    color: #555;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+}
+.doc-header h1 {
+    font-size: 17pt;
+    font-weight: 900;
+    letter-spacing: .05em;
+    color: #1a1a2e;
+}
+.doc-header .doc-no {
+    font-size: 7.5pt;
+    color: #888;
+    margin-top: 2px;
+}
+
+/* ── 섹션 타이틀 ── */
+.sec-title {
+    background: #1a1a2e;
+    color: #fff;
+    font-size: 8.5pt;
+    font-weight: 700;
+    padding: 4px 10px;
+    letter-spacing: .06em;
+    margin: 10px 0 0;
+    position: relative;
+    z-index: 1;
+}
+.sec-title-light {
+    background: #f0f0f8;
+    color: #1a1a2e;
+    border-left: 3px solid #1a1a2e;
+    font-size: 8pt;
+    font-weight: 700;
+    padding: 3px 8px;
+    margin: 7px 0 0;
+}
+
+/* ── 정보 테이블 ── */
+table.info-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+    margin-bottom: 2px;
+    position: relative;
+    z-index: 1;
+}
+table.info-table th,
+table.info-table td {
+    border: 1px solid #bbb;
+    padding: 5px 8px;
+    vertical-align: middle;
+}
+table.info-table th {
+    background: #f5f5fa;
+    font-weight: 700;
+    width: 22%;
+    color: #1a1a2e;
+    white-space: nowrap;
+}
+table.info-table td {
+    min-height: 22px;
+}
+table.info-table td.fill {
+    min-width: 0;
+}
+/* 기입 라인 */
+.fill-line {
+    display: inline-block;
+    min-width: 140px;
+    border-bottom: 1px solid #555;
+    height: 16px;
+}
+
+/* ── 규정·약관 박스 ── */
+.policy-box {
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    padding: 6px 9px;
+    font-size: 8pt;
+    line-height: 1.7;
+    margin-top: 4px;
+    position: relative;
+    z-index: 1;
+}
+.policy-box strong { color: #c00; }
+.policy-box ol,
+.policy-box ul { padding-left: 16px; margin: 2px 0; }
+.policy-box li { margin-bottom: 1px; }
+
+/* ── 약관 번호 항목 ── */
+.terms-list { margin-top: 4px; position: relative; z-index: 1; }
+.terms-item {
+    border-bottom: 1px dotted #ccc;
+    padding: 3px 0 3px 4px;
+    font-size: 8pt;
+    line-height: 1.65;
+}
+.terms-item:last-child { border-bottom: none; }
+.terms-item .t-num {
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-right: 4px;
+}
+
+/* ── 동의 체크박스 행 ── */
+.consent-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    padding: 5px 10px;
+    margin-top: 5px;
+    font-size: 8.5pt;
+    background: #fffef5;
+    position: relative;
+    z-index: 1;
+}
+.consent-row .checkbox-sq {
+    width: 12px; height: 12px;
+    border: 1.5px solid #555;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+/* ── 서명 영역 ── */
+.signature-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 8px;
+    position: relative;
+    z-index: 1;
+}
+.sig-block {
+    border: 1px solid #aaa;
+    border-radius: 3px;
+    padding: 8px 10px;
+    font-size: 8.5pt;
+}
+.sig-block .sig-label {
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 4px;
+    font-size: 8pt;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 3px;
+}
+.sig-block .sig-field {
+    border-bottom: 1px solid #555;
+    min-height: 28px;
+    margin: 4px 0;
+}
+.sig-block .sig-img-box {
+    border: 1px dashed #aaa;
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #bbb;
+    font-size: 7.5pt;
+    margin-top: 4px;
+    border-radius: 2px;
+}
+
+/* ── 하단 주석 ── */
+.doc-footer {
+    text-align: center;
+    font-size: 7pt;
+    color: #aaa;
+    margin-top: 10px;
+    border-top: 1px solid #eee;
+    padding-top: 5px;
+    position: relative;
+    z-index: 1;
+}
+
+/* ── 인쇄 버튼 (화면 전용) ── */
+.print-btn-wrap {
+    text-align: center;
+    margin-bottom: 20px;
+}
+.print-btn {
+    background: #1a1a2e;
+    color: #fff;
+    border: none;
+    padding: 11px 36px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: .04em;
+}
+.print-btn:hover { background: #2e2e5e; }
+
+/* ── 안내 박스 ── */
+.notice-box {
+    background: #fff8e1;
+    border: 1px solid #f5c842;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 8pt;
+    color: #5a4200;
+    margin: 6px 0 0;
+    line-height: 1.65;
+    position: relative;
+    z-index: 1;
+}
+
+/* ── 단지명 강조 ── */
+.complex-tag {
+    display: inline-block;
+    border: 1px solid #1a1a2e;
+    border-radius: 3px;
+    padding: 1px 7px;
+    font-size: 8pt;
+    color: #1a1a2e;
+    font-weight: 700;
+    margin-left: 6px;
+}
+
+/* ── 구분선 ── */
+.divider { border: none; border-top: 1px dashed #ccc; margin: 6px 0; }
+</style>
+</head>
+<body>
+
+<!-- 인쇄 버튼 (화면에서만 표시) -->
+<div class="print-btn-wrap no-print">
+    <button class="print-btn" onclick="window.print()">🖨️ 인쇄 / PDF 저장</button>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE 1 — 레슨 이용계약서
+════════════════════════════════════════ -->
+<div class="page">
+    <div class="watermark">PILATES</div>
+
+    <!-- 헤더 -->
+    <div class="doc-header">
+        <div class="center-name">아파트 필라테스 센터</div>
+        <h1>레슨 이용계약서</h1>
+        <div class="doc-no">
+            작성일: ________년 ____월 ____일 &nbsp;&nbsp;|&nbsp;&nbsp;
+            관리 번호: ___________________
+        </div>
+    </div>
+
+    <!-- ① 신청 정보 -->
+    <div class="sec-title">① 신청자 정보</div>
+    <table class="info-table">
+        <tr>
+            <th>단지명</th>
+            <td colspan="3"><span class="fill-line" style="min-width:180px"></span></td>
+        </tr>
+        <tr>
+            <th>동 / 호수</th>
+            <td><span class="fill-line"></span> 동 &nbsp; <span class="fill-line"></span> 호</td>
+            <th>이름</th>
+            <td><span class="fill-line"></span></td>
+        </tr>
+        <tr>
+            <th>전화번호</th>
+            <td colspan="3"><span class="fill-line" style="min-width:200px"></span></td>
+        </tr>
+    </table>
+
+    <!-- ② 수강 정보 -->
+    <div class="sec-title">② 수강 프로그램 정보</div>
+    <table class="info-table">
+        <tr>
+            <th>프로그램</th>
+            <td colspan="3"><span class="fill-line" style="min-width:200px"></span></td>
+        </tr>
+        <tr>
+            <th>수업 요일</th>
+            <td>
+                <span style="margin-right:10px">□ 월</span>
+                <span style="margin-right:10px">□ 화</span>
+                <span style="margin-right:10px">□ 수</span>
+                <span style="margin-right:10px">□ 목</span>
+                <span style="margin-right:10px">□ 금</span>
+                <span style="margin-right:10px">□ 토</span>
+                <span>□ 일</span>
+            </td>
+            <th style="white-space:nowrap">수업 시간</th>
+            <td><span class="fill-line"></span></td>
+        </tr>
+        <tr>
+            <th>희망 강사</th>
+            <td><span class="fill-line"></span></td>
+            <th>월 수강료</th>
+            <td><span class="fill-line"></span> 원</td>
+        </tr>
+        <tr>
+            <th>수강 시작일</th>
+            <td><span class="fill-line"></span></td>
+            <th>정원</th>
+            <td><span class="fill-line"></span> 명</td>
+        </tr>
+    </table>
+
+    <!-- ③ 신청·해지 기간 안내 -->
+    <div class="sec-title">③ 신청·해지 기간 안내</div>
+    <div class="notice-box">
+        <strong>📝 등록 접수 기간:</strong> 매월 <strong>22일 09시 ~ 26일 09시</strong> — 이 기간에만 신규 등록이 가능합니다.<br>
+        <strong>🚫 해지 신청 기간:</strong> 매월 <strong>22일 09시 ~ 26일 09시</strong> — 당월은 정상 수강 후 <strong>익월부터 해지</strong>가 적용됩니다.<br>
+        <strong>🔄 자동 재등록 안내:</strong> 해지 신청을 하지 않으면 <strong>다음 달 수강료가 자동 청구</strong>되며 수업이 자동 연장됩니다.
+    </div>
+
+    <!-- ④ 해지·환불 규정 -->
+    <div class="sec-title">④ 해지 및 환불 규정 <span style="font-size:7pt;font-weight:400;opacity:.85">(필독 · 필수 동의)</span></div>
+    <div class="policy-box">
+        <div class="sec-title-light">📋 해지 방식</div>
+        <ul>
+            <li>해지는 <strong>기간 내 정상 신청</strong>을 통해서만 가능합니다.</li>
+            <li>해지 신청이 접수되면 <strong>즉시 자동 승인</strong>되며, 당월은 정상 수강 후 <strong>익월부터 해지</strong>가 적용됩니다.</li>
+            <li>해지 신청 후 <strong>번복이 불가</strong>합니다. 신중하게 신청해 주세요.</li>
+        </ul>
+        <div class="sec-title-light" style="margin-top:4px">💰 환불금 정산 방식</div>
+        <ul>
+            <li>환불은 <strong>천재지변 · 질병 · 부상 등 불가피한 사유</strong>에 한해 예외적으로 검토됩니다.</li>
+            <li>환불금 산정: <strong>위약금(원금의 10%)</strong> + <strong>진행 횟수분 차감</strong> 후 잔여 금액 지급</li>
+            <li>단순 변심 · 취업 · 이직 · 출장 · 여행 · 타 센터 이동 등의 사유는 환불 대상에서 제외됩니다.</li>
+            <li>강사 교체 · 수업 구성원 변경 등 수업 내 인적 사유는 환불 대상에서 제외됩니다.</li>
+        </ul>
+        <div class="sec-title-light" style="margin-top:4px">📅 해지 신청 기간</div>
+        <ul>
+            <li>해지를 원하시면 <strong>해지 신청 기간</strong> 사이에 해지 신청을 완료해 주세요.</li>
+            <li>기간 외 접수는 불가하며, 해지 신청을 하지 않으면 다음 달 수강료가 자동 청구됩니다.</li>
+            <li>해지 신청은 반드시 <strong>본 시스템(온라인)</strong>을 통해 제출해야 하며, SMS·통화 등 구두 요청은 인정되지 않습니다.</li>
+        </ul>
+    </div>
+    <div class="consent-row">
+        <span class="checkbox-sq"></span>
+        <span>위 <strong>해지 및 환불 규정</strong>을 모두 읽고 이해하였으며 동의합니다.</span>
+    </div>
+
+    <!-- 하단 서명 (간략) -->
+    <div class="sec-title" style="margin-top:8px">⑤ 동의 및 서명</div>
+    <div class="signature-section">
+        <div class="sig-block">
+            <div class="sig-label">신청자 서명</div>
+            <div style="font-size:7.5pt;color:#666;margin-bottom:2px">성명 (자필)</div>
+            <div class="sig-field"></div>
+            <div style="font-size:7.5pt;color:#666;margin:4px 0 2px">서명</div>
+            <div class="sig-img-box">서명란</div>
+        </div>
+        <div class="sig-block">
+            <div class="sig-label">관리자 확인</div>
+            <div style="font-size:7.5pt;color:#666;margin-bottom:2px">담당자</div>
+            <div class="sig-field"></div>
+            <div style="font-size:7.5pt;color:#666;margin:4px 0 2px">직인 / 확인란</div>
+            <div class="sig-img-box">확인란</div>
+        </div>
+    </div>
+
+    <div class="doc-footer">
+        본 계약서는 온라인 수강 신청 시 동의한 전자계약서와 동일한 효력을 가집니다. &nbsp;|&nbsp; 작성 후 센터 보관 1부 · 수강생 보관 1부
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     PAGE 2 — 이용약관 전문
+════════════════════════════════════════ -->
+<div class="page">
+    <div class="watermark">PILATES</div>
+
+    <div class="doc-header">
+        <div class="center-name">아파트 필라테스 센터</div>
+        <h1>이용약관 전문</h1>
+        <div class="doc-no">레슨 이용계약서 부속 문서 — 계약서와 함께 보관하십시오</div>
+    </div>
+
+    <div class="sec-title">이용약관 (①~⑧)</div>
+    <div class="terms-list">
+        <div class="terms-item">
+            <span class="t-num">①</span><strong>본인 외 사용 불가</strong><br>
+            본인 이외에 사용하실 수 없습니다.
+        </div>
+        <div class="terms-item">
+            <span class="t-num">②</span><strong>환불 규정</strong><br>
+            환불은 천재지변 · 질병 · 부상 등 불가피한 사유에 한해 예외적으로 검토되며, 환불금은 <strong>위약금(원금의 10%) + 진행 횟수분 차감</strong> 후 잔여 금액을 지급합니다. 단순 변심 · 취업 · 이직 · 출장 등의 사유는 환불 대상에서 제외됩니다. 해지를 원하시는 경우 <strong>해지 신청 기간</strong> 내에 온라인으로 접수해 주세요.
+        </div>
+        <div class="terms-item">
+            <span class="t-num">③</span><strong>사고 면책</strong><br>
+            본인 부주의로 발생한 사고에 대해서는 일체 책임을 지지 않습니다.
+        </div>
+        <div class="terms-item">
+            <span class="t-num">④</span><strong>수업 운영</strong><br>
+            수업은 횟수제입니다. 공휴일은 휴무이며 공휴일 기간에는 수업이 차감되지 않습니다. 수업은 지정요일 지정시간에만 수업이 가능하며, 못나올 경우 기간은 차감됩니다.
+        </div>
+        <div class="terms-item">
+            <span class="t-num">⑤</span><strong>그룹 수업 구성</strong><br>
+            수업은 6:1 그룹수업 혹은 강사와의 협의에 따라 2:1 혹은 개인레슨으로 진행되며, 4명 미만이 1개월 이상 지속될 시 기간은 정지되며, 다음 차순 그룹이 구성될 경우 수업이 가능합니다.
+        </div>
+        <div class="terms-item">
+            <span class="t-num">⑥</span><strong>건강 상태</strong><br>
+            신체적 기능이나 문제가 있을 시 의사 또는 전문의와 반드시 상담하셔야 하며, 동작 수행 중 상태가 악화될 경우 당사는 어떠한 책임도 지지 않습니다.
+        </div>
+        <div class="terms-item">
+            <span class="t-num">⑦</span><strong>양도·양수</strong><br>
+            지인에게 상품 재판매 혹은 양도 시, 다음 회차에 바로 이어서 하지 않으시는 경우 횟수는 차감됩니다.
+        </div>
+        <div class="terms-item">
+            <span class="t-num">⑧</span><strong>연장 및 해지 신청</strong><br>
+            신청서는 최초 1회 작성 후 <strong style="color:#c00">해지 신청서를 제출하지 않으시면 자동 연장</strong>됩니다.
+            해지를 원하시면 <strong style="color:#c00">해지 신청 기간</strong> 사이에 반드시 해지 신청을 완료해주세요.
+            해지 신청 접수 즉시 자동 승인되며, <strong>당월은 정상 수강 후 익월부터 해지</strong>가 적용됩니다.
+            해지 신청 후 번복이 불가하며, 기간 이외에는 접수가 불가합니다.
+        </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- 개인정보 수집·이용 동의 -->
+    <div class="sec-title">개인정보 수집·이용 동의</div>
+    <div class="policy-box" style="margin-top:4px">
+        <table style="width:100%;border-collapse:collapse;font-size:8pt">
+            <thead>
+                <tr style="background:#f0f0f8">
+                    <th style="border:1px solid #bbb;padding:4px 7px;text-align:left;font-weight:700;width:25%">항목</th>
+                    <th style="border:1px solid #bbb;padding:4px 7px;text-align:left;font-weight:700;width:40%">수집 목적</th>
+                    <th style="border:1px solid #bbb;padding:4px 7px;text-align:left;font-weight:700">보유 기간</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="border:1px solid #bbb;padding:4px 7px">동호수, 이름, 전화번호</td>
+                    <td style="border:1px solid #bbb;padding:4px 7px">레슨 신청 처리, 관리비 부과, SMS 안내</td>
+                    <td style="border:1px solid #bbb;padding:4px 7px">계약 종료 후 1년</td>
+                </tr>
+            </tbody>
+        </table>
+        <div style="margin-top:4px;color:#555">
+            ※ 위 개인정보 수집·이용에 동의하지 않으실 경우 서비스 이용이 제한될 수 있습니다.
+        </div>
+    </div>
+    <div class="consent-row">
+        <span class="checkbox-sq"></span>
+        <span>위 <strong>개인정보 수집·이용</strong>에 동의합니다.</span>
+    </div>
+    <div class="consent-row" style="margin-top:4px">
+        <span class="checkbox-sq"></span>
+        <span>위 <strong>이용약관 전체 (①~⑧)</strong>를 모두 읽고 이해하였으며 동의합니다.</span>
+    </div>
+
+    <hr class="divider" style="margin-top:10px">
+
+    <!-- 최종 서명 -->
+    <div class="sec-title">최종 서명</div>
+    <div class="signature-section" style="margin-top:6px">
+        <div class="sig-block">
+            <div class="sig-label">수강생 (신청자)</div>
+            <table style="width:100%;border-collapse:collapse;font-size:8pt;margin-top:4px">
+                <tr>
+                    <td style="border-bottom:1px solid #555;padding:3px 0;width:30%;color:#666">성&nbsp;&nbsp;&nbsp;명</td>
+                    <td style="border-bottom:1px solid #555;padding:3px 0"></td>
+                </tr>
+                <tr>
+                    <td style="border-bottom:1px solid #555;padding:3px 0;color:#666">서명 날짜</td>
+                    <td style="border-bottom:1px solid #555;padding:3px 0">____년 ____월 ____일</td>
+                </tr>
+            </table>
+            <div style="font-size:7.5pt;color:#666;margin:6px 0 2px">서명 (자필)</div>
+            <div class="sig-img-box" style="min-height:60px">서명란</div>
+        </div>
+        <div class="sig-block">
+            <div class="sig-label">센터 (관리자)</div>
+            <table style="width:100%;border-collapse:collapse;font-size:8pt;margin-top:4px">
+                <tr>
+                    <td style="border-bottom:1px solid #555;padding:3px 0;width:30%;color:#666">센터명</td>
+                    <td style="border-bottom:1px solid #555;padding:3px 0"></td>
+                </tr>
+                <tr>
+                    <td style="border-bottom:1px solid #555;padding:3px 0;color:#666">담당자</td>
+                    <td style="border-bottom:1px solid #555;padding:3px 0"></td>
+                </tr>
+            </table>
+            <div style="font-size:7.5pt;color:#666;margin:6px 0 2px">직인 / 서명</div>
+            <div class="sig-img-box" style="min-height:60px">직인 / 확인란</div>
+        </div>
+    </div>
+
+    <div class="doc-footer">
+        본 약관 문서는 온라인 수강 신청 시 동의한 전자계약서의 이용약관과 동일한 내용입니다. &nbsp;|&nbsp; 센터 보관 1부 · 수강생 보관 1부
+    </div>
+</div>
+
+
+<!-- ══════════════════════════════════════
+     PAGE 3 — 개인/듀엣 레슨 전용 계약서
+════════════════════════════════════════ -->
+<div class="page">
+    <div class="watermark">PILATES</div>
+
+    <div class="doc-header">
+        <div class="center-name">아파트 필라테스 센터</div>
+        <h1>개인 / 듀엣 레슨 신청서</h1>
+        <div class="doc-no">
+            작성일: ________년 ____월 ____일 &nbsp;&nbsp;|&nbsp;&nbsp; 관리 번호: ___________________
+        </div>
+    </div>
+
+    <!-- 신청자 정보 -->
+    <div class="sec-title">① 신청자 정보</div>
+    <table class="info-table">
+        <tr>
+            <th>단지명</th>
+            <td colspan="3"><span class="fill-line" style="min-width:200px"></span></td>
+        </tr>
+        <tr>
+            <th>동 / 호수</th>
+            <td><span class="fill-line"></span> 동 &nbsp; <span class="fill-line"></span> 호</td>
+            <th>이름</th>
+            <td><span class="fill-line"></span></td>
+        </tr>
+        <tr>
+            <th>전화번호</th>
+            <td colspan="3"><span class="fill-line" style="min-width:200px"></span></td>
+        </tr>
+    </table>
+
+    <!-- 레슨 정보 -->
+    <div class="sec-title">② 레슨 신청 정보</div>
+    <table class="info-table">
+        <tr>
+            <th>레슨 유형</th>
+            <td>
+                <span style="margin-right:16px">□ 1:1 개인 레슨</span>
+                <span>□ 2:1 듀엣 레슨</span>
+            </td>
+            <th>월 수강료</th>
+            <td><span class="fill-line"></span> 원</td>
+        </tr>
+        <tr>
+            <th>희망 강사</th>
+            <td><span class="fill-line" style="min-width:120px"></span></td>
+            <th>배정 강사</th>
+            <td><span class="fill-line"></span></td>
+        </tr>
+        <tr>
+            <th>희망 요일/시간</th>
+            <td colspan="3">
+                <span class="fill-line" style="min-width:280px"></span>
+                <span style="font-size:7.5pt;color:#888;margin-left:8px">(예: 월·수 오전 10시, 화·목 오후 2시)</span>
+            </td>
+        </tr>
+        <tr>
+            <th>확정 요일/시간</th>
+            <td colspan="3"><span class="fill-line" style="min-width:280px"></span></td>
+        </tr>
+        <tr>
+            <th>수강 시작일</th>
+            <td><span class="fill-line"></span></td>
+            <th>처리 상태</th>
+            <td>
+                <span style="margin-right:12px">□ 대기</span>
+                <span style="margin-right:12px">□ 확정</span>
+                <span>□ 거절</span>
+            </td>
+        </tr>
+    </table>
+
+    <!-- 강사 배정 메모 -->
+    <div class="sec-title">③ 강사 배정 메모 <span style="font-size:7pt;font-weight:400">(관리자 기재)</span></div>
+    <div style="border:1px solid #bbb;min-height:44px;padding:6px 8px;font-size:8pt;margin-top:0;line-height:1.8">
+        &nbsp;
+    </div>
+
+    <!-- 개인/듀엣 레슨 특이 규정 -->
+    <div class="sec-title">④ 개인/듀엣 레슨 안내 사항</div>
+    <div class="policy-box">
+        <ul>
+            <li>개인/듀엣 레슨은 <strong>상시 접수</strong>가 가능합니다. 신청 후 담당 강사가 일정을 확인하여 개별 연락 드립니다.</li>
+            <li>수업 일정은 <strong>강사와 수강생이 직접 조율</strong>하며, 확정된 일정은 위 ②항에 기재합니다.</li>
+            <li>수업은 <strong>횟수제</strong>이며, 결석 시 횟수가 차감됩니다. 사전 연락 없이 무단 결석 시 환불/보충 불가합니다.</li>
+            <li>월 수강료는 수업 횟수 기준으로 계산되며, 공휴일은 수업이 없고 횟수에서 제외됩니다.</li>
+            <li>해지 및 환불은 일반 이용약관 ②항을 동일하게 적용합니다.</li>
+            <li>강사 사정(부상·휴가 등)으로 수업이 불가한 경우, 대체 강사 배정 또는 수업 기간 연장으로 처리됩니다.</li>
+        </ul>
+    </div>
+
+    <hr class="divider">
+
+    <!-- 동의 -->
+    <div class="consent-row">
+        <span class="checkbox-sq"></span>
+        <span>위 <strong>해지 및 환불 규정</strong> 및 <strong>개인/듀엣 레슨 안내 사항</strong>을 모두 읽고 이해하였으며 동의합니다.</span>
+    </div>
+    <div class="consent-row" style="margin-top:4px">
+        <span class="checkbox-sq"></span>
+        <span><strong>개인정보(동호수·이름·전화번호)</strong> 수집 및 이용에 동의합니다. (목적: 레슨 신청 처리 / 보유: 계약 종료 후 1년)</span>
+    </div>
+
+    <!-- 서명 -->
+    <div class="sec-title" style="margin-top:8px">⑤ 서명</div>
+    <div class="signature-section">
+        <div class="sig-block">
+            <div class="sig-label">수강생 서명</div>
+            <div style="font-size:7.5pt;color:#666;margin-bottom:2px">성명 (자필)</div>
+            <div class="sig-field"></div>
+            <div style="font-size:7.5pt;color:#666;margin:4px 0 2px">서명</div>
+            <div class="sig-img-box" style="min-height:55px">서명란</div>
+            <div style="font-size:7.5pt;color:#666;margin-top:4px">서명 날짜: ____년 ____월 ____일</div>
+        </div>
+        <div class="sig-block">
+            <div class="sig-label">담당 강사 확인</div>
+            <div style="font-size:7.5pt;color:#666;margin-bottom:2px">강사명</div>
+            <div class="sig-field"></div>
+            <div style="font-size:7.5pt;color:#666;margin:4px 0 2px">서명 / 직인</div>
+            <div class="sig-img-box" style="min-height:55px">확인란</div>
+            <div style="font-size:7.5pt;color:#666;margin-top:4px">확인 날짜: ____년 ____월 ____일</div>
+        </div>
+    </div>
+
+    <div class="doc-footer">
+        개인/듀엣 레슨 신청서 &nbsp;|&nbsp; 센터 보관 1부 · 수강생 보관 1부 · 강사 보관 1부 (선택)
+    </div>
+</div>
+
+</body>
+</html>
