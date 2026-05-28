@@ -28,7 +28,7 @@ const programs = {
         c.innerHTML = this.data.map(p => `
             <div class="list-item">
                 <div class="item-status">
-                    <span class="status-badge type-badge-${p.type}">${typeLabel(p.type)}</span>
+                    <span class="status-badge type-badge-${_resolveType(p)}">${typeLabel(_resolveType(p))}</span>
                     ${!p.is_active ? '<span class="status-badge status-muted" title="신규 접수 차단 중 · 해지 신청 및 기존 수강자 현황은 정상 표시">신규접수 차단</span>' : ''}
                 </div>
                 <div class="item-main">
@@ -84,7 +84,8 @@ const programs = {
             </label>`
         ).join('');
 
-        const isPersonal = p?.type === 'personal' || p?.type === 'duet';
+        const resolvedType = _resolveType(p);
+        const isPersonal = resolvedType === 'personal' || resolvedType === 'duet';
         const body = `
             ${complexName ? `<p style="font-size:.85rem;color:#888;margin-bottom:8px"><i class="fas fa-building"></i> ${escHtml(complexName)}</p>` : ''}
             <input type="hidden" id="programComplexId" value="${complexId || ''}">
@@ -92,9 +93,9 @@ const programs = {
             <div class="form-group">
                 <label>유형 *</label>
                 <select id="pType" onchange="programs._onTypeChange(this.value)">
-                    <option value="group"    ${p?.type==='group'   ?'selected':''}>그룹</option>
-                    <option value="duet"     ${p?.type==='duet'    ?'selected':''}>듀엣</option>
-                    <option value="personal" ${p?.type==='personal'?'selected':''}>개인</option>
+                    <option value="group"    ${resolvedType==='group'   ?'selected':''}>그룹</option>
+                    <option value="duet"     ${resolvedType==='duet'    ?'selected':''}>듀엣</option>
+                    <option value="personal" ${resolvedType==='personal'?'selected':''}>개인</option>
                 </select>
             </div>
             <div class="form-group">
@@ -128,7 +129,7 @@ const programs = {
             <div class="form-group"><label>설명</label><textarea id="pDesc" rows="3">${p ? escHtml(p.description||'') : ''}</textarea></div>
             <div class="form-group"><label>표시 순서</label><input type="number" id="pOrder" value="${p?.display_order||0}"></div>
             ${isPersonal ? `
-            <div class="form-group" style="padding:12px 14px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px">
+            <div class="form-group" id="pAlwaysOpenLessonWrap" style="padding:12px 14px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px">
                 <label class="checkbox-label">
                     <input type="checkbox" id="pAlwaysOpenLesson" ${p?.always_open_lesson ? 'checked' : ''}>
                     <span style="font-weight:600;color:#2e7d32">상시 접수 ON
@@ -179,8 +180,37 @@ const programs = {
 
     /** 유형 변경 시 시간대 섹션 토글 */
     _onTypeChange(val) {
+        const isPersonalType = val === 'personal' || val === 'duet';
+
+        // 시간대 섹션 토글
         const g = document.getElementById('pSlotsGroup');
-        if (g) g.style.display = (val === 'personal' || val === 'duet') ? 'none' : '';
+        if (g) g.style.display = isPersonalType ? 'none' : '';
+
+        // 상시 접수 체크박스: 개인/듀엣이면 표시, 그룹이면 제거
+        const alwaysOpenWrap = document.getElementById('pAlwaysOpenLessonWrap');
+        if (isPersonalType && !alwaysOpenWrap) {
+            // 체크박스 동적 삽입 (활성화 체크박스 바로 위)
+            const activeGroup = document.getElementById('pActive')?.closest('.form-group');
+            if (activeGroup) {
+                const wrap = document.createElement('div');
+                wrap.id = 'pAlwaysOpenLessonWrap';
+                wrap.className = 'form-group';
+                wrap.style.cssText = 'padding:12px 14px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px';
+                wrap.innerHTML = `
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="pAlwaysOpenLesson">
+                        <span style="font-weight:600;color:#2e7d32">상시 접수 ON
+                            <small style="color:#555;font-weight:normal;display:block;margin-top:2px">
+                                체크 시: 신청 기간과 무관하게 언제든 접수 가능 (대기 저장 → 강사 SMS 자동 발송)<br>
+                                체크 해제 시: 일반 신청 기간 규칙 적용
+                            </small>
+                        </span>
+                    </label>`;
+                activeGroup.before(wrap);
+            }
+        } else if (!isPersonalType && alwaysOpenWrap) {
+            alwaysOpenWrap.remove();
+        }
     },
 
     /** 직접 입력 시간대 → 동적 체크박스 추가 */
@@ -280,4 +310,18 @@ const programs = {
 
 function typeLabel(t) {
     return { group:'그룹', duet:'듀엣', personal:'개인' }[t] || t;
+}
+
+/**
+ * DB type 컬럼값이 'group'이어도 프로그램명으로 실제 유형을 추론
+ * 예: "1:1 개인 레슨" → 'personal', "2:1 듀엣레슨" → 'duet'
+ */
+function _resolveType(p) {
+    if (!p) return 'group';
+    const t = (p.type || '').toLowerCase();
+    if (t === 'personal' || t === 'duet') return t;
+    const n = (p.name || '').toLowerCase();
+    if (/1:1|개인/.test(n)) return 'personal';
+    if (/2:1|듀엣/.test(n)) return 'duet';
+    return t || 'group';
 }
