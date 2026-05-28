@@ -3,6 +3,7 @@ const cancellations = {
     data: [],
     currentTab: 'cancel',   // 'cancel' | 'refund'
     currentStatus: '',
+    currentKeyword: '',     // 검색 키워드 (이름/동호수/전화번호/프로그램명)
 
     async render() {
         document.getElementById('pageContent').innerHTML = `
@@ -56,6 +57,31 @@ const cancellations = {
                 <button id="tabRefund" class="type-tab-btn" onclick="cancellations.switchTab('refund')">
                     <i class="fas fa-file-invoice-dollar"></i> 환불 신청
                 </button>
+            </div>
+
+            <!-- 검색 바 -->
+            <div style="margin-bottom:8px">
+                <div style="position:relative;display:flex;gap:6px;align-items:center">
+                    <div style="position:relative;flex:1">
+                        <i class="fas fa-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);
+                           color:#9ca3af;font-size:.85rem;pointer-events:none"></i>
+                        <input id="cancelSearchInput" type="text" placeholder="이름 · 동/호수 · 전화번호 · 프로그램명 검색"
+                            value=""
+                            oninput="cancellations._onSearchInput(this.value)"
+                            onkeydown="if(event.key==='Escape'){cancellations._clearSearch();}"
+                            style="width:100%;padding:8px 36px 8px 32px;border:1.5px solid #e5e7eb;
+                                   border-radius:8px;font-size:.875rem;box-sizing:border-box;
+                                   transition:border-color .2s;outline:none;"
+                            onfocus="this.style.borderColor='#3b82f6'"
+                            onblur="this.style.borderColor='#e5e7eb'">
+                        <button id="cancelSearchClear" onclick="cancellations._clearSearch()"
+                            style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                                   background:none;border:none;cursor:pointer;color:#9ca3af;font-size:.85rem;
+                                   padding:2px 4px;line-height:1" title="검색 초기화">
+                            <i class="fas fa-times-circle"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <!-- 상태 필터 -->
@@ -202,6 +228,12 @@ const cancellations = {
     switchTab(tab) {
         this.currentTab = tab;
         this.currentStatus = '';
+        this.currentKeyword = '';
+        // 탭 전환 시 검색 초기화
+        const input = document.getElementById('cancelSearchInput');
+        if (input) input.value = '';
+        const clearBtn = document.getElementById('cancelSearchClear');
+        if (clearBtn) clearBtn.style.display = 'none';
         document.getElementById('tabCancel')?.classList.toggle('active',    tab === 'cancel');
         document.getElementById('tabMidCancel')?.classList.toggle('active', tab === 'mid_cancel');
         document.getElementById('tabRefund')?.classList.toggle('active',    tab === 'refund');
@@ -218,7 +250,7 @@ const cancellations = {
             if (status) params.status = status;
             const res = await API.cancellations.list(params);
             this.data = res.data || [];
-            this.renderList(this.data);
+            this._applySearch();
         } catch (e) {
             document.getElementById('cancelList').innerHTML = `<p class="error-hint">${e.message}</p>`;
         }
@@ -228,6 +260,53 @@ const cancellations = {
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.load(status);
+    },
+
+    // ── 검색 입력 핸들러 (debounce 150ms) ──────────────────────────────
+    _searchTimer: null,
+    _onSearchInput(value) {
+        clearTimeout(this._searchTimer);
+        this._searchTimer = setTimeout(() => {
+            this.currentKeyword = value.trim();
+            const clearBtn = document.getElementById('cancelSearchClear');
+            if (clearBtn) clearBtn.style.display = this.currentKeyword ? 'block' : 'none';
+            this._applySearch();
+        }, 150);
+    },
+
+    _clearSearch() {
+        this.currentKeyword = '';
+        const input = document.getElementById('cancelSearchInput');
+        if (input) input.value = '';
+        const clearBtn = document.getElementById('cancelSearchClear');
+        if (clearBtn) clearBtn.style.display = 'none';
+        this._applySearch();
+    },
+
+    // ── 키워드 기반 클라이언트 필터링 → renderList 호출 ─────────────────
+    _applySearch() {
+        if (!this.currentKeyword) {
+            this.renderList(this.data);
+            return;
+        }
+        const kw = this.currentKeyword.toLowerCase().replace(/[-\s]/g, '');
+        const filtered = this.data.filter(c => {
+            const name    = (c.name        || '').toLowerCase();
+            const dong    = (c.dong        || '').toLowerCase();
+            const ho      = (c.ho          || '').toLowerCase();
+            const phone   = (c.phone       || '').replace(/[-\s]/g, '');
+            const prog    = (c.program_name|| '').toLowerCase();
+            const dongHo  = (dong + ho).replace(/[-\s]/g, '');
+            const dongHo2 = (dong + '동' + ho + '호').replace(/[-\s]/g, '');
+            return name.includes(kw)
+                || dong.includes(kw)
+                || ho.includes(kw)
+                || phone.includes(kw)
+                || prog.includes(kw)
+                || dongHo.includes(kw)
+                || dongHo2.includes(kw);
+        });
+        this.renderList(filtered, this.currentKeyword);
     },
 
     // 접수일 기준 익월 해지 적용 예정일 계산
@@ -242,17 +321,19 @@ const cancellations = {
         return `${applyYear}년 ${m}월 1일`;
     },
 
-    renderList(list) {
+    renderList(list, keyword = '') {
         const container = document.getElementById('cancelList');
         const isRefund    = this.currentTab === 'refund';
         const isMidCancel = this.currentTab === 'mid_cancel';
         const isCancel    = this.currentTab === 'cancel';
 
-        const emptyMsg = isRefund ? '환불 신청이 없습니다'
-                       : isMidCancel ? '중도 해지 신청이 없습니다'
-                       : '해지 신청이 없습니다';
+        const emptyMsg = keyword
+            ? `'${keyword}' 검색 결과가 없습니다`
+            : isRefund ? '환불 신청이 없습니다'
+            : isMidCancel ? '중도 해지 신청이 없습니다'
+            : '해지 신청이 없습니다';
         if (!list.length) {
-            container.innerHTML = `<p class="empty-hint">${emptyMsg}</p>`;
+            container.innerHTML = `<p class="empty-hint"><i class="fas fa-search" style="margin-right:6px;opacity:.5"></i>${emptyMsg}</p>`;
             return;
         }
 
@@ -260,6 +341,9 @@ const cancellations = {
         const pendingCount = list.filter(c => c.status === 'pending').length;
         const summaryExtra = (!isRefund && pendingCount > 0)
             ? ` &nbsp;·&nbsp; <span style="color:#dc2626;font-weight:700">미처리 대기 ${pendingCount}건</span>`
+            : '';
+        const searchExtra = keyword
+            ? ` &nbsp;·&nbsp; <span style="color:#3b82f6"><i class="fas fa-search" style="font-size:.8rem"></i> "${escHtml(keyword)}" 검색 결과</span>`
             : '';
 
         // 탭별 배지 색상
@@ -269,9 +353,24 @@ const cancellations = {
                 ? '<span class="status-badge" style="margin-top:4px;display:block;background:#fef3c7;color:#92400e;border:1px solid #fbbf24">중도해지</span>'
                 : '<span class="status-badge badge-cancel" style="margin-top:4px;display:block">차월해지</span>';
 
-        container.innerHTML = `<div class="list-summary">${list.length}건${summaryExtra}</div>`
+        // 검색 키워드 하이라이트 헬퍼
+        const hl = (text, kw) => {
+            if (!kw || !text) return escHtml(text || '');
+            const escaped = escHtml(text);
+            const kwE = escHtml(kw);
+            // 대소문자 무시 하이라이트
+            const re = new RegExp('(' + kwE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+            return escaped.replace(re, '<mark style="background:#fef08a;color:#1a1a1a;border-radius:2px;padding:0 1px">$1</mark>');
+        };
+
+        container.innerHTML = `<div class="list-summary">${list.length}건${summaryExtra}${searchExtra}</div>`
             + list.map(c => {
                 const applyDate = isCancel ? this.calcApplyMonth(c.created_at) : '';
+                const dispName  = hl(c.name, keyword);
+                const dispDong  = hl(c.dong, keyword);
+                const dispHo    = hl(c.ho, keyword);
+                const dispPhone = hl(c.phone, keyword);
+                const dispProg  = hl(c.program_name || '', keyword);
                 return `
                 <div class="list-item" onclick="cancellations.showDetail('${c.id}')">
                     <div class="item-status">
@@ -279,15 +378,18 @@ const cancellations = {
                         ${typeBadge}
                     </div>
                     <div class="item-main">
-                        <strong>${c.dong} ${c.ho} | ${c.name}</strong>
-                        <p>${c.program_name || emptyMsg}${!isRefund && c.preferred_time ? ` <span style="color:#6b7280;font-size:.8rem">(${c.preferred_time})</span>` : ''}</p>
+                        <strong>${dispDong} ${dispHo} | ${dispName}</strong>
+                        <p>${dispProg || escHtml(isRefund ? '환불 신청이 없습니다' : isMidCancel ? '중도 해지 신청이 없습니다' : '해지 신청이 없습니다')}${
+                            !isRefund && c.preferred_time
+                                ? ` <span style="color:#6b7280;font-size:.8rem">(${escHtml(c.preferred_time)})</span>`
+                                : ''}</p>
                         ${isCancel && applyDate
                             ? `<span class="cancel-apply-date"><i class="fas fa-calendar-check"></i> 익월 해지 예정: ${applyDate}</span>`
                             : ''}
                         ${isMidCancel && c.termination_date
-                            ? `<span class="cancel-apply-date" style="color:#92400e"><i class="fas fa-scissors"></i> 중도해지일: ${c.termination_date}</span>`
+                            ? `<span class="cancel-apply-date" style="color:#92400e"><i class="fas fa-scissors"></i> 중도해지일: ${escHtml(c.termination_date)}</span>`
                             : ''}
-                        <small>${c.phone} | ${formatDate(c.created_at)}</small>
+                        <small>${dispPhone} | ${formatDate(c.created_at)}</small>
                     </div>
                     <i class="fas fa-chevron-right item-arrow"></i>
                 </div>`;
