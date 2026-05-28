@@ -1409,7 +1409,32 @@ router.get('/settlement-report', async (req, res) => {
             .order('dong', { ascending: true });
         if (appErr) throw appErr;
 
-        const approvedList = allApproved || [];
+        // ★ 중복 approved 레코드 제거:
+        //   동일인(dong+ho+name+program_name)에게 approved가 2개 이상 있을 경우
+        //   notes에 [시간변경] 이력이 있는 레코드(최신 변경본) 또는 updated_at이 가장 최근인 레코드를 우선 사용
+        //   → 박신영 케이스: 09:00(ffa4d9e8)과 11:00(807ace58) 둘 다 approved → 11:00(최신 변경본) 유지
+        const dedupMap = new Map(); // key: normKey4 → 대표 레코드
+        (allApproved || []).forEach(a => {
+            const k = `${parseInt((a.dong||'').replace(/[^0-9]/g,''))||0}_${parseInt((a.ho||'').replace(/[^0-9]/g,''))||0}_${(a.name||'').trim()}_${(a.program_name||'').replace(/\s/g,'')}`;
+            if (!dedupMap.has(k)) {
+                dedupMap.set(k, a);
+            } else {
+                const existing = dedupMap.get(k);
+                // [시간변경] notes가 있는 쪽 우선 (change-time 실행된 최신 레코드)
+                const aNotes    = (a.notes        || '').includes('[시간변경]') || (a.notes        || '').includes('[요일변경]');
+                const exNotes   = (existing.notes || '').includes('[시간변경]') || (existing.notes || '').includes('[요일변경]');
+                if (aNotes && !exNotes) {
+                    dedupMap.set(k, a);  // 변경 이력 있는 쪽으로 교체
+                } else if (!aNotes && !exNotes) {
+                    // 둘 다 변경이력 없으면 updated_at 최신 우선
+                    const aTime  = new Date(a.updated_at        || a.created_at || 0).getTime();
+                    const exTime = new Date(existing.updated_at || existing.created_at || 0).getTime();
+                    if (aTime > exTime) dedupMap.set(k, a);
+                }
+                // 기존이 변경이력 있고 신규가 없으면 기존 유지 (no-op)
+            }
+        });
+        const approvedList = Array.from(dedupMap.values());
 
         // 기존수강자: 해당월 이전부터 수강 중이던 사람
         const existingList = approvedList.filter(a => {
@@ -1661,6 +1686,49 @@ router.get('/settlement-report', async (req, res) => {
         // ★ dong/ho 정규화 키(normKey) 사용: '106동' vs '106' 같은 형식 불일치 방지
         const endCancelKeySet = new Set(endCancel.map(r => normKey(r.dong, r.ho, r.name, r.program_name)));
         const midCancelKeySet = new Set(midCancel.map(r => normKey(r.dong, r.ho, r.name, r.program_name)));
+
+        // ★ 차월해지자 fallback: approvedList에 없지만 endCancel에는 있는 사람
+        //   → 이전 버그로 application.status가 이미 cancelled가 된 경우
+        //   → cancellation 레코드의 application_id로 해당 application을 직접 조회해 보완
+        const approvedKeySet = new Set(approvedList.map(a => normKey(a.dong, a.ho, a.name, a.program_name)));
+        const missingEndCancels = endCancel.filter(ec => !approvedKeySet.has(normKey(ec.dong, ec.ho, ec.name, ec.program_name)));
+        if (missingEndCancels.length > 0) {
+            const appIds = missingEndCancels.map(ec => ec.application_id).filter(Boolean);
+            if (appIds.length > 0) {
+                const { data: cancelledApps } = await sb
+                    .from('applications')
+                    .select('*')
+                    .in('id', appIds);
+                (cancelledApps || []).forEach(a => {
+                    const k = normKey(a.dong, a.ho, a.name, a.program_name);
+                    if (!approvedKeySet.has(k)) {
+                        approvedList.push(a);    // fallback 추가
+                        approvedKeySet.add(k);
+                    }
+                });
+            }
+            // application_id 없는 경우: cancellation의 dong/ho/name으로 직접 조회
+            const missingWithoutAppId = missingEndCancels.filter(ec => !ec.application_id);
+            for (const ec of missingWithoutAppId) {
+                const { data: fallbackApps } = await sb
+                    .from('applications')
+                    .select('*')
+                    .eq('complex_id', cid)
+                    .eq('dong', ec.dong)
+                    .eq('ho', ec.ho)
+                    .eq('name', (ec.name || '').trim())
+                    .eq('program_name', ec.program_name)
+                    .limit(1);
+                const fa = fallbackApps?.[0];
+                if (fa) {
+                    const k = normKey(fa.dong, fa.ho, fa.name, fa.program_name);
+                    if (!approvedKeySet.has(k)) {
+                        approvedList.push(fa);
+                        approvedKeySet.add(k);
+                    }
+                }
+            }
+        }
 
         // 당월 수강생 행 생성 (approved + 해지자 포함)
         const settlementRows = [];
