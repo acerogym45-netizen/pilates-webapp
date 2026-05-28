@@ -1410,9 +1410,11 @@ router.get('/settlement-report', async (req, res) => {
         if (appErr) throw appErr;
 
         // ★ 중복 approved 레코드 제거:
-        //   동일인(dong+ho+name+program_name)에게 approved가 2개 이상 있을 경우
-        //   notes에 [시간변경] 이력이 있는 레코드(최신 변경본) 또는 updated_at이 가장 최근인 레코드를 우선 사용
-        //   → 박신영 케이스: 09:00(ffa4d9e8)과 11:00(807ace58) 둘 다 approved → 11:00(최신 변경본) 유지
+        //   change-time(접수기간 20~27일 실행) = 다음달 수강 변경
+        //   → notes에 [시간변경]/[요일변경]이 있는 레코드 = 다음달 기준 레코드 (이번달 정산 제외)
+        //   → 변경이력 없는 원본(created_at 이른 것) = 이번달 수강 중인 레코드 → 유지
+        //   박신영: ffa4d9e8(09:00, 원본 4/19생성) + 807ace58(11:00, [시간변경] 있음)
+        //     → 5월 정산: ffa4d9e8(09:00) 유지 / 807ace58은 6월 차월신규로만 반영
         const dedupMap = new Map(); // key: normKey4 → 대표 레코드
         (allApproved || []).forEach(a => {
             const k = `${parseInt((a.dong||'').replace(/[^0-9]/g,''))||0}_${parseInt((a.ho||'').replace(/[^0-9]/g,''))||0}_${(a.name||'').trim()}_${(a.program_name||'').replace(/\s/g,'')}`;
@@ -1420,18 +1422,20 @@ router.get('/settlement-report', async (req, res) => {
                 dedupMap.set(k, a);
             } else {
                 const existing = dedupMap.get(k);
-                // [시간변경] notes가 있는 쪽 우선 (change-time 실행된 최신 레코드)
-                const aNotes    = (a.notes        || '').includes('[시간변경]') || (a.notes        || '').includes('[요일변경]');
-                const exNotes   = (existing.notes || '').includes('[시간변경]') || (existing.notes || '').includes('[요일변경]');
-                if (aNotes && !exNotes) {
-                    dedupMap.set(k, a);  // 변경 이력 있는 쪽으로 교체
+                // 변경이력 있는 쪽 = 다음달 레코드 → 이번달 정산에서 제외
+                // 변경이력 없는 원본 쪽을 유지
+                const aNotes   = (a.notes        || '').includes('[시간변경]') || (a.notes        || '').includes('[요일변경]');
+                const exNotes  = (existing.notes || '').includes('[시간변경]') || (existing.notes || '').includes('[요일변경]');
+                if (!aNotes && exNotes) {
+                    // a가 원본, existing이 변경본 → 원본(a)으로 교체
+                    dedupMap.set(k, a);
                 } else if (!aNotes && !exNotes) {
-                    // 둘 다 변경이력 없으면 updated_at 최신 우선
-                    const aTime  = new Date(a.updated_at        || a.created_at || 0).getTime();
-                    const exTime = new Date(existing.updated_at || existing.created_at || 0).getTime();
-                    if (aTime > exTime) dedupMap.set(k, a);
+                    // 둘 다 변경이력 없으면 created_at 더 이른 것(원본) 유지
+                    const aTime  = new Date(a.created_at  || 0).getTime();
+                    const exTime = new Date(existing.created_at || 0).getTime();
+                    if (aTime < exTime) dedupMap.set(k, a);
                 }
-                // 기존이 변경이력 있고 신규가 없으면 기존 유지 (no-op)
+                // existing이 원본, a가 변경본이면 existing 유지 (no-op)
             }
         });
         const approvedList = Array.from(dedupMap.values());
