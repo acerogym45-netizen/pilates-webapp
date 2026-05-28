@@ -389,6 +389,8 @@ const settlement = {
                     catBadge = `<span style="background:#e74c3c;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">중도해지</span>`;
                 } else if (r.category && r.category.includes('해지')) {
                     catBadge = `<span style="background:#e67e22;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">${r.category}</span>`;
+                } else if (r.category === '금월신규') {
+                    catBadge = `<span style="background:#0891b2;color:#fff;font-size:.68rem;padding:2px 7px;border-radius:10px">금월신규</span>`;
                 }
 
                 tbodyRows += `<tr id="app-row-${id}">

@@ -1322,22 +1322,48 @@ router.get('/settlement-report', async (req, res) => {
         }
 
         // ── 요금 헬퍼 ─────────────────────────────────────────
-        // getFee   : 정산 내역 "요금" 컬럼 = 수강료 정액
-        //            우선순위: applications.monthly_fee → programs.price
-        //            ※ 수업횟수×15,000은 "최종부과액" 계산에만 사용 (여기서는 쓰지 않음)
-        // getNextFee: 차월 수강신청 내역 요금 (동일 우선순위)
+        // [수정] getFee / getNextFee:
+        //   1순위: applications.monthly_fee (직접 지정된 요금)
+        //   2순위: 해당 월 수업횟수 합계 × 15,000 (prog_session_map 기반)
+        //           → 타임별 시간 합계 (개인레슨은 _total 키 사용)
+        //   3순위: programs.price (프로그램 정가 fallback)
         // SESSION_UNIT: 출석 1회당 단가 (최종부과액 = 출석횟수 × SESSION_UNIT)
         const SESSION_UNIT = 15000;
+
+        // 수업횟수 합계로 요금 계산하는 헬퍼
+        const calcFeeFromSessions = (progName, sessionMap) => {
+            const slotMap = sessionMap[progName];
+            if (!slotMap) return 0;
+            const total = Object.values(slotMap).reduce((s, v) => s + (Number(v) || 0), 0);
+            return total * SESSION_UNIT;
+        };
 
         const getFee = (app) => {
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
+            // 당월 수업횟수 기반 요금 (preferred_time 해당 슬롯 or 전체 합계)
+            const slotMap = progSessionMap[app.program_name];
+            if (slotMap) {
+                const slot = app.preferred_time;
+                // 타임별 슬롯이 있으면 해당 슬롯 횟수, 없으면 _total
+                const cnt = (slot && slotMap[slot] != null) ? Number(slotMap[slot])
+                          : (slotMap['_total'] != null ? Number(slotMap['_total']) : 0);
+                if (cnt > 0) return cnt * SESSION_UNIT;
+            }
             return progPriceMap[app.program_name] || 0;
         };
 
         const getNextFee = (app) => {
             const f = app.monthly_fee;
             if (f !== null && f !== undefined && Number(f) > 0) return Number(f);
+            // 차월 수업횟수 기반 요금
+            const slotMap = nextProgSessionMap[app.program_name];
+            if (slotMap) {
+                const slot = app.preferred_time;
+                const cnt = (slot && slotMap[slot] != null) ? Number(slotMap[slot])
+                          : (slotMap['_total'] != null ? Number(slotMap['_total']) : 0);
+                if (cnt > 0) return cnt * SESSION_UNIT;
+            }
             return progPriceMap[app.program_name] || 0;
         };
 
@@ -1361,10 +1387,20 @@ router.get('/settlement-report', async (req, res) => {
             return dt < monthStart;
         });
 
-        // 차월신규접수: 해당월 내 승인된 것 = 전체 - 기존
-        const nextNewList = approvedList.filter(a => {
+        // 차월신규접수 / 금월신규접수 분류
+        // - lesson_start_month 가 해당 월(monthKey)이면 → 금월신규 (당월 수강 시작)
+        // - 그 외 해당월 내 승인 → 차월신규
+        const nextNewList = [];     // 차월신규 (다음 달부터 수강)
+        const curNewList  = [];     // 금월신규 (이번 달부터 수강 — 개인/듀엣 상시접수)
+        approvedList.forEach(a => {
             const dt = (a.approved_at || a.created_at || '').slice(0, 10);
-            return dt >= monthStart && dt <= monthEnd;
+            if (dt < monthStart || dt > monthEnd) return; // 기존수강자
+            // lesson_start_month = monthKey 이면 금월 신규
+            if (a.lesson_start_month && a.lesson_start_month === monthKey) {
+                curNewList.push(a);
+            } else {
+                nextNewList.push(a);
+            }
         });
 
         // ────────────────────────────────────────────────
@@ -1416,28 +1452,40 @@ router.get('/settlement-report', async (req, res) => {
             }
         }
         // request_type='refund'(환불) 는 해지 인원 집계에서 제외
+        // request_type='cancel'(차월해지) + 'mid_cancel'(중도해지) 모두 포함
         // request_type 컬럼이 없는 구버전 레코드는 'cancel'로 간주
         cancels = cancels.filter(c => {
             const rt = c.request_type || 'cancel';
-            return rt === 'cancel';
+            return rt === 'cancel' || rt === 'mid_cancel';
         });
 
         // ────────────────────────────────────────────────
         // C. 중도해지 / 차월해지 분류
         //
-        //  중도해지: termination_date가 있고, monthStart <= date < monthEnd
-        //           (월 중간에 해지 → 당월 후청구 방식)
-        //  차월해지: termination_date = monthEnd 이거나 날짜 미상
-        //           (말일 해지 또는 미상 → 다음달부터 미부과)
+        //  [수정] request_type 우선 판별:
+        //   - request_type = 'mid_cancel' → 중도해지 (termination_date 유무 무관)
+        //   - request_type = 'cancel'     → 차월해지 (termination_date = monthEnd 또는 null)
+        //   - termination_date가 있고 monthStart <= date < monthEnd → 중도해지 보조 판별
         // ────────────────────────────────────────────────
         const midCancel = [];
         const endCancel = [];
 
         (cancels || []).forEach(c => {
             const tDate = c.termination_date ? c.termination_date.slice(0, 10) : null;
+            const rt = c.request_type || 'cancel';
 
-            // 말일 해지이거나 날짜 미상 → 차월해지
-            const isEndDay = !tDate || tDate >= monthEnd;
+            // request_type이 mid_cancel이면 무조건 중도해지
+            // request_type이 cancel이면 차월해지
+            // termination_date가 월 중간이고 request_type 미구분 구버전이면 날짜 기반 분류
+            let isEndDay;
+            if (rt === 'mid_cancel') {
+                isEndDay = false; // 중도해지
+            } else if (rt === 'cancel') {
+                isEndDay = true;  // 차월해지
+            } else {
+                // 구버전 fallback: termination_date 기반
+                isEndDay = !tDate || tDate >= monthEnd;
+            }
 
             const row = {
                 id:               c.id,
@@ -1581,18 +1629,24 @@ router.get('/settlement-report', async (req, res) => {
         // 당월 수강생 행 생성 (approved + 해지자 포함)
         const settlementRows = [];
 
-        // approved 목록: 자동연장 / 차월해지 / 중도해지 구분
-        // ★ 차월신규(이번 달 승인된 신규 수강생)는 settlementRows에서 완전 제외
+        // curNewList 키셋 (금월신규 — lesson_start_month = monthKey)
+        const curNewKeySet = new Set(curNewList.map(a => a.id));
+
+        // approved 목록: 자동연장 / 차월해지 / 중도해지 / 금월신규 구분
+        // ★ 차월신규(이번 달 승인, lesson_start_month ≠ monthKey)는 settlementRows 제외
         //   → 해당 인원은 newSectionRows(신규 수강 예정자 섹션)에만 표시됨
-        //   → 중도합류(이번 달 중간부터 수강 시작) 개념 제거: 이번 달 승인 = 다음 달부터 수강
+        // ★ 금월신규(lesson_start_month = monthKey)는 당월 정산에 포함
         approvedList.forEach(a => {
             const approvedDate = (a.approved_at || a.created_at || '').slice(0, 10);
-            const isNextNew   = approvedDate >= monthStart && approvedDate <= monthEnd;
+            const isThisMonthNew = approvedDate >= monthStart && approvedDate <= monthEnd;
+            const isCurNew    = curNewKeySet.has(a.id);           // 금월신규 (당월 정산 포함)
+            const isNextNew   = isThisMonthNew && !isCurNew;      // 차월신규 (다음달 부과)
             const isEndCancel = endCancelKeySet.has(`${a.dong}_${a.ho}_${a.name}`);
             const isMidCancel = midCancelKeySet.has(`${a.dong}_${a.ho}_${a.name}`);
 
-            // ★ 이번 달 신규 승인자는 정산 내역에서 제외 (신규 섹션에만 표시)
+            // ★ 차월신규는 정산 내역에서 제외 (신규 섹션에만)
             //   단, 중도해지/차월해지자는 해지 분류를 위해 그대로 포함
+            //   금월신규(isCurNew)는 제외하지 않고 정산 포함
             if (isNextNew && !isEndCancel && !isMidCancel) return;
 
             let category = '';
@@ -1600,6 +1654,10 @@ router.get('/settlement-report', async (req, res) => {
             else if (isEndCancel) {
                 const nextLabel = `${nextYr}년 ${nextMo}월`;
                 category = `${nextLabel} 수강 해지`;
+            }
+            // 금월신규 표시 (이번 달 수강 시작 — 개인/듀엣 상시접수)
+            else if (isCurNew) {
+                category = '금월신규';
             }
             // else: 빈칸 (자동연장 — 이전 달부터 수강 중)
 
@@ -1627,7 +1685,8 @@ router.get('/settlement-report', async (req, res) => {
                 approved_at:      approvedDate,
                 is_mid_cancel:    isMidCancel,
                 is_end_cancel:    isEndCancel,
-                is_mid_join:      false, // 중도합류 분류 제거 (차월신규는 정산 제외)
+                is_cur_new:       isCurNew,  // 금월신규 플래그
+                is_mid_join:      false,
             });
         });
 
@@ -1801,6 +1860,7 @@ router.get('/settlement-report', async (req, res) => {
                 approved_count:   approvedList.length,
                 existing_count:   existingList.length,
                 next_new_count:   nextNewList.length,
+                cur_new_count:    curNewList.length,    // 금월신규 인원
                 mid_cancel_count: midCancel.length,
                 end_cancel_count: endCancel.length,
                 total_charge:     totalCharge,

@@ -566,6 +566,7 @@ router.post('/api/lesson/respond', async (req, res) => {
     if (action === 'confirm' && (!scheduled_date || !scheduled_time)) {
         return res.status(400).json({ success: false, error: '확정 시 시작일과 시간을 입력해주세요.' });
     }
+    const { lesson_start_month } = req.body; // 'YYYY-MM' 형식, 옵션
 
     try {
         const { data: app, error } = await sb
@@ -588,9 +589,13 @@ router.post('/api/lesson/respond', async (req, res) => {
         };
         if (action === 'confirm') {
             // notes에 일정 조율 결과 기록
-            const scheduleNote = `[강사 확정] 시작일: ${scheduled_date}, 시간: ${scheduled_time}${scheduled_days ? ', 요일: ' + scheduled_days : ''}${memo ? ', 메모: ' + memo : ''}`;
+            const scheduleNote = `[강사 확정] 시작일: ${scheduled_date}, 시간: ${scheduled_time}${scheduled_days ? ', 요일: ' + scheduled_days : ''}${lesson_start_month ? ', 수강시작월: ' + lesson_start_month : ''}${memo ? ', 메모: ' + memo : ''}`;
             updatePayload.preferred_time = scheduled_time;
             updatePayload.notes = scheduleNote;
+            // 레슨 시작월 저장 → 정산에서 금월신규 판별에 사용
+            if (lesson_start_month && /^\d{4}-\d{2}$/.test(lesson_start_month)) {
+                updatePayload.lesson_start_month = lesson_start_month;
+            }
         } else {
             const rejectNote = `[강사 거절]${memo ? ' 사유: ' + memo : ''}`;
             updatePayload.notes = rejectNote;
@@ -735,6 +740,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <input type="text" id="scheduledDays" placeholder="예: 월수금 / 화목">
       </div>
       <div class="form-group">
+        <label>수강 시작월 <span style="color:#ef4444">*</span>
+          <small style="color:#94a3b8"> — 이번 달 시작이면 금월, 다음 달이면 차월 선택</small>
+        </label>
+        <select id="lessonStartMonth" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:.9rem;color:#0f172a;background:#f8fafc">
+          <option value="">— 선택해주세요 —</option>
+          ${(function() {
+            const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Seoul' }));
+            const opts = [];
+            for (let i = 0; i <= 2; i++) {
+              const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+              const yyyy = d.getFullYear();
+              const mm   = String(d.getMonth() + 1).padStart(2, '0');
+              const label = i === 0
+                ? `${yyyy}년 ${d.getMonth()+1}월 (이번 달 — 금월신규·당월 부과)`
+                : i === 1
+                  ? `${yyyy}년 ${d.getMonth()+1}월 (다음 달 — 차월신규)`
+                  : `${yyyy}년 ${d.getMonth()+1}월`;
+              opts.push(`<option value="${yyyy}-${mm}"${i === 1 ? ' selected' : ''}>${label}</option>`);
+            }
+            return opts.join('');
+          })()}
+        </select>
+      </div>
+      <div class="form-group">
         <label>메모 <small style="color:#94a3b8">(선택)</small></label>
         <textarea id="memoField" rows="3" placeholder="수강생에게 전달할 내용이 있으면 입력해주세요"></textarea>
       </div>
@@ -759,8 +788,14 @@ async function respond(action) {
   if (action === 'confirm') {
     const d = document.getElementById('scheduledDate').value;
     const t = document.getElementById('scheduledTime').value;
+    const sm = document.getElementById('lessonStartMonth')?.value;
     if (!d || !t) {
       errEl.textContent = '시작일과 수업 시간을 입력해주세요.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (!sm) {
+      errEl.textContent = '수강 시작월을 선택해주세요.';
       errEl.style.display = 'block';
       return;
     }
@@ -778,7 +813,8 @@ async function respond(action) {
     action,
     scheduled_date: document.getElementById('scheduledDate').value,
     scheduled_time: document.getElementById('scheduledTime').value,
-    scheduled_days: document.getElementById('scheduledDays').value,
+    scheduled_days: document.getElementById('scheduledDays')?.value || '',
+    lesson_start_month: document.getElementById('lessonStartMonth')?.value || '',
     memo: document.getElementById('memoField').value,
   };
 
