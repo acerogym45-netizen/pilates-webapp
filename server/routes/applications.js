@@ -1375,8 +1375,12 @@ router.post('/:id/change-time', async (req, res) => {
                 }
             }
         } else {
-            // OFF: 해당 프로그램 건만 카운트 (기존 방식)
-            changeApprovedQuery = changeApprovedQuery.eq('program_id', targetProgramId);
+            // OFF: 해당 프로그램 건만 카운트
+            // ★ 버그 수정: program_id=null 레코드는 .eq('program_id', id)에 걸리지 않으므로
+            //   program_id=null AND program_name 일치 케이스도 함께 카운트
+            changeApprovedQuery = changeApprovedQuery.or(
+                `program_id.eq.${targetProgramId},and(program_id.is.null,program_name.eq.${targetProgram.name})`
+            );
         }
         const { count: approvedCnt } = await changeApprovedQuery;
 
@@ -1421,6 +1425,29 @@ router.post('/:id/change-time', async (req, res) => {
         const newNotes  = prevNotes
             ? prevNotes + `\n${changeTag} ` + changeMeta
             : `${changeTag} ` + changeMeta;
+
+        // ★ 버그 수정: 변경 실행 전, 동일인의 다른 approved 레코드 정리
+        // (change-time은 id 하나만 update → 이전 시간대 레코드가 approved로 남아 중복 집계됨)
+        const nameTrimmed = (app.name || '').trim();
+        const { data: dupRecords } = await sb
+            .from('applications')
+            .select('id, preferred_time, program_name')
+            .eq('complex_id', app.complex_id)
+            .eq('dong', app.dong)
+            .eq('ho', app.ho)
+            .eq('name', nameTrimmed)
+            .eq('program_name', targetProgram.name)
+            .eq('status', 'approved')
+            .neq('id', id);
+
+        if (dupRecords && dupRecords.length > 0) {
+            const dupIds = dupRecords.map(r => r.id);
+            const dupNote = `[중복정리] ${changedAt} change-time 실행으로 이전 레코드 자동 cancelled (변경: ${oldTime}→${new_preferred_time})`;
+            await sb
+                .from('applications')
+                .update({ status: 'cancelled', notes: dupNote, updated_at: changedAt })
+                .in('id', dupIds);
+        }
 
         // 변경 실행 (notes에 이력 포함)
         const { error: updateErr } = await sb
