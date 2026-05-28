@@ -515,31 +515,10 @@ router.post('/', async (req, res) => {
             }
         }
 
-        // ── 비활성 프로그램 신규 접수 차단 ────────────────────────────────────
-        // is_active=false 프로그램은 신규 신청(접수)만 불가.
-        // 해지 신청·관리자 현황 조회는 정상 동작.
-        if (!admin_bypass && (program_id || program_name) && complex_id) {
-            let prog = null;
-            if (program_id) {
-                const { data: p } = await sb.from('programs').select('is_active, name').eq('id', program_id).single();
-                prog = p;
-            } else {
-                const { data: ps } = await sb.from('programs').select('is_active, name')
-                    .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
-                prog = ps?.[0] || null;
-            }
-            if (prog && prog.is_active === false) {
-                return res.status(400).json({
-                    success: false,
-                    inactive: true,
-                    error: `${prog.name || program_name} 프로그램은 현재 신규 접수를 받지 않습니다. 관리자에게 문의하세요.`
-                });
-            }
-        }
-
         // ── 개인/듀엣 레슨: always_open_lesson 상시 접수 분기 ──────────────────
+        // ⚠️ 비활성(is_active) 체크보다 먼저 실행: 상시접수는 최상위 설정으로
         // always_open_lesson=true 인 프로그램은 신청 기간 제한 없이 상시 대기 접수
-        // → 신청종류 체크(period check) 스킵, 강사에게 SMS 자동 발송
+        // → is_active 차단 스킵, 신청종류 기간 체크 스킵, 강사에게 SMS 자동 발송
         let isLessonAlwaysOpen = false;
         let lessonProgram = null; // 이 블록에서 조회한 프로그램 정보 (SMS 발송에 재활용)
 
@@ -559,6 +538,32 @@ router.post('/', async (req, res) => {
                 (lessonProgram.type === 'personal' || lessonProgram.type === 'duet') &&
                 lessonProgram.always_open_lesson === true) {
                 isLessonAlwaysOpen = true;
+            }
+        }
+
+        // ── 비활성 프로그램 신규 접수 차단 ────────────────────────────────────
+        // is_active=false 프로그램은 신규 신청(접수)만 불가.
+        // 단, always_open_lesson=true 인 상시접수 레슨은 이 차단을 건너뜀.
+        // 해지 신청·관리자 현황 조회는 정상 동작.
+        if (!admin_bypass && !isLessonAlwaysOpen && (program_id || program_name) && complex_id) {
+            // lessonProgram 조회 결과 재활용 (위에서 이미 조회했으면 재사용)
+            let prog = lessonProgram;
+            if (!prog) {
+                if (program_id) {
+                    const { data: p } = await sb.from('programs').select('is_active, name').eq('id', program_id).single();
+                    prog = p;
+                } else {
+                    const { data: ps } = await sb.from('programs').select('is_active, name')
+                        .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
+                    prog = ps?.[0] || null;
+                }
+            }
+            if (prog && prog.is_active === false) {
+                return res.status(400).json({
+                    success: false,
+                    inactive: true,
+                    error: `${prog.name || program_name} 프로그램은 현재 신규 접수를 받지 않습니다. 관리자에게 문의하세요.`
+                });
             }
         }
 

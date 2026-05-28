@@ -2953,12 +2953,14 @@ function populateProgramOptions(programs, newApplyIsOpen = null) {
         const isActive = program.is_active;
 
         // ── '곧 오픈 예정' 판단 ──────────────────────────────────────
-        // apply-settings new.is_open 기반으로 판단 (is_active / schedule_mode 무관)
-        // is_open=true  → 신청 가능 기간 → 선택 가능 (곧 오픈 예정 X)
-        // is_open=false → 신청 불가 기간 → 모든 프로그램 '곧 오픈 예정'
-        // is_open=null  → API 조회 실패  → is_active 폴백 (기존 동작 유지)
+        // always_open_lesson=true (개인/듀엣 상시접수)인 프로그램은
+        // 신청 기간(newApplyIsOpen) 무관하게 항상 선택 가능 → comingSoon 표시 안 함
+        const isAlwaysOpenLesson = !!program.always_open_lesson;
         let showAsComingSoon;
-        if (newApplyIsOpen === null) {
+        if (isAlwaysOpenLesson) {
+            // 상시 접수 레슨: 신청 기간 설정 상위 — 항상 열려 있음
+            showAsComingSoon = false;
+        } else if (newApplyIsOpen === null) {
             // apply-settings 조회 실패: is_active 폴백
             showAsComingSoon = !isActive;
         } else {
