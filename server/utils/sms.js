@@ -238,11 +238,68 @@ async function sendRenewalExpiredSms({ phone, name, complexName, programName, se
     }
 }
 
+/**
+ * 개인/듀엣 레슨 신청 알림 SMS — 강사에게 발송
+ * @param {Object} p
+ * @param {string} p.instructorPhone   - 수신 강사 전화번호
+ * @param {string} p.instructorName    - 강사 이름
+ * @param {string} p.applicantName     - 신청자 이름
+ * @param {string} p.applicantPhone    - 신청자 전화번호
+ * @param {string} p.programName       - 프로그램명 (개인레슨 / 듀엣레슨)
+ * @param {string} p.preferredTime     - 희망 요일/시간 (자유입력 텍스트)
+ * @param {string} p.complexName       - 단지명
+ * @param {string} p.applicationId     - 신청 ID (관리자 확인용)
+ * @param {string} p.confirmUrl        - Phase 2 강사 처리 링크 (없으면 관리자 URL)
+ * @param {string} p.sender            - 발신번호
+ * @param {boolean} p.smsEnabled       - 단지 SMS 활성 여부
+ */
+async function sendLessonRequestSms({
+    instructorPhone, instructorName, applicantName, applicantPhone,
+    programName, preferredTime, complexName, applicationId,
+    confirmUrl, sender, smsEnabled
+}) {
+    if (!isSmsEnabled()) return { success: false, skipped: true, reason: 'SMS 전역 비활성화' };
+    if (smsEnabled === false) return { success: false, skipped: true, reason: '해당 단지 SMS 비활성화' };
+
+    const normalizedPhone = normalizePhone(instructorPhone);
+    if (!normalizedPhone) return { success: false, error: '유효하지 않은 강사 전화번호' };
+
+    const service = getSolapiService();
+    if (!service) return { success: false, error: '솔라피 서비스 초기화 실패' };
+
+    const fromNumber = (sender && sender.trim()) || process.env.SOLAPI_SENDER;
+    if (!fromNumber) return { success: false, error: '발신번호가 설정되지 않았습니다' };
+
+    const complex = complexName ? `[${complexName}] ` : '';
+    const urlLine  = confirmUrl ? `\n\n▶ 일정 조율 처리:\n${confirmUrl}` : '';
+    const text = `${complex}${instructorName} 강사님,\n\n새 레슨 신청이 접수되었습니다.\n\n` +
+        `■ 프로그램: ${programName}\n` +
+        `■ 신청자: ${applicantName} (${applicantPhone})\n` +
+        `■ 희망 요일/시간: ${preferredTime || '미입력'}` +
+        urlLine +
+        `\n\n※ 관리자 페이지에서도 확인 가능합니다.`;
+
+    try {
+        console.log(`[SMS][레슨신청] 강사 발송 시도: ${normalizedPhone} (${instructorName})`);
+        const result = await service.send({ to: normalizedPhone, from: fromNumber, text });
+        const failed = result?.failedMessageList?.length || 0;
+        if (failed > 0) {
+            const reason = result.failedMessageList[0]?.reason || '알 수 없는 오류';
+            return { success: false, error: reason };
+        }
+        return { success: true, messageId: result?.groupInfo?.id || 'sent' };
+    } catch (err) {
+        console.error('[SMS][레슨신청] 발송 실패:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
 module.exports = {
     sendInquiryAnswerSms,
     sendRenewalNoticeSms,
     sendRenewalConfirmedSms,
     sendRenewalExpiredSms,
+    sendLessonRequestSms,
     isSmsEnabled,
     isSmsConfigured,
     getSmsStatus,

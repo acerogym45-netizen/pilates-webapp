@@ -221,6 +221,16 @@
                             (예: 월수금 오후 2시, 화목 오후 3시)
                         </small>
                     </div>
+
+                    <div class="form-group" id="instructorGroup" style="display:none">
+                        <label for="preferredInstructor">희망 강사 <span class="required">*</span></label>
+                        <select id="preferredInstructor">
+                            <option value="">-- 강사를 선택해주세요 --</option>
+                        </select>
+                        <small style="color:#7f8c8d; font-size:.78rem; margin-top:4px; display:block;">
+                            담당 강사와 직접 일정을 조율합니다. 신청 후 강사에게 연락이 갑니다.
+                        </small>
+                    </div>
                 </fieldset>
 
                 <div class="consent-group">
@@ -282,6 +292,7 @@
                     <div class="summary-row"><span>연락처</span>  <strong id="displayPhone"></strong></div>
                     <div class="summary-row"><span>프로그램</span><strong id="displayLesson"></strong></div>
                     <div class="summary-row"><span>희망 시간</span><strong id="displayTime"></strong></div>
+                    <div class="summary-row" id="displayInstructorWrap" style="display:none"><span>희망 강사</span><strong id="displayInstructor"></strong></div>
                 </div>
 
                 <button type="button" class="btn-secondary btn-sm" onclick="goToPage1()" style="margin-bottom:16px">

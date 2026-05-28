@@ -140,7 +140,7 @@ router.get('/:id', async (req, res) => {
 // ── 프로그램 생성 ─────────────────────────────────────────────
 router.post('/', async (req, res) => {
     try {
-        const { complex_id, name, type, description, days, time_slots, price, capacity, display_order, show_on_inactive, duration_days, display_approved_count } = req.body;
+        const { complex_id, name, type, description, days, time_slots, price, capacity, display_order, show_on_inactive, duration_days, display_approved_count, always_open_lesson } = req.body;
         if (!complex_id || !name || !type) return res.status(400).json({ success: false, error: 'complex_id, name, type 필수' });
 
         const sb = getSupabase();
@@ -157,6 +157,8 @@ router.post('/', async (req, res) => {
         if (show_on_inactive !== undefined) insertObj.show_on_inactive = Boolean(show_on_inactive);
         // duration_days: NULL이면 자동계산 미사용
         if (duration_days !== undefined) insertObj.duration_days = duration_days ? parseInt(duration_days) : null;
+        // always_open_lesson: 개인/듀엣 상시 접수 ON/OFF
+        if (always_open_lesson !== undefined) insertObj.always_open_lesson = Boolean(always_open_lesson);
         // display_approved_count: JSONB { "HH:MM": N, ... } — NULL이면 실제값 표시 (마케팅용)
         if (display_approved_count !== undefined) {
             if (display_approved_count === null) {
@@ -193,7 +195,7 @@ router.post('/', async (req, res) => {
 // ── 프로그램 수정 ─────────────────────────────────────────────
 router.put('/:id', async (req, res) => {
     try {
-        const { name, type, description, days, time_slots, price, capacity, display_order, is_active, show_on_inactive, duration_days, display_approved_count } = req.body;
+        const { name, type, description, days, time_slots, price, capacity, display_order, is_active, show_on_inactive, duration_days, display_approved_count, always_open_lesson } = req.body;
         const sb = getSupabase();
         const updateObj = {
             name, type, description, days,
@@ -207,6 +209,8 @@ router.put('/:id', async (req, res) => {
         if (show_on_inactive !== undefined) updateObj.show_on_inactive = Boolean(show_on_inactive);
         // duration_days: NULL이면 자동계산 미사용
         if (duration_days !== undefined) updateObj.duration_days = duration_days ? parseInt(duration_days) : null;
+        // always_open_lesson: 개인/듀엣 상시 접수 ON/OFF
+        if (always_open_lesson !== undefined) updateObj.always_open_lesson = Boolean(always_open_lesson);
         // display_approved_count: JSONB { "HH:MM": N, ... } — NULL이면 실제값 표시 (마케팅용)
         if (display_approved_count !== undefined) {
             if (display_approved_count === null) {

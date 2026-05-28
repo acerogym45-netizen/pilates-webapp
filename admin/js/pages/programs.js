@@ -127,6 +127,18 @@ const programs = {
             </div>
             <div class="form-group"><label>설명</label><textarea id="pDesc" rows="3">${p ? escHtml(p.description||'') : ''}</textarea></div>
             <div class="form-group"><label>표시 순서</label><input type="number" id="pOrder" value="${p?.display_order||0}"></div>
+            ${isPersonal ? `
+            <div class="form-group" style="padding:12px 14px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="pAlwaysOpenLesson" ${p?.always_open_lesson ? 'checked' : ''}>
+                    <span style="font-weight:600;color:#2e7d32">상시 접수 ON
+                        <small style="color:#555;font-weight:normal;display:block;margin-top:2px">
+                            체크 시: 신청 기간과 무관하게 언제든 접수 가능 (대기 저장 → 강사 SMS 자동 발송)<br>
+                            체크 해제 시: 일반 신청 기간 규칙 적용
+                        </small>
+                    </span>
+                </label>
+            </div>` : ''}
             ${p ? `
             <div class="form-group">
                 <label class="checkbox-label">
@@ -219,6 +231,10 @@ const programs = {
                 display_order: parseInt(document.getElementById('pOrder').value)||0,
                 duration_days: durationDaysVal ? parseInt(durationDaysVal) : null,
             };
+            // always_open_lesson: 개인/듀엣 상시접수 (체크박스가 있을 때만 포함)
+            const alwaysOpenEl = document.getElementById('pAlwaysOpenLesson');
+            if (alwaysOpenEl) data.always_open_lesson = alwaysOpenEl.checked;
+
             if (id) {
                 const activeEl = document.getElementById('pActive');
                 if (activeEl) data.is_active = activeEl.checked;

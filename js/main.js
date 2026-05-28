@@ -225,6 +225,16 @@ function handlePage1Submit(e) {
         }
     }
     
+    // 상시 접수 레슨: 강사 선택 여부 확인
+    const alwaysOpenLesson = selectedOption && selectedOption.dataset.alwaysOpenLesson === 'true';
+    const instructorSelect = document.getElementById('preferredInstructor');
+    const selectedInstructorId = (alwaysOpenLesson && instructorSelect) ? instructorSelect.value : null;
+    if (alwaysOpenLesson && !selectedInstructorId) {
+        alert('희망 강사를 선택해주세요.');
+        instructorSelect?.focus();
+        return;
+    }
+
     // Collect form data
     formData = {
         dong: document.getElementById('dong').value.trim(),
@@ -234,7 +244,8 @@ function handlePage1Submit(e) {
         lesson_type: lessonType,
         program_id: selectedOption ? (selectedOption.dataset.programId || null) : null,
         preferred_time: preferredTime,
-        agreement: document.getElementById('agreement').checked
+        agreement: document.getElementById('agreement').checked,
+        instructor_id: selectedInstructorId || null,
     };
     
     // Validation
@@ -284,6 +295,21 @@ function goToPage2() {
     document.getElementById('displayPhone').textContent = formData.phone;
     document.getElementById('displayLesson').textContent = formData.lesson_type;
     document.getElementById('displayTime').textContent  = formData.preferred_time;
+
+    // 강사 이름 표시 (상시 접수 레슨)
+    const displayInstructorWrap = document.getElementById('displayInstructorWrap');
+    if (displayInstructorWrap) {
+        if (formData.instructor_id) {
+            const instructorSelect = document.getElementById('preferredInstructor');
+            const selectedOpt = instructorSelect?.options[instructorSelect.selectedIndex];
+            const instructorName = selectedOpt ? selectedOpt.textContent : '';
+            displayInstructorWrap.style.display = 'block';
+            const el = document.getElementById('displayInstructor');
+            if (el) el.textContent = instructorName;
+        } else {
+            displayInstructorWrap.style.display = 'none';
+        }
+    }
     
     // Scroll to top first, then init signature pad
     // (page2가 display:block 된 직후 offsetWidth가 0일 수 있어 rAF로 지연)
@@ -414,7 +440,8 @@ async function submitContract() {
             signature_data: contractData.signature_image,  // 서버 필드명
             signature_date: contractData.signature_date,
             terms_agreement: contractData.terms_agreement,
-            agreement: contractData.terms_agreement
+            agreement: contractData.terms_agreement,
+            instructor_id: contractData.instructor_id || null  // 개인/듀엣 희망 강사
         };
         
         console.log('🚀 Sending POST request to: /api/applications');
@@ -678,6 +705,45 @@ async function loadTimeSlotStatus() {
     }
 }
 
+// 강사 목록 드롭다운 채우기 (API 조회, 결과 캐시)
+let _instructorCache = null; // { complexCode: [{id, name, phone, assigned_programs},...] }
+async function _fillInstructorOptions(selectEl, programId) {
+    selectEl.innerHTML = '<option value="">불러오는 중...</option>';
+    selectEl.disabled = true;
+    try {
+        const complexCode = complexContext.getComplexCode();
+        if (!_instructorCache || _instructorCache._code !== complexCode) {
+            const r = await fetch(`/api/instructors?complexCode=${complexCode}`);
+            const j = await r.json();
+            _instructorCache = { _code: complexCode, list: j.data || [] };
+        }
+        // assigned_programs 배열에 해당 programId가 포함된 강사만 필터
+        // (assigned_programs가 비어있거나 없는 강사는 전원 노출)
+        let list = _instructorCache.list;
+        if (programId) {
+            const filtered = list.filter(ins =>
+                !ins.assigned_programs ||
+                ins.assigned_programs.length === 0 ||
+                ins.assigned_programs.includes(programId)
+            );
+            if (filtered.length > 0) list = filtered;
+        }
+        selectEl.innerHTML = '<option value="">-- 강사를 선택해주세요 --</option>';
+        list.forEach(ins => {
+            const opt = document.createElement('option');
+            opt.value = ins.id;
+            opt.textContent = ins.name || ins.title || '이름 없음';
+            selectEl.appendChild(opt);
+        });
+        selectEl.disabled = false;
+        console.log(`✅ 강사 목록 ${list.length}명 로딩 완료`);
+    } catch (e) {
+        console.error('강사 목록 로딩 실패:', e);
+        selectEl.innerHTML = '<option value="">불러오기 실패 (새로고침 후 시도)</option>';
+        selectEl.disabled = false;
+    }
+}
+
 // Update time slot options based on selected program
 function updateTimeSlotOptions() {
     const lessonTypeSelect = document.getElementById('lessonType');
@@ -713,17 +779,40 @@ function updateTimeSlotOptions() {
     // 개인/듀엣 레슨인 경우
     if (isPersonalLesson) {
         console.log('✅ Personal lesson selected - showing custom time input');
-        
+
         // 드롭다운 숨기기
         timeSlotSelect.parentElement.style.display = 'none';
         timeSlotSelect.required = false;
-        
+
         // 자유 입력 표시
         customTimeGroup.style.display = 'block';
         customTimeInput.required = true;
-        
+
+        // 상시 접수(always_open_lesson)인 경우 강사 선택 드롭다운 표시
+        const alwaysOpen = selectedOption.dataset.alwaysOpenLesson === 'true';
+        const instructorGroup = document.getElementById('instructorGroup');
+        const instructorSelect = document.getElementById('preferredInstructor');
+        if (instructorGroup && instructorSelect) {
+            if (alwaysOpen) {
+                instructorGroup.style.display = 'block';
+                instructorSelect.required = true;
+                // 강사 목록 채우기 (캐시 우선)
+                _fillInstructorOptions(instructorSelect, selectedOption.dataset.programId);
+            } else {
+                instructorGroup.style.display = 'none';
+                instructorSelect.required = false;
+                instructorSelect.innerHTML = '<option value="">-- 강사를 선택해주세요 --</option>';
+            }
+        }
+
         return;
     }
+
+    // 그룹 수업: 강사 선택 드롭다운 숨기기
+    const instructorGroup = document.getElementById('instructorGroup');
+    const instructorSelect = document.getElementById('preferredInstructor');
+    if (instructorGroup) { instructorGroup.style.display = 'none'; }
+    if (instructorSelect) { instructorSelect.required = false; }
     
     // 그룹 수업인 경우
     console.log('✅ Group lesson selected - showing time slot dropdown');
@@ -2912,9 +3001,10 @@ function populateProgramOptions(programs, newApplyIsOpen = null) {
         option.dataset.price = program.price;
         option.dataset.scheduleDays = program.days || program.schedule_days;
         option.dataset.scheduleTimes = program.days || program.schedule_times;
-        option.dataset.isPersonalLesson = isPersonalLesson;
+        option.dataset.isPersonalLesson   = isPersonalLesson;
         option.dataset.availableTimeSlots = JSON.stringify(program.time_slots || program.available_time_slots || []);
-        option.dataset.isActive = isActive;
+        option.dataset.isActive           = isActive;
+        option.dataset.alwaysOpenLesson   = program.always_open_lesson ? 'true' : 'false';
 
         lessonTypeSelect.appendChild(option);
     });

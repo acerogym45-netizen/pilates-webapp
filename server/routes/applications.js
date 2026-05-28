@@ -9,6 +9,7 @@ const express = require('express');
 const router = express.Router();
 const { getSupabase, sbErr } = require('../db-supabase');
 const { triggerWaitingQueue, checkApplyTypeSetting } = require('../utils/waiting');
+const { sendLessonRequestSms } = require('../utils/sms');
 
 // ── 목록 조회 ────────────────────────────────────────────────
 router.get('/', async (req, res) => {
@@ -433,7 +434,8 @@ router.post('/', async (req, res) => {
         const {
             complex_id, dong, ho, name, phone, program_id, program_name, preferred_time,
             signature_name, signature_data, signature_date, agreement, terms_agreement, notes,
-            admin_bypass   // 관리자가 중복 차단을 우회하여 복수 프로그램 신청 시 true
+            admin_bypass,   // 관리자가 중복 차단을 우회하여 복수 프로그램 신청 시 true
+            instructor_id   // 개인/듀엣 레슨: 희망 강사 ID
         } = req.body;
 
         if (!complex_id || !dong || !ho || !name || !phone || !program_name) {
@@ -534,8 +536,34 @@ router.post('/', async (req, res) => {
             }
         }
 
+        // ── 개인/듀엣 레슨: always_open_lesson 상시 접수 분기 ──────────────────
+        // always_open_lesson=true 인 프로그램은 신청 기간 제한 없이 상시 대기 접수
+        // → 신청종류 체크(period check) 스킵, 강사에게 SMS 자동 발송
+        let isLessonAlwaysOpen = false;
+        let lessonProgram = null; // 이 블록에서 조회한 프로그램 정보 (SMS 발송에 재활용)
+
+        if (!admin_bypass && (program_id || program_name) && complex_id) {
+            if (program_id) {
+                const { data: lp } = await sb.from('programs')
+                    .select('id, name, type, always_open_lesson, complex_id, complexes(name, sms_sender, sms_enabled)')
+                    .eq('id', program_id).single();
+                lessonProgram = lp;
+            } else {
+                const { data: lps } = await sb.from('programs')
+                    .select('id, name, type, always_open_lesson, complex_id, complexes(name, sms_sender, sms_enabled)')
+                    .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
+                lessonProgram = lps?.[0] || null;
+            }
+            if (lessonProgram &&
+                (lessonProgram.type === 'personal' || lessonProgram.type === 'duet') &&
+                lessonProgram.always_open_lesson === true) {
+                isLessonAlwaysOpen = true;
+            }
+        }
+
         // ── 신청 종류 설정 체크 (complex_apply_settings) ─────────────────────
-        if (!admin_bypass && complex_id) {
+        // 상시 접수 레슨은 기간 체크 스킵
+        if (!admin_bypass && !isLessonAlwaysOpen && complex_id) {
             const applyCheck = await checkApplyTypeSetting(complex_id, 'new');
             if (!applyCheck.isEnabled) {
                 return res.status(400).json({ success: false, period_closed: true, error: applyCheck.message });
@@ -666,26 +694,82 @@ router.post('/', async (req, res) => {
             }
         }
 
+        // ── 개인/듀엣 상시접수: status 강제 대기 ────────────────────────────
+        if (isLessonAlwaysOpen) {
+            status    = 'waiting';
+            applyType = 'new';
+            waitingOrder = null; // 레슨 대기는 순번 없음 (강사 배정 기반)
+        }
+
+        const insertPayload = {
+            complex_id, dong, ho, name, phone,
+            program_id: program_id || null, program_name,
+            preferred_time: preferred_time || null,
+            status, waiting_order: waitingOrder,
+            apply_type: applyType,
+            signature_name: signature_name || '',
+            signature_data: signature_data || '',
+            signature_date: signature_date || '',
+            agreement: Boolean(agreement),
+            terms_agreement: Boolean(terms_agreement),
+            notes: notes || ''
+        };
+        // instructor_id: 컬럼이 없으면 무시되도록 undefined 대신 조건부 추가
+        if (instructor_id) insertPayload.instructor_id = instructor_id;
+
         const { data: created, error } = await sb
             .from('applications')
-            .insert({
-                complex_id, dong, ho, name, phone,
-                program_id: program_id || null, program_name,
-                preferred_time: preferred_time || null,
-                status, waiting_order: waitingOrder,
-                apply_type: applyType,
-                signature_name: signature_name || '',
-                signature_data: signature_data || '',
-                signature_date: signature_date || '',
-                agreement: Boolean(agreement),
-                terms_agreement: Boolean(terms_agreement),
-                notes: notes || ''
-            })
+            .insert(insertPayload)
             .select()
             .single();
 
         if (error) throw sbErr(error, 'POST /applications');
-        res.status(201).json({ success: true, data: created, status, waitingOrder });
+
+        // ── 개인/듀엣 상시접수: 강사에게 SMS 발송 ──────────────────────────
+        let smsSentAt = null;
+        if (isLessonAlwaysOpen && instructor_id && created) {
+            try {
+                const { data: instructor } = await sb
+                    .from('instructors')
+                    .select('name, phone')
+                    .eq('id', instructor_id)
+                    .single();
+
+                if (instructor?.phone) {
+                    const cx = lessonProgram?.complexes;
+                    const smsResult = await sendLessonRequestSms({
+                        instructorPhone: instructor.phone,
+                        instructorName:  instructor.name || '강사',
+                        applicantName:   name,
+                        applicantPhone:  phone,
+                        programName:     program_name || lessonProgram?.name || '',
+                        preferredTime:   preferred_time || '미입력',
+                        complexName:     cx?.name || '',
+                        applicationId:   created.id,
+                        confirmUrl:      null, // Phase 2에서 추가
+                        sender:          cx?.sms_sender || null,
+                        smsEnabled:      cx?.sms_enabled != null ? Boolean(cx.sms_enabled) : null
+                    });
+                    console.log('[레슨신청] 강사 SMS 발송 결과:', smsResult);
+                    if (smsResult.success) {
+                        smsSentAt = new Date().toISOString();
+                        // instructor_sms_sent_at 컬럼 업데이트 (있을 때만)
+                        await sb.from('applications')
+                            .update({ instructor_sms_sent_at: smsSentAt })
+                            .eq('id', created.id)
+                            .catch(() => {}); // 컬럼 없으면 무시
+                    }
+                }
+            } catch (smsErr) {
+                console.error('[레슨신청] SMS 발송 중 오류 (신청은 정상 완료):', smsErr.message);
+            }
+        }
+
+        res.status(201).json({
+            success: true, data: created, status, waitingOrder,
+            isLessonAlwaysOpen,
+            instructorSmsSent: !!smsSentAt
+        });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
