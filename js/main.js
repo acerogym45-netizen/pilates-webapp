@@ -2513,6 +2513,16 @@ async function submitCancellationMain() {
     const applicationId = selectedOpt.dataset.applicationId || null;
     const person = _cancelLookupResultMain.find(p => p.application_id === sel.value) || _cancelLookupResultMain[0] || {};
 
+    // ── 시간대 변경 안내 confirm ──────────────────────────────────────────
+    const confirmed = window.confirm(
+        '⚠️ 해지 신청 전 확인해 주세요\n\n' +
+        '시간대만 바꾸고 싶다면 해지 신청이 아닌\n' +
+        '「내 신청 취소·변경」 탭의 [시간대 변경] 버튼을 이용하세요.\n\n' +
+        '해지 신청은 즉시 승인되며 번복이 불가합니다.\n' +
+        '계속 진행하시겠습니까?'
+    );
+    if (!confirmed) return;
+
     const submitBtn = document.getElementById('cancelSubmitBtnMain');
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 신청 중...';
