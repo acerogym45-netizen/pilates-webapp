@@ -801,9 +801,8 @@ function updateTimeSlotOptions() {
             if (alwaysOpen) {
                 instructorGroup.style.display = 'block';
                 instructorSelect.required = true;
-                // 강사 목록 채우기 (캐시 우선) — 개인/듀엣 레슨은 필터 무시하고 전체 표시
-                const isProgramLesson = selectedOption.dataset.isPersonalLesson === 'true';
-                _fillInstructorOptions(instructorSelect, selectedOption.dataset.programId, isProgramLesson);
+                // 강사 목록 채우기 — alwaysOpen(개인/듀엣 상시접수)이면 필터 무시, 전체 강사 표시
+                _fillInstructorOptions(instructorSelect, selectedOption.dataset.programId, true);
             } else {
                 instructorGroup.style.display = 'none';
                 instructorSelect.required = false;
@@ -2978,7 +2977,10 @@ function populateProgramOptions(programs, newApplyIsOpen = null) {
         }
 
         // Check if it's 1:1 or 2:1 lesson
-        const isPersonalLesson = pName.includes('1:1') || pName.includes('2:1');
+        // type 컬럼(personal/duet) 우선, 없으면 프로그램명에서 판별 (하위호환)
+        const pType = program.type || program.program_type || '';
+        const isPersonalLesson = pType === 'personal' || pType === 'duet'
+            || pName.includes('1:1') || pName.includes('2:1') || pName.includes('개인') || pName.includes('듀엣');
 
         // Build display text
         let displayText = pName;
