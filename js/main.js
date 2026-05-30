@@ -707,7 +707,7 @@ async function loadTimeSlotStatus() {
 
 // 강사 목록 드롭다운 채우기 (API 조회, 결과 캐시)
 let _instructorCache = null; // { complexCode: [{id, name, phone, assigned_programs},...] }
-async function _fillInstructorOptions(selectEl, programId) {
+async function _fillInstructorOptions(selectEl, programId, isLesson) {
     selectEl.innerHTML = '<option value="">불러오는 중...</option>';
     selectEl.disabled = true;
     try {
@@ -717,12 +717,10 @@ async function _fillInstructorOptions(selectEl, programId) {
             const j = await r.json();
             _instructorCache = { _code: complexCode, list: j.data || [] };
         }
-        // assigned_programs 배열에 해당 programId가 포함된 강사만 필터
-        // assigned_programs 구조: 객체 배열 [{program_id, program_name, ...}]
-        //   또는 구형 문자열 배열 ["프로그램명", ...]
-        // 빈 배열이거나 없는 강사 → 모든 프로그램 담당 가능 → 항상 표시
         let list = _instructorCache.list;
-        if (programId) {
+        // 개인/듀엣 레슨은 assigned_programs 필터 무시 → 전체 강사 표시
+        // 그룹 프로그램만 assigned_programs 기반 필터 적용
+        if (programId && !isLesson) {
             const filtered = list.filter(ins => {
                 const ap = ins.assigned_programs;
                 if (!ap || ap.length === 0) return true; // 담당 미지정 → 전체 노출
@@ -803,8 +801,9 @@ function updateTimeSlotOptions() {
             if (alwaysOpen) {
                 instructorGroup.style.display = 'block';
                 instructorSelect.required = true;
-                // 강사 목록 채우기 (캐시 우선)
-                _fillInstructorOptions(instructorSelect, selectedOption.dataset.programId);
+                // 강사 목록 채우기 (캐시 우선) — 개인/듀엣 레슨은 필터 무시하고 전체 표시
+                const isProgramLesson = selectedOption.dataset.isPersonalLesson === 'true';
+                _fillInstructorOptions(instructorSelect, selectedOption.dataset.programId, isProgramLesson);
             } else {
                 instructorGroup.style.display = 'none';
                 instructorSelect.required = false;
