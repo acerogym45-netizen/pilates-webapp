@@ -1,16 +1,21 @@
 /**
- * Vercel Cron Job — 프로그램 자동 활성화/비활성화
+ * Vercel Cron Job — 프로그램 자동 활성화/비활성화 + DB 자동 백업
  *
- * 스케줄: 매일 UTC 00:00 (= KST 09:00)
+ * 스케줄: 매일 UTC 21:00 (= KST 06:00)
+ *   → vercel.json: "schedule": "0 21 * * *"
  *
  * schedule_mode 별 동작:
  *   auto        — 기존 22~26일 자동 Cron 적용
  *   always_on   — Cron 무시, 항상 is_active = true 유지
  *   always_off  — Cron 무시, 항상 is_active = false 유지
+ *
+ * 백업:
+ *   매일 KST 06:00 자동 실행, 30일 보관 (auto 라벨만 자동 삭제)
  */
 require('dotenv').config();
 
-const { getSupabase } = require('../server/db-supabase');
+const { getSupabase }    = require('../server/db-supabase');
+const { runBackup }      = require('../server/routes/backup');
 
 module.exports = async function handler(req, res) {
     if (req.method !== 'GET') {
@@ -32,34 +37,32 @@ module.exports = async function handler(req, res) {
         const hourKst = nowKst.getUTCHours();
         const monKst  = nowKst.getUTCMonth() + 1;
 
-        // 22일 09:00 ~ 26일 09:00 → 자동 모드 활성화 기간
+        // ── [1] 프로그램 자동 활성화/비활성화 ─────────────────────────
+        // 22일 09:00 KST ~ 26일 09:00 KST → 자동 모드 활성화 기간
         const isInPeriod =
             (dayKst === 22 && hourKst >= 9) ||
             (dayKst > 22 && dayKst < 26)   ||
             (dayKst === 26 && hourKst < 9);
 
-        const autoTarget = isInPeriod; // auto 모드 단지에 적용할 값
+        const autoTarget = isInPeriod;
 
         const sb = getSupabase();
 
-        // ── 단지 목록 + schedule_mode 조회 ───────────────────────────
         const { data: complexes, error: cxErr } = await sb
             .from('complexes')
             .select('id, name, schedule_mode');
         if (cxErr) throw cxErr;
 
-        const results = [];
+        const scheduleResults = [];
 
         for (const cx of complexes || []) {
             const mode = cx.schedule_mode || 'auto';
 
-            // always_on / always_off 는 Cron 무시
             if (mode === 'always_on' || mode === 'always_off') {
-                results.push({ complex: cx.name, mode, skipped: true });
+                scheduleResults.push({ complex: cx.name, mode, skipped: true });
                 continue;
             }
 
-            // auto 모드: 22~26일 스케줄에 따라 업데이트
             const { data, error } = await sb
                 .from('programs')
                 .update({ is_active: autoTarget })
@@ -68,27 +71,42 @@ module.exports = async function handler(req, res) {
                 .select('id');
 
             if (error) {
-                results.push({ complex: cx.name, mode, error: error.message });
+                scheduleResults.push({ complex: cx.name, mode, error: error.message });
             } else {
-                results.push({ complex: cx.name, mode, count: (data || []).length, is_active: autoTarget });
+                scheduleResults.push({ complex: cx.name, mode, count: (data || []).length, is_active: autoTarget });
             }
         }
 
-        const action = autoTarget ? '활성화' : '비활성화';
-        const autoCount = results.filter(r => !r.skipped && !r.error).reduce((s, r) => s + (r.count || 0), 0);
-        const skipCount = results.filter(r => r.skipped).length;
+        const action    = autoTarget ? '활성화' : '비활성화';
+        const autoCount = scheduleResults.filter(r => !r.skipped && !r.error).reduce((s, r) => s + (r.count || 0), 0);
+        const skipCount = scheduleResults.filter(r => r.skipped).length;
+        console.log(`[cron/schedule] ${monKst}월 ${dayKst}일 ${String(hourKst).padStart(2,'0')}:00 KST → auto ${action} ${autoCount}개 / always 스킵 ${skipCount}개`);
 
-        console.log(`[cron] ${monKst}월 ${dayKst}일 ${String(hourKst).padStart(2,'0')}:00 KST → auto ${action} ${autoCount}개 / always 스킵 ${skipCount}개`);
+        // ── [2] DB 자동 백업 ───────────────────────────────────────────
+        let backupResult = null;
+        try {
+            backupResult = await runBackup('auto', 'cron');
+            const totalRows = Object.values(backupResult.rowCounts).reduce((s, n) => s + n, 0);
+            const sizeMb    = ((backupResult.sizeBytes || 0) / 1024 / 1024).toFixed(2);
+            console.log(`[cron/backup] 완료 — ${totalRows}행 / ${sizeMb}MB / ${backupResult.snapshotDate}`);
+        } catch (backupErr) {
+            // 백업 실패해도 크론 전체를 실패 처리하지 않음
+            console.error('[cron/backup] 오류:', backupErr.message);
+            backupResult = { success: false, error: backupErr.message };
+        }
 
         return res.status(200).json({
             success: true,
-            action,
-            is_active: autoTarget,
             kst: `${monKst}월 ${dayKst}일 ${String(hourKst).padStart(2,'0')}:00 KST`,
-            isInPeriod,
-            autoCount,
-            skipCount,
-            results,
+            schedule: {
+                action,
+                is_active: autoTarget,
+                isInPeriod,
+                autoCount,
+                skipCount,
+                results: scheduleResults,
+            },
+            backup: backupResult,
         });
     } catch (e) {
         console.error('[cron] 오류:', e.message);

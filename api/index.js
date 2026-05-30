@@ -26,6 +26,7 @@ const applicationsRouter = require('../server/routes/applications');
 const miscRouter         = require('../server/routes/misc');
 const uploadRouter       = require('../server/routes/upload');
 const renewalRouter      = require('../server/routes/renewal');
+const backupRouter       = require('../server/routes/backup');
 
 const app = express();
 
@@ -137,6 +138,7 @@ app.use('/api/upload',       uploadRouter);       // ← 구체적 경로 먼저
 app.use('/api/complexes',    complexesRouter);
 app.use('/api/programs',     programsRouter);
 app.use('/api/applications', applicationsRouter);
+app.use('/api/backup',       backupRouter);       // ← DB 백업
 app.use('/api',              miscRouter);          // ← 와일드카드 마지막
 
 // ── 연장 라우터 (GET /renew/:token + POST /api/renewal/*) ─────────────────────
