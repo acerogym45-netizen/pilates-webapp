@@ -989,31 +989,11 @@ async function searchMyInquiries() {
     const phone4    = document.getElementById('myInqPhone4')?.value.trim();
     const resultEl  = document.getElementById('myInquiryResult');
 
-    // 유효성 검사
-    let hasError = false;
-    if (!dong) {
-        document.getElementById('myInqDong').style.borderColor = '#ef4444';
-        hasError = true;
-    }
-    if (!ho) {
-        document.getElementById('myInqHo').style.borderColor = '#ef4444';
-        hasError = true;
-    }
+    // 유효성 검사 — 전화번호 끝 4자리만 필수, 동·호수는 선택
     if (!phone4 || !/^\d{4}$/.test(phone4)) {
         document.getElementById('myInqPhone4').style.borderColor = '#ef4444';
-        if (!hasError) {
-            resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
-                <i class="fas fa-exclamation-circle"></i> 전화번호 끝 4자리를 숫자로 입력하세요.</p>`;
-        }
-        hasError = true;
-    }
-    if (hasError) {
-        if (dong && ho && phone4 && !/^\d{4}$/.test(phone4)) {
-            // 이미 위에서 처리됨
-        } else if (!dong || !ho) {
-            resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
-                <i class="fas fa-exclamation-circle"></i> 동·호수·전화번호 끝 4자리를 모두 입력해주세요.</p>`;
-        }
+        resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
+            <i class="fas fa-exclamation-circle"></i> 전화번호 끝 4자리를 숫자로 입력하세요.</p>`;
         return;
     }
 
@@ -1023,8 +1003,10 @@ async function searchMyInquiries() {
     try {
         const complexId   = complexContext?.getComplexId?.()   || '';
         const complexCode = complexContext?.getComplexCode?.() || '';
-        // 이름 없이 동+호수+전화번호 뒤4자리로 조회
-        const params = new URLSearchParams({ dong, ho, phoneLast4: phone4 });
+        // 전화번호 끝 4자리 필수, 동·호수는 입력된 경우에만 파라미터 추가
+        const params = new URLSearchParams({ phoneLast4: phone4 });
+        if (dong) params.set('dong', dong);
+        if (ho)   params.set('ho', ho);
         if (complexId)   params.set('complexId', complexId);
         if (complexCode) params.set('complexCode', complexCode);
 

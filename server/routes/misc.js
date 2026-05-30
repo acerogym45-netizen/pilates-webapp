@@ -175,14 +175,15 @@ router.post('/inquiries', async (req, res) => {
 
 /**
  * GET /api/inquiries/my
- * 본인 문의 조회 (비공개 포함) — 동·호수·전화번호 끝 4자리로 인증 (이름 불필요)
- * query: complexId, complexCode, dong, ho, phoneLast4
+ * 본인 문의 조회 (비공개 포함) — 전화번호 끝 4자리 필수, 동·호수는 선택(입력 시 추가 필터)
+ * query: complexId, complexCode, dong(선택), ho(선택), phoneLast4
  */
 router.get('/inquiries/my', async (req, res) => {
     try {
         const { complexId: rawComplexId, complexCode, dong, ho, phoneLast4 } = req.query;
-        if (!dong || !ho || !phoneLast4) {
-            return res.status(400).json({ success: false, error: '동·호수·전화번호 끝 4자리를 모두 입력하세요' });
+        // 전화번호 끝 4자리만 필수 — 동·호수는 선택사항
+        if (!phoneLast4) {
+            return res.status(400).json({ success: false, error: '전화번호 끝 4자리를 입력하세요' });
         }
         if (!/^\d{4}$/.test(phoneLast4.replace(/\D/g, ''))) {
             return res.status(400).json({ success: false, error: '전화번호 끝 4자리를 숫자 4개로 입력하세요' });
@@ -200,11 +201,10 @@ router.get('/inquiries/my', async (req, res) => {
             if (cx) resolvedComplexId = cx.id;
         }
 
-        // 동·호수로 모든 문의 조회 (phone은 별도 필터링)
-        // '113동', '113' 등 접미사 유무 무관하게 숫자 부분만 추출하여 비교하기 위해
-        // DB에서 범위를 넓게 가져온 후 클라이언트 필터링 적용
-        const dongNum = dong.replace(/[^0-9]/g, '');   // '113동' → '113'
-        const hoNum   = ho.replace(/[^0-9]/g, '');     // '1303호' → '1303'
+        // 전화번호 끝 4자리로 필터링 (필수), 동·호수는 입력된 경우에만 추가 필터링
+        // '113동', '113' 등 접미사 유무 무관하게 숫자 부분만 추출하여 비교
+        const dongNum = dong ? dong.replace(/[^0-9]/g, '') : '';   // '113동' → '113', 미입력 시 ''
+        const hoNum   = ho   ? ho.replace(/[^0-9]/g, '')   : '';   // '1303호' → '1303', 미입력 시 ''
 
         let query = sb
             .from('inquiries')
@@ -216,19 +216,28 @@ router.get('/inquiries/my', async (req, res) => {
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /inquiries/my');
 
-        // 전화번호 끝 4자리 + 동·호수 숫자 부분으로 필터링 (접미사 '동','호' 무관)
+        // 1단계: 전화번호 끝 4자리 필수 일치
+        // 2단계: 동이 입력된 경우에만 추가 필터
+        // 3단계: 호수가 입력된 경우에만 추가 필터
         const normalizedPhone4 = phoneLast4.replace(/\D/g, '');
         const result = (data || []).filter(r => {
-            const rDong = (r.dong || '').replace(/[^0-9]/g, '');
-            const rHo   = (r.ho   || '').replace(/[^0-9]/g, '');
             const phone4Match = r.phone && r.phone.replace(/\D/g, '').slice(-4) === normalizedPhone4;
-            return rDong === dongNum && rHo === hoNum && phone4Match;
+            if (!phone4Match) return false;
+            if (dongNum) {
+                const rDong = (r.dong || '').replace(/[^0-9]/g, '');
+                if (rDong !== dongNum) return false;
+            }
+            if (hoNum) {
+                const rHo = (r.ho || '').replace(/[^0-9]/g, '');
+                if (rHo !== hoNum) return false;
+            }
+            return true;
         });
 
         if (result.length === 0) {
             return res.status(404).json({
                 success: false,
-                error: '일치하는 문의 내역이 없습니다.\n동·호수·전화번호를 다시 확인해주세요.'
+                error: '일치하는 문의 내역이 없습니다.\n전화번호를 다시 확인해주세요.'
             });
         }
 
