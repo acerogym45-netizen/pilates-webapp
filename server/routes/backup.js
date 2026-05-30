@@ -17,20 +17,29 @@ const express = require('express');
 const router  = express.Router();
 const { getSupabase } = require('../db-supabase');
 
-// ── 백업 대상 테이블 목록 ────────────────────────────────────────────────────
-const BACKUP_TABLES = [
-    'applications',
-    'cancellations',
-    'programs',
-    'complexes',
-    'inquiries',
-    'instructors',
-    'notices',
-    'renewal_payments',
-    'complex_apply_settings',
-    'curricula',
-    'attendance_records',
+// ── 백업 대상 테이블 + 복구 메타 정보 ──────────────────────────────────────
+// restore_order: 복구 시 이 순서대로 덮어써야 외래키 오류가 안 남
+//   (부모 테이블 먼저 → 자식 테이블 나중)
+// pk: 각 테이블의 기본키 컬럼명 (복구 시 upsert 기준)
+// description: 사람이 읽기 쉬운 설명
+const BACKUP_TABLE_META = [
+    { name: 'complexes',             restore_order: 1,  pk: 'id',              description: '단지 정보' },
+    { name: 'programs',              restore_order: 2,  pk: 'id',              description: '수업 프로그램' },
+    { name: 'instructors',           restore_order: 3,  pk: 'id',              description: '강사 정보' },
+    { name: 'complex_apply_settings',restore_order: 4,  pk: 'id',              description: '접수 기간 설정' },
+    { name: 'curricula',             restore_order: 5,  pk: 'id',              description: '커리큘럼/시간표' },
+    { name: 'applications',          restore_order: 6,  pk: 'id',              description: '수강 신청 내역' },
+    { name: 'cancellations',         restore_order: 7,  pk: 'id',              description: '해지 신청 내역' },
+    { name: 'renewal_payments',      restore_order: 8,  pk: 'id',              description: '연장/결제 내역' },
+    { name: 'inquiries',             restore_order: 9,  pk: 'id',              description: '문의 내역' },
+    { name: 'notices',               restore_order: 10, pk: 'id',              description: '공지사항' },
+    { name: 'attendance_records',    restore_order: 11, pk: 'id',              description: '출결 기록' },
 ];
+
+const BACKUP_TABLES = BACKUP_TABLE_META.map(t => t.name);
+
+// 백업 파일 포맷 버전 — 구조가 바뀔 때마다 올림 (복구 시 버전 체크용)
+const BACKUP_FORMAT_VERSION = '1.0';
 
 // ── 핵심 백업 실행 함수 (cron.js에서도 require해서 사용) ─────────────────────
 async function runBackup(label = 'auto', createdBy = 'cron') {
@@ -152,19 +161,46 @@ router.get('/:id/download', async (req, res) => {
         const filename = `backup_${data.snapshot_date}_${data.label}.json`;
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-        res.send(JSON.stringify({
+
+        // ── 복구에 필요한 모든 정보를 포함한 정형화된 구조 ──────────────
+        const output = {
+            // ① 이 파일이 뭔지 식별하는 헤더
+            __pilates_backup__: true,
+            format_version    : BACKUP_FORMAT_VERSION,
+
+            // ② 언제 어떻게 만들어진 백업인지
             meta: {
-                snapshot_date  : data.snapshot_date,
-                snapshot_time  : data.snapshot_time,
-                label          : data.label,
-                tables_included: data.tables_included,
-                row_counts     : data.row_counts,
+                snapshot_date  : data.snapshot_date,       // KST 기준 날짜 (YYYY-MM-DD)
+                snapshot_time  : data.snapshot_time,       // 실제 백업 실행 시각 (UTC)
+                label          : data.label,               // 'auto' | 'manual' | 직접 입력한 메모
+                created_by     : data.created_by,          // 'cron' | 'admin'
+                exported_at    : new Date().toISOString(),  // 이 파일을 다운로드한 시각
                 size_bytes     : data.size_bytes,
-                created_by     : data.created_by,
-                exported_at    : new Date().toISOString(),
+                total_rows     : Object.values(data.row_counts || {}).reduce((s, n) => s + n, 0),
             },
-            data: data.data,
-        }, null, 2));
+
+            // ③ 테이블별 행 수 요약 (복구 전 내용 미리 파악용)
+            summary: BACKUP_TABLE_META.map(t => ({
+                table      : t.name,
+                description: t.description,
+                row_count  : (data.row_counts || {})[t.name] ?? 0,
+            })),
+
+            // ④ 복구 방법 안내 (이 파일만 있으면 복구 지시가 가능하도록)
+            restore_guide: {
+                how_to_restore : '이 파일을 그대로 저에게(AI)에게 전달하면 복구해드립니다.',
+                restore_order  : BACKUP_TABLE_META.map(t => `${t.restore_order}. ${t.name} (${t.description})`),
+                pk_columns     : Object.fromEntries(BACKUP_TABLE_META.map(t => [t.name, t.pk])),
+                caution        : '복구 시 해당 테이블의 현재 데이터가 백업 시점으로 덮어써집니다. 전체 복구가 아닌 특정 테이블만 복구도 가능합니다.',
+            },
+
+            // ⑤ 실제 데이터 (테이블명: [행 배열])
+            data: Object.fromEntries(
+                BACKUP_TABLE_META.map(t => [t.name, (data.data || {})[t.name] || []])
+            ),
+        };
+
+        res.send(JSON.stringify(output, null, 2));
     } catch (e) {
         console.error('[backup/download]', e.message);
         res.status(500).json({ success: false, error: e.message });
