@@ -10,7 +10,7 @@ const crypto  = require('crypto');
 const router  = express.Router();
 const { getSupabase, sbErr } = require('../db-supabase');
 const { triggerWaitingQueue, checkApplyTypeSetting } = require('../utils/waiting');
-const { sendLessonRequestSms } = require('../utils/sms');
+const { sendLessonRequestSms, sendPaymentPendingSms, sendApprovalConfirmedSms } = require('../utils/sms');
 
 // ── 목록 조회 ────────────────────────────────────────────────
 router.get('/', async (req, res) => {
@@ -579,19 +579,29 @@ router.post('/', async (req, res) => {
             }
         }
 
-        // ── 단지 설정 조회 (auto_approve, waiting_enabled, share_timeslot_capacity) ─
-        let complexSettings = { auto_approve: true, waiting_enabled: false, share_timeslot_capacity: false };
+        // ── 단지 설정 조회 (auto_approve, waiting_enabled, share_timeslot_capacity, payment_mode, 계좌정보) ─
+        let complexSettings = {
+            auto_approve: true, waiting_enabled: false, share_timeslot_capacity: false,
+            payment_mode: null,
+            renewal_account_bank: null, renewal_account_number: null, renewal_account_holder: null,
+            sms_sender: null, sms_enabled: null, name: null
+        };
         if (complex_id) {
             const { data: cxData } = await sb
                 .from('complexes')
-                .select('auto_approve, waiting_enabled, share_timeslot_capacity')
+                .select('auto_approve, waiting_enabled, share_timeslot_capacity, payment_mode, renewal_account_bank, renewal_account_number, renewal_account_holder, sms_sender, sms_enabled, name')
                 .eq('id', complex_id)
                 .single();
             if (cxData) complexSettings = cxData;
         }
 
         // 정원 확인 + 대기 처리
+        // 계좌이체/현금결제 단지는 payment_mode로 감지 — 입금 확인 전까지 강제 waiting
+        const PAYMENT_PENDING_MODES = ['bank_transfer', 'cash', 'direct'];
+        const isPaymentPending = PAYMENT_PENDING_MODES.includes(complexSettings.payment_mode);
         let status = complexSettings.auto_approve !== false ? 'approved' : 'received';
+        // 계좌이체/현금 단지는 auto_approve 여부와 무관하게 무조건 waiting으로 시작
+        if (isPaymentPending) status = 'waiting';
         let waitingOrder = null;
         let applyType = 'new';
 
@@ -734,6 +744,29 @@ router.post('/', async (req, res) => {
 
         if (error) throw sbErr(error, 'POST /applications');
 
+        // ── 계좌이체/현금결제: 입금 계좌 안내 SMS 발송 ────────────────────
+        let paymentSmsSent = false;
+        if (isPaymentPending && created) {
+            try {
+                const smsResult = await sendPaymentPendingSms({
+                    phone:          phone,
+                    name:           name,
+                    complexName:    complexSettings.name || '',
+                    programName:    program_name || '',
+                    accountBank:    complexSettings.renewal_account_bank    || '',
+                    accountNumber:  complexSettings.renewal_account_number  || '',
+                    accountHolder:  complexSettings.renewal_account_holder  || '',
+                    sender:         complexSettings.sms_sender || null,
+                    smsEnabled:     complexSettings.sms_enabled != null
+                                        ? Boolean(complexSettings.sms_enabled) : null,
+                });
+                console.log('[신규접수] 입금대기 SMS 발송 결과:', smsResult);
+                paymentSmsSent = smsResult.success;
+            } catch (smsErr) {
+                console.error('[신규접수] SMS 발송 중 오류 (신청은 정상 완료):', smsErr.message);
+            }
+        }
+
         // ── 개인/듀엣 상시접수: 강사에게 SMS 발송 ──────────────────────────
         let smsSentAt = null;
         if (isLessonAlwaysOpen && instructor_id && created) {
@@ -781,7 +814,8 @@ router.post('/', async (req, res) => {
         res.status(201).json({
             success: true, data: created, status, waitingOrder,
             isLessonAlwaysOpen,
-            instructorSmsSent: !!smsSentAt
+            instructorSmsSent: !!smsSentAt,
+            paymentSmsSent,
         });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -911,7 +945,45 @@ router.put('/:id', async (req, res) => {
             await promoteWaitingApplicant(sb, current.program_id, current.preferred_time);
         }
 
-        res.json({ success: true, data: updated });
+        // ── 계좌이체/현금결제 단지: waiting/received → approved 전환 시 승인 완료 SMS ──
+        let approvalSmsSent = false;
+        const isApprovalTransition =
+            status === 'approved' &&
+            current.status !== 'approved' &&
+            ['waiting', 'received'].includes(current.status);
+
+        if (isApprovalTransition && current.complex_id) {
+            try {
+                // 단지 SMS 설정 + 계좌 정보 조회
+                const { data: cxInfo } = await sb
+                    .from('complexes')
+                    .select('name, sms_sender, sms_enabled, payment_mode')
+                    .eq('id', current.complex_id)
+                    .single();
+
+                // payment_mode가 계좌이체/현금인 단지에서만 승인 SMS 발송
+                const PAYMENT_PENDING_MODES = ['bank_transfer', 'cash', 'direct'];
+                if (cxInfo && PAYMENT_PENDING_MODES.includes(cxInfo.payment_mode)) {
+                    const smsResult = await sendApprovalConfirmedSms({
+                        phone:       current.phone,
+                        name:        current.name,
+                        complexName: cxInfo.name || '',
+                        programName: updated.program_name || current.program_name || '',
+                        startDate:   updated.start_date  || current.start_date  || null,
+                        expiryDate:  updated.expiry_date || current.expiry_date || null,
+                        sender:      cxInfo.sms_sender || null,
+                        smsEnabled:  cxInfo.sms_enabled != null
+                                         ? Boolean(cxInfo.sms_enabled) : null,
+                    });
+                    console.log('[승인처리] 승인완료 SMS 발송 결과:', smsResult);
+                    approvalSmsSent = smsResult.success;
+                }
+            } catch (smsErr) {
+                console.error('[승인처리] SMS 발송 중 오류 (승인은 정상 완료):', smsErr.message);
+            }
+        }
+
+        res.json({ success: true, data: updated, approvalSmsSent });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
