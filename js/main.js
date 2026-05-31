@@ -3127,26 +3127,22 @@ async function loadCurriculum() {
         }
         
         const [year, month] = selectValue.split('-');
-        const complexId = complexContext.getComplexCode(); // ✅ UUID 대신 complex_code 사용
+        const complexCode = complexContext.getComplexCode();
         
-        console.log(`📅 Loading curriculum for ${year}-${month}, complex: ${complexId}`);
+        console.log(`📅 Loading curriculum for ${year}-${month}, complex: ${complexCode}`);
         
-        // /api/curricula 엔드포인트로 조회
-        const currParams = new URLSearchParams({ complexCode: complexId, limit: 100 });
+        // year, month 서버 필터링 — is_active 컬럼 없음, 클라이언트 필터 제거
+        const currParams = new URLSearchParams({ complexCode, year, month });
         const response = await fetch(`/api/curricula?${currParams}`);
         const result = await response.json();
         const curriculums = result.data || [];
         
         console.log(`✅ Fetched ${curriculums.length} total curriculums`);
         
-        // Filter by year, month, and active status
-        const targetCurriculum = curriculums.find(c => {
-            return c.year === parseInt(year) &&
-                c.month === parseInt(month) &&
-                c.is_active;
-        });
+        // 서버에서 이미 필터링됨 — 첫 번째 항목 사용
+        const targetCurriculum = curriculums[0] || null;
         
-        console.log('🎯 Target curriculum found:', targetCurriculum);
+        console.log('🎯 Target curriculum found:', targetCurriculum?.id ?? 'none');
         
         if (!targetCurriculum) {
             content.innerHTML = `
@@ -3169,9 +3165,9 @@ async function loadCurriculum() {
                          alt="커리큘럼 이미지" 
                          style="width: 100%; max-width: 600px; border-radius: 8px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
                 ` : ''}
-                ${targetCurriculum.description ? `
+                ${targetCurriculum.content ? `
                     <div style="color: #4a5568; line-height: 1.8;">
-                        ${targetCurriculum.description.replace(/\n/g, '<br>')}
+                        ${targetCurriculum.content.replace(/\n/g, '<br>')}
                     </div>
                 ` : ''}
             </div>
