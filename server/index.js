@@ -22,6 +22,7 @@ const applicationsRouter  = require('./routes/applications');
 const miscRouter          = require('./routes/misc');
 const uploadRouter        = require('./routes/upload');
 const renewalRouter       = require('./routes/renewal');
+const backupRouter        = require('./routes/backup');
 const { startCron }       = require('./cron');
 
 const app = express();
@@ -101,6 +102,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/api/complexes',    complexesRouter);
 app.use('/api/programs',     programsRouter);
 app.use('/api/applications', applicationsRouter);
+app.use('/api/backup',       backupRouter);
 app.use('/api',              miscRouter);
 app.use('/api/upload',       uploadRouter);
 // ── 연장 자동화 라우터 (GET /renew/:token 포함) ───────────────────────────────
