@@ -554,7 +554,7 @@ router.get('/lesson-confirm/:token', async (req, res) => {
 // POST /api/lesson/respond — 강사 일정조율 응답
 router.post('/api/lesson/respond', async (req, res) => {
     const sb = getSupabase();
-    const { token, action, scheduled_date, scheduled_time, scheduled_days, memo } = req.body;
+    const { token, action, scheduled_date, scheduled_end_date, scheduled_time, scheduled_days, memo } = req.body;
     // action: 'confirm' | 'reject'
 
     if (!token || !action) {
@@ -589,9 +589,17 @@ router.post('/api/lesson/respond', async (req, res) => {
         };
         if (action === 'confirm') {
             // notes에 일정 조율 결과 기록
-            const scheduleNote = `[강사 확정] 시작일: ${scheduled_date}, 시간: ${scheduled_time}${scheduled_days ? ', 요일: ' + scheduled_days : ''}${lesson_start_month ? ', 수강시작월: ' + lesson_start_month : ''}${memo ? ', 메모: ' + memo : ''}`;
+            const scheduleNote = `[강사 확정] 시작일: ${scheduled_date}${scheduled_end_date ? ', 예상종료일: ' + scheduled_end_date : ''}, 시간: ${scheduled_time}${scheduled_days ? ', 요일: ' + scheduled_days : ''}${lesson_start_month ? ', 수강시작월: ' + lesson_start_month : ''}${memo ? ', 메모: ' + memo : ''}`;
             updatePayload.preferred_time = scheduled_time;
             updatePayload.notes = scheduleNote;
+            // 레슨 시작일 저장 (start_date 컬럼)
+            if (scheduled_date) {
+                updatePayload.start_date = scheduled_date;
+            }
+            // 예상 종료일 저장 (expiry_date 컬럼)
+            if (scheduled_end_date) {
+                updatePayload.expiry_date = scheduled_end_date;
+            }
             // 레슨 시작월 저장 → 정산에서 금월신규 판별에 사용
             if (lesson_start_month && /^\d{4}-\d{2}$/.test(lesson_start_month)) {
                 updatePayload.lesson_start_month = lesson_start_month;
@@ -606,7 +614,19 @@ router.post('/api/lesson/respond', async (req, res) => {
             .update(updatePayload)
             .eq('id', app.id);
 
-        if (updErr) throw updErr;
+        if (updErr) {
+            // preferred_days 컬럼 없음으로 인한 오류일 경우 해당 필드 제거 후 재시도
+            if (updErr.message && updErr.message.includes('preferred_days')) {
+                delete updatePayload.preferred_days;
+                const { error: updErr2 } = await sb
+                    .from('applications')
+                    .update(updatePayload)
+                    .eq('id', app.id);
+                if (updErr2) throw updErr2;
+            } else {
+                throw updErr;
+            }
+        }
 
         console.log(`[lesson/respond] ${app.name} 신청 → ${newStatus} (강사 처리)`);
         return res.json({ success: true, status: newStatus });
@@ -732,6 +752,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <input type="date" id="scheduledDate" min="${new Date().toISOString().slice(0,10)}">
       </div>
       <div class="form-group">
+        <label>예상 종료일 <small style="color:#94a3b8">(선택 — 만료일로 자동 등록)</small></label>
+        <input type="date" id="scheduledEndDate" min="${new Date().toISOString().slice(0,10)}">
+      </div>
+      <div class="form-group">
         <label>수업 시간 <span style="color:#ef4444">*</span></label>
         <input type="time" id="scheduledTime">
       </div>
@@ -811,11 +835,12 @@ async function respond(action) {
   const payload = {
     token: '${escXml(token)}',
     action,
-    scheduled_date: document.getElementById('scheduledDate').value,
-    scheduled_time: document.getElementById('scheduledTime').value,
-    scheduled_days: document.getElementById('scheduledDays')?.value || '',
+    scheduled_date:     document.getElementById('scheduledDate').value,
+    scheduled_end_date: document.getElementById('scheduledEndDate')?.value || '',
+    scheduled_time:     document.getElementById('scheduledTime').value,
+    scheduled_days:     document.getElementById('scheduledDays')?.value || '',
     lesson_start_month: document.getElementById('lessonStartMonth')?.value || '',
-    memo: document.getElementById('memoField').value,
+    memo:               document.getElementById('memoField').value,
   };
 
   try {

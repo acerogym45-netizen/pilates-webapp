@@ -825,6 +825,22 @@ router.put('/:id', async (req, res) => {
         if (start_date  !== undefined)        updates.start_date  = start_date  || null;
         if (expiry_date !== undefined)        updates.expiry_date = expiry_date || null;
 
+        // ── program_name 변경 시 program_id도 자동 동기화 ────────────────────
+        // 관리자가 프로그램명을 수기로 변경할 때 program_id가 구 프로그램을 가리킨 채
+        // 남아있으면 program-summary 집계에서 해당 신청이 누락되는 버그 수정.
+        if (program_name !== undefined && program_name !== current.program_name) {
+            const { data: newProg } = await sb
+                .from('programs')
+                .select('id')
+                .eq('complex_id', current.complex_id)
+                .ilike('name', program_name)
+                .eq('is_active', true)
+                .limit(1)
+                .single();
+            // 새 프로그램을 찾으면 program_id 동기화, 못 찾으면 null로 초기화(이름만으로 집계)
+            updates.program_id = newProg?.id || null;
+        }
+
         // ── cancelled 직접 변경 방어 로직 ─────────────────────────────────────
         // applications 상태를 직접 cancelled로 바꾸려면 반드시 cancellations 테이블에
         // 해당 신청(application_id 또는 phone+complex_id 매칭)이 있어야 함.

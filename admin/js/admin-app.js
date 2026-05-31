@@ -274,7 +274,7 @@ function navigate(page) {
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
     document.getElementById('sidebar').classList.remove('open');
-    const pages = { dashboard, applications, cancellations, inquiries, notices, programs, instructors, curricula, timetables, complexes, mycomplex, settlement };
+    const pages = { dashboard, applications, cancellations, inquiries, notices, programs, instructors, curricula, timetables, complexes, mycomplex, settlement, backup };
     if (pages[page]) pages[page].render();
     return false;
 }

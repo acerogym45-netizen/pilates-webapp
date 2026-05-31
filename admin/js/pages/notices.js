@@ -1,7 +1,7 @@
 /** 공지사항 관리 — 다중 이미지 슬라이드 지원 */
 const notices = {
     data: [],
-    // 현재 편집 중인 이미지 URL 배열 (최대 5장)
+    // 현재 편집 중인 이미지 URL 배열 (최대 10장)
     _editImages: [],
 
     async render() {
@@ -78,7 +78,7 @@ const notices = {
             <!-- ── 다중 이미지 업로드 ── -->
             <div class="form-group">
                 <label>이미지 첨부
-                    <span style="font-size:.8rem;color:#999">(최대 5장 · JPG/PNG/GIF, 장당 5MB)</span>
+                    <span style="font-size:.8rem;color:#999">(최대 10장 · JPG/PNG/GIF, 장당 5MB)</span>
                 </label>
 
                 <!-- 이미지 썸네일 목록 -->
@@ -136,8 +136,8 @@ const notices = {
                 </div>
             </div>`).join('');
 
-        // 5장 초과 시 추가 버튼 숨김
-        if (addBtn) addBtn.style.display = this._editImages.length >= 5 ? 'none' : 'inline-block';
+        // 10장 초과 시 추가 버튼 숨김
+        if (addBtn) addBtn.style.display = this._editImages.length >= 10 ? 'none' : 'inline-block';
     },
 
     // ── 이미지 파일 선택 (multiple) ─────────────────────────
@@ -145,8 +145,8 @@ const notices = {
         const files = Array.from(input.files || []);
         if (!files.length) return;
 
-        const remain = 5 - this._editImages.length;
-        if (remain <= 0) { showToast('이미지는 최대 5장까지 추가할 수 있습니다', 'warning'); input.value = ''; return; }
+        const remain = 10 - this._editImages.length;
+        if (remain <= 0) { showToast('이미지는 최대 10장까지 추가할 수 있습니다', 'warning'); input.value = ''; return; }
 
         const toUpload = files.slice(0, remain);
         const statusEl = document.getElementById('noticeImageUploadStatus');

@@ -629,21 +629,30 @@ const instructors = {
     },
 };
 
+
 /** 커리큘럼 관리 */
 const curricula = {
     data: [],
+
+    /* ── 페이지 렌더 ── */
     async render() {
-        const now = new Date();
         document.getElementById('pageContent').innerHTML = `
             <div class="page-header">
                 <h2><i class="fas fa-calendar-alt"></i> 커리큘럼 관리</h2>
-                <button class="btn-primary btn-sm" onclick="curricula.showForm()">
-                    <i class="fas fa-plus"></i> 커리큘럼 등록
-                </button>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-secondary btn-sm" onclick="curricula.showAutoForm()">
+                        <i class="fas fa-magic"></i> 자동 생성
+                    </button>
+                    <button class="btn-primary btn-sm" onclick="curricula.showForm()">
+                        <i class="fas fa-plus"></i> 직접 등록
+                    </button>
+                </div>
             </div>
             <div id="curricList" class="data-list"><div class="loading-mini"><i class="fas fa-spinner fa-spin"></i></div></div>`;
         await this.load();
     },
+
+    /* ── 목록 로드 ── */
     async load() {
         try {
             const res = await API.curricula.list({ complexId: getEffectiveComplexId() });
@@ -667,109 +676,502 @@ const curricula = {
                 </div>
             </div>`).join('');
     },
-    showForm(id) {
-        const cu = id ? this.data.find(x => x.id === id) : null;
+
+    /* ══════════════════════════════════════════
+       자동 생성 폼 — 템플릿 기반 Canvas 이미지
+    ══════════════════════════════════════════ */
+    showAutoForm() {
         const now = new Date();
+        const DAYS = ['월요일','화요일','수요일','목요일','금요일'];
+        const mkRows = (prefix) => DAYS.map((d,i) => `
+            <div style="display:grid;grid-template-columns:72px 1fr;align-items:center;gap:6px;margin-bottom:5px;">
+                <span style="font-size:13px;font-weight:600;color:#334155;">${d}</span>
+                <input type="text" id="${prefix}_${i}" placeholder="예: 콤비리포머"
+                    style="padding:5px 9px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:100%;">
+            </div>`).join('');
+
         const body = `
+<style>
+.cu-tab-btn{padding:6px 16px;border:1px solid #d1d5db;border-radius:20px;font-size:13px;cursor:pointer;background:#f8fafc;color:#64748b;font-weight:600;transition:all .15s;}
+.cu-tab-btn.active{background:#0f3460;color:#fff;border-color:#0f3460;}
+</style>
+<div style="display:flex;gap:12px;margin-bottom:14px;">
+    <div class="form-group" style="flex:1"><label>년도</label><input type="number" id="cuAutoYear" value="${now.getFullYear()}" style="width:100%;"></div>
+    <div class="form-group" style="flex:1"><label>월</label><input type="number" id="cuAutoMonth" min="1" max="12" value="${now.getMonth()+1}" style="width:100%;"></div>
+</div>
+<div class="form-group" style="margin-bottom:14px;">
+    <label>템플릿 선택</label>
+    <div style="display:flex;gap:8px;">
+        <button class="cu-tab-btn active" onclick="curricula._selectTpl(this,'group')"><i class="fas fa-users"></i> 6:1 그룹</button>
+        <button class="cu-tab-btn" onclick="curricula._selectTpl(this,'personal')"><i class="fas fa-user"></i> 개인/듀엣</button>
+    </div>
+</div>
+<div id="tplGroup">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+            <div style="font-size:12px;font-weight:700;color:#0f3460;margin-bottom:8px;padding:3px 10px;background:#e8f0fe;border-radius:6px;">🔵 홀수 주</div>
+            ${mkRows('odd')}
+        </div>
+        <div>
+            <div style="font-size:12px;font-weight:700;color:#2e8b57;margin-bottom:8px;padding:3px 10px;background:#e8f8f0;border-radius:6px;">🟢 짝수 주</div>
+            ${mkRows('even')}
+        </div>
+    </div>
+</div>
+<div id="tplPersonal" style="display:none;">
+    <div class="form-group">
+        <label>수업 구성 설명</label>
+        <textarea id="personalDesc" rows="3" placeholder="예: 수강생과 강사가 1:1로 일정을 직접 조율합니다." style="width:100%;resize:vertical;"></textarea>
+    </div>
+</div>
+<button onclick="curricula._previewCanvas()" style="margin-top:12px;width:100%;padding:8px;background:#f1f5f9;border:1px dashed #94a3b8;border-radius:8px;font-size:13px;cursor:pointer;color:#475569;">
+    <i class="fas fa-eye"></i> 미리보기 생성
+</button>
+<div id="cuPreviewWrap" style="display:none;margin-top:12px;text-align:center;">
+    <canvas id="cuCanvas" style="max-width:100%;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.15);"></canvas>
+    <p style="font-size:12px;color:#94a3b8;margin-top:6px;">이 이미지로 커리큘럼이 등록됩니다</p>
+</div>`;
+
+        const footer = `
+            <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
+            <button class="btn-primary" id="cuAutoSaveBtn" onclick="curricula.saveAuto()"><i class="fas fa-magic"></i> 생성 및 저장</button>`;
+        openGlobalModal('커리큘럼 자동 생성', body, footer);
+        setTimeout(() => {
+            const box = document.querySelector('#globalModal .modal-box,#globalModal .modal-content,#globalModal [class*="modal-"]');
+            if (box) box.style.maxWidth = '680px';
+        }, 50);
+    },
+
+    _selectTpl(btn, type) {
+        document.querySelectorAll('.cu-tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tplGroup').style.display    = type === 'group'    ? '' : 'none';
+        document.getElementById('tplPersonal').style.display = type === 'personal' ? '' : 'none';
+    },
+
+    _previewCanvas() {
+        const isPersonal = document.getElementById('tplPersonal').style.display !== 'none';
+        const year  = document.getElementById('cuAutoYear').value;
+        const month = document.getElementById('cuAutoMonth').value;
+        isPersonal ? this._drawPersonal(year, month) : this._drawGroup(year, month);
+    },
+
+    /* ── 6:1 그룹 Canvas 이미지 (참조 템플릿 재현) ── */
+    _drawGroup(year, month) {
+        const DAYS = ['월요일','화요일','수요일','목요일','금요일'];
+        const oddVals  = DAYS.map((_,i) => document.getElementById(`odd_${i}`)?.value.trim()  || '—');
+        const evenVals = DAYS.map((_,i) => document.getElementById(`even_${i}`)?.value.trim() || '—');
+
+        const W = 1080, H = 1080;
+        const canvas = document.getElementById('cuCanvas');
+        canvas.width = W; canvas.height = H;
+        const ctx = canvas.getContext('2d');
+
+        /* ── 1. 배경: 딥그린 + 중앙 radial spotlight ── */
+        ctx.fillStyle = '#0a2219'; ctx.fillRect(0,0,W,H);
+        // 중앙 상단 부드러운 초록 spotlight
+        const gSpot = ctx.createRadialGradient(W/2, 350, 30, W/2, 350, 560);
+        gSpot.addColorStop(0,'rgba(20,80,45,0.55)');
+        gSpot.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = gSpot; ctx.fillRect(0,0,W,H);
+
+        /* ── 2. 외곽 골드 이중 테두리 ── */
+        ctx.strokeStyle='rgba(203,177,123,0.55)'; ctx.lineWidth=2.5; ctx.strokeRect(22,22,W-44,H-44);
+        ctx.strokeStyle='rgba(203,177,123,0.22)'; ctx.lineWidth=1;   ctx.strokeRect(32,32,W-64,H-64);
+
+        ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+
+        /* ── 3. PILATES STUDIO (상단 캡션) ── */
+        ctx.letterSpacing = '8px';
+        ctx.fillStyle='#cbb17b'; ctx.font='500 22px Georgia,serif';
+        ctx.fillText('PILATES STUDIO', W/2, 82);
+        ctx.letterSpacing = '0px';
+
+        /* ── 4. 메인 타이틀 골드 그라데이션 ── */
+        const tGrad = ctx.createLinearGradient(0, 100, 0, 180);
+        tGrad.addColorStop(0,'#f5e090'); tGrad.addColorStop(0.5,'#e8c85a'); tGrad.addColorStop(1,'#c9a030');
+        ctx.fillStyle = tGrad; ctx.font = 'bold 68px sans-serif';
+        ctx.fillText('6:1 그룹 기구필라테스 커리큘럼', W/2, 172);
+
+        /* ── 5. 골드 수평선 + 다이아몬드 ── */
+        const lineY = 194;
+        ctx.strokeStyle='rgba(203,177,123,0.55)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(100,lineY); ctx.lineTo(W/2-18,lineY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(W/2+18,lineY); ctx.lineTo(W-100,lineY); ctx.stroke();
+        // 다이아몬드
+        ctx.fillStyle='#cbb17b';
+        ctx.beginPath();
+        ctx.moveTo(W/2,lineY-8); ctx.lineTo(W/2+10,lineY); ctx.lineTo(W/2,lineY+8); ctx.lineTo(W/2-10,lineY); ctx.closePath();
+        ctx.fill();
+
+        /* ── 6. 부제 ── */
+        ctx.fillStyle='rgba(220,240,225,0.75)'; ctx.font='300 24px sans-serif';
+        ctx.fillText('체계적인 커리큘럼으로 안전하고 효과적인 운동을 경험하세요.', W/2, 232);
+
+        /* ── 7. 연·월 배지 ── */
+        ctx.fillStyle='rgba(203,177,123,0.12)';
+        _cuRoundRect(ctx, W/2-70, 244, 140, 30, 15); ctx.fill();
+        ctx.strokeStyle='rgba(203,177,123,0.35)'; ctx.lineWidth=1;
+        _cuRoundRect(ctx, W/2-70, 244, 140, 30, 15); ctx.stroke();
+        ctx.fillStyle='#cbb17b'; ctx.font='500 16px sans-serif';
+        ctx.fillText(`${year}년 ${month}월`, W/2, 263);
+
+        /* ── 8. 테이블 ── */
+        const tblY=292, rowH=62, colW=200;
+        const oddX=50, evenX=W/2+30;
+        const GAP=20; // 배지 아래 공간
+
+        const drawTable = (sx, label, vals, isEven) => {
+            const centerX = sx + colW;          // 테이블 중심 X
+            const tblW    = colW * 2;
+
+            // 배지
+            ctx.font='bold 22px sans-serif';
+            const lw = ctx.measureText(label).width + 48;
+            const lx = centerX - lw/2;
+            const bY = tblY - GAP - 36;
+            if (isEven) {
+                ctx.fillStyle = '#cbb17b';
+            } else {
+                ctx.fillStyle = 'rgba(203,177,123,0)';
+                ctx.strokeStyle = '#cbb17b'; ctx.lineWidth = 1.5;
+            }
+            _cuRoundRect(ctx, lx, bY, lw, 34, 17);
+            if (isEven) { ctx.fill(); ctx.fillStyle='#1a3828'; }
+            else        { ctx.fill(); ctx.stroke(); ctx.fillStyle='#cbb17b'; }
+            ctx.fillText(label, centerX, bY+23);
+
+            // 헤더 행 (골드 배경)
+            const hdrBg = isEven
+                ? ctx.createLinearGradient(sx, tblY, sx, tblY+rowH)
+                : null;
+            if (hdrBg) {
+                hdrBg.addColorStop(0,'rgba(203,177,123,0.55)');
+                hdrBg.addColorStop(1,'rgba(175,148,88,0.45)');
+                ctx.fillStyle = hdrBg;
+            } else {
+                ctx.fillStyle = 'rgba(203,177,123,0.15)';
+            }
+            _cuRoundRect(ctx, sx, tblY, tblW, rowH, [6,6,0,0]); ctx.fill();
+            ctx.strokeStyle='rgba(203,177,123,0.5)'; ctx.lineWidth=1;
+            ctx.strokeRect(sx, tblY, tblW, rowH);
+            // 세로 구분선 (헤더)
+            ctx.beginPath(); ctx.moveTo(sx+colW, tblY); ctx.lineTo(sx+colW, tblY+rowH); ctx.stroke();
+            ctx.fillStyle = isEven ? '#1a3828' : '#cbb17b';
+            ctx.font='bold 22px sans-serif';
+            ctx.fillText('요일', sx+colW/2, tblY+rowH*0.65);
+            ctx.fillText('수업',  sx+colW*1.5, tblY+rowH*0.65);
+
+            // 데이터 행
+            vals.forEach((v,i) => {
+                const ry = tblY + rowH*(i+1);
+                ctx.fillStyle = 'rgba(255,255,255,0.03)';
+                ctx.fillRect(sx, ry, tblW, rowH);
+                ctx.strokeStyle='rgba(203,177,123,0.22)'; ctx.lineWidth=0.8;
+                ctx.strokeRect(sx, ry, tblW, rowH);
+                ctx.beginPath(); ctx.moveTo(sx+colW,ry); ctx.lineTo(sx+colW,ry+rowH); ctx.stroke();
+                ctx.fillStyle='rgba(220,235,225,0.88)'; ctx.font='400 21px sans-serif';
+                ctx.fillText(DAYS[i], sx+colW/2, ry+rowH*0.65);
+                ctx.fillStyle='#f0d870'; ctx.font='bold 22px sans-serif';
+                ctx.fillText(v, sx+colW*1.5, ry+rowH*0.65);
+            });
+
+            // 테이블 외곽 라운드 테두리
+            ctx.strokeStyle='rgba(203,177,123,0.55)'; ctx.lineWidth=1.5;
+            _cuRoundRect(ctx, sx, tblY, tblW, rowH*(vals.length+1), [6,6,6,6]); ctx.stroke();
+        };
+
+        drawTable(oddX,  '홀수주', oddVals,  false);
+        drawTable(evenX, '짝수주', evenVals, true);
+
+        /* ── 9. 하단 구분선 ── */
+        const botSectionY = tblY + rowH*6 + 18;
+        ctx.strokeStyle='rgba(203,177,123,0.25)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(40, botSectionY); ctx.lineTo(W-40, botSectionY); ctx.stroke();
+
+        /* ── 10. 기구 일러스트 (Combo Reformer 좌 / Chair 우) ── */
+        const drawEquipment = (cx, label, subLabel, isReformer) => {
+            const ey = botSectionY + 18;
+            const eH  = H - ey - 60;
+
+            // spotlight 원
+            const rGlow = ctx.createRadialGradient(cx, ey+eH*0.6, 10, cx, ey+eH*0.6, eH*0.55);
+            rGlow.addColorStop(0,'rgba(30,90,55,0.45)');
+            rGlow.addColorStop(1,'rgba(0,0,0,0)');
+            ctx.fillStyle=rGlow; ctx.fillRect(cx-eH*0.6, ey, eH*1.2, eH);
+
+            // 기구 실루엣 (단순 기하 도형으로 표현)
+            ctx.save();
+            ctx.translate(cx, ey + eH*0.52);
+
+            if (isReformer) {
+                // 콤비리포머 단순 실루엣
+                const sc = eH * 0.0034;
+                ctx.scale(sc, sc);
+                ctx.fillStyle='rgba(203,177,123,0.35)';
+                // 레일 바디
+                _cuRoundRect(ctx, -200, -20, 400, 40, 8); ctx.fill();
+                // 다리 4개
+                [[-160,-20],[-100,-20],[100,-20],[160,-20]].forEach(([lx])=>{
+                    ctx.fillRect(lx-8, 20, 16, 60);
+                });
+                // 숄더블록
+                ctx.fillStyle='rgba(203,177,123,0.5)';
+                _cuRoundRect(ctx, 140, -55, 60, 35, 6); ctx.fill();
+                // 캐리지
+                ctx.fillStyle='rgba(203,177,123,0.25)';
+                _cuRoundRect(ctx, -80, -55, 130, 40, 5); ctx.fill();
+                ctx.strokeStyle='rgba(203,177,123,0.6)'; ctx.lineWidth=4;
+                _cuRoundRect(ctx, -200, -20, 400, 40, 8); ctx.stroke();
+            } else {
+                // 체어 단순 실루엣
+                const sc = eH * 0.003;
+                ctx.scale(sc, sc);
+                ctx.fillStyle='rgba(203,177,123,0.35)';
+                // 시트
+                _cuRoundRect(ctx, -90, -80, 180, 40, 6); ctx.fill();
+                // 몸통
+                _cuRoundRect(ctx, -70, -40, 140, 80, 4); ctx.fill();
+                // 다리 4개
+                [[-60, 40],[60, 40]].forEach(([lx,ly])=>{
+                    ctx.fillRect(lx-8, ly, 16, 55);
+                });
+                // 핸들 (폴)
+                ctx.fillStyle='rgba(203,177,123,0.55)';
+                ctx.fillRect(-8, -160, 16, 80);
+                ctx.fillRect(-30, -175, 60, 16);
+                ctx.strokeStyle='rgba(203,177,123,0.6)'; ctx.lineWidth=4;
+                _cuRoundRect(ctx, -90, -80, 180, 40, 6); ctx.stroke();
+            }
+            ctx.restore();
+
+            // 기구 이름 (이탤릭 골드)
+            ctx.fillStyle='#d4b870'; ctx.font='italic bold 26px Georgia,serif';
+            ctx.fillText(label, cx, ey+eH*0.88);
+            // 설명 텍스트
+            ctx.fillStyle='rgba(200,220,210,0.65)'; ctx.font='300 18px sans-serif';
+            ctx.fillText(subLabel, cx, ey+eH*0.97);
+        };
+
+        drawEquipment(W*0.25, 'Combo Reformer', '전신을 조화롭게 단련하는 대표 기구', true);
+        drawEquipment(W*0.75, 'Chair',           '코어 강화와 균형 향상에 효과적인 기구', false);
+
+        /* ── 11. 중앙 S 방패 로고 ── */
+        const logoX = W/2, logoY2 = botSectionY + 30;
+        const lSz = 52;
+        // 방패 형태
+        ctx.fillStyle='rgba(203,177,123,0.15)';
+        ctx.beginPath();
+        ctx.moveTo(logoX, logoY2+lSz*1.3);
+        ctx.lineTo(logoX-lSz*0.8, logoY2+lSz*0.6);
+        ctx.lineTo(logoX-lSz*0.8, logoY2-lSz*0.15);
+        ctx.arcTo(logoX-lSz*0.8, logoY2-lSz*0.5, logoX, logoY2-lSz*0.5, lSz*0.4);
+        ctx.arcTo(logoX+lSz*0.8, logoY2-lSz*0.5, logoX+lSz*0.8, logoY2-lSz*0.15, lSz*0.4);
+        ctx.lineTo(logoX+lSz*0.8, logoY2+lSz*0.6);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle='rgba(203,177,123,0.7)'; ctx.lineWidth=1.5;
+        ctx.stroke();
+        // S 텍스트
+        ctx.fillStyle='#d4b870'; ctx.font='bold 44px Georgia,serif';
+        ctx.fillText('S', logoX, logoY2+lSz*0.55);
+
+        document.getElementById('cuPreviewWrap').style.display='';
+    },
+
+    /* ── 개인/듀엣 Canvas 이미지 ── */
+    _drawPersonal(year, month) {
+        const desc = document.getElementById('personalDesc')?.value.trim() || '수강생과 강사가 직접 일정을 조율합니다.';
+        const W=1080, H=720;
+        const canvas = document.getElementById('cuCanvas');
+        canvas.width=W; canvas.height=H;
+        const ctx=canvas.getContext('2d');
+
+        const bg=ctx.createLinearGradient(0,0,0,H);
+        bg.addColorStop(0,'#0d1f3c'); bg.addColorStop(1,'#061228');
+        ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+        ctx.strokeStyle='rgba(226,185,110,0.3)'; ctx.lineWidth=2; ctx.strokeRect(20,20,W-40,H-40);
+        ctx.textAlign='center';
+
+        ctx.fillStyle='#c9a84c'; ctx.font='600 22px Georgia,serif';
+        ctx.fillText('PILATES STUDIO', W/2, 70);
+        ctx.fillStyle='#f0d080'; ctx.font='bold 56px sans-serif';
+        ctx.fillText('개인 / 듀엣 레슨', W/2, 150);
+        ctx.fillStyle='rgba(255,255,255,0.6)'; ctx.font='300 22px sans-serif';
+        ctx.fillText('상시 접수 · 강사와 1:1 일정 조율', W/2, 192);
+
+        ctx.strokeStyle='rgba(226,185,110,0.45)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(180,216); ctx.lineTo(W-180,216); ctx.stroke();
+
+        ctx.fillStyle='rgba(255,255,255,0.82)'; ctx.font='400 24px sans-serif';
+        const lines=_cuWrapText(ctx,desc,W-180); let ly=256;
+        lines.forEach(l=>{ ctx.fillText(l,W/2,ly); ly+=40; });
+
+        const boxY=Math.max(ly+20,360);
+        const items=[['개인 레슨 (1:1)','440,000원 / 월'],['듀엣 레슨 (2:1)','280,000원 / 월']];
+        items.forEach((it,i)=>{
+            const bx=W/2-280+i*300, by=boxY;
+            ctx.fillStyle='rgba(226,185,110,0.12)';
+            _cuRoundRect(ctx,bx,by,260,90,12); ctx.fill();
+            ctx.strokeStyle='rgba(226,185,110,0.4)'; ctx.lineWidth=1;
+            _cuRoundRect(ctx,bx,by,260,90,12); ctx.stroke();
+            ctx.fillStyle='#e2b96e'; ctx.font='bold 21px sans-serif';
+            ctx.fillText(it[0],bx+130,by+34);
+            ctx.fillStyle='#f0d080'; ctx.font='bold 27px sans-serif';
+            ctx.fillText(it[1],bx+130,by+66);
+        });
+
+        ctx.fillStyle='rgba(255,255,255,0.2)'; ctx.font='300 17px sans-serif';
+        ctx.fillText(`${year}년 ${month}월`,W/2,H-26);
+        document.getElementById('cuPreviewWrap').style.display='';
+    },
+
+    /* ── Canvas → 업로드 → DB 저장 ── */
+    async saveAuto() {
+        const btn = document.getElementById('cuAutoSaveBtn');
+        if (btn) { btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> 저장 중...'; }
+        try {
+            if (!document.getElementById('cuPreviewWrap') || document.getElementById('cuPreviewWrap').style.display==='none') {
+                this._previewCanvas();
+                await new Promise(r=>setTimeout(r,100));
+            }
+            const canvas = document.getElementById('cuCanvas');
+            if (!canvas) throw new Error('캔버스 없음');
+            const year  = parseInt(document.getElementById('cuAutoYear').value);
+            const month = parseInt(document.getElementById('cuAutoMonth').value);
+            const blob  = await new Promise(r=>canvas.toBlob(r,'image/jpeg',0.92));
+            const file  = new File([blob],`curriculum_${year}_${month}.jpg`,{type:'image/jpeg'});
+            const fd=new FormData(); fd.append('image',file);
+            const upRes = await fetch(window.location.origin+'/api/upload/image',{method:'POST',body:fd});
+            const upJson= await upRes.json();
+            if (!upRes.ok||!upJson.success) throw new Error(upJson.error||'이미지 업로드 실패');
+
+            const isPersonal = document.getElementById('tplPersonal').style.display!=='none';
+            const DAYS=['월요일','화요일','수요일','목요일','금요일'];
+            const title = isPersonal
+                ? `${year}년 ${month}월 개인/듀엣 레슨 커리큘럼`
+                : `${year}년 ${month}월 6:1 그룹 기구필라테스 커리큘럼`;
+            let content='';
+            if (!isPersonal) {
+                content='【홀수주】\n'+DAYS.map((d,i)=>`${d}: ${document.getElementById(`odd_${i}`)?.value||''}`).join('\n')
+                       +'\n\n【짝수주】\n'+DAYS.map((d,i)=>`${d}: ${document.getElementById(`even_${i}`)?.value||''}`).join('\n');
+            } else {
+                content=document.getElementById('personalDesc')?.value||'';
+            }
+
+            const payload={year,month,title,content,image_url:upJson.url};
+            const complexId=getEffectiveComplexId();
+            const doSave=async(cxId)=>{
+                await API.curricula.create({complex_id:cxId,...payload});
+                closeGlobalModal();
+                showToast('커리큘럼이 생성되었습니다 ✨');
+                await curricula.load();
+            };
+            if (!complexId){ pickComplexForCreate(doSave); if(btn){btn.disabled=false;btn.innerHTML='<i class="fas fa-magic"></i> 생성 및 저장';} return; }
+            await doSave(complexId);
+        } catch(e) {
+            console.error('[curricula] saveAuto 오류:',e);
+            if(btn){btn.disabled=false;btn.innerHTML='<i class="fas fa-magic"></i> 생성 및 저장';}
+            showToast('저장 실패: '+e.message,'error');
+        }
+    },
+
+    /* ══════════════════════════
+       직접 등록 / 수정 폼
+    ══════════════════════════ */
+    showForm(id) {
+        const cu = id ? this.data.find(x=>x.id===id) : null;
+        const now = new Date();
+        const body=`
             <div class="form-row">
                 <div class="form-group"><label>년도</label><input type="number" id="cuYear" value="${cu?.year||now.getFullYear()}"></div>
                 <div class="form-group"><label>월</label><input type="number" id="cuMonth" min="1" max="12" value="${cu?.month||(now.getMonth()+1)}"></div>
             </div>
-            <div class="form-group"><label>제목</label><input type="text" id="cuTitle" value="${cu ? escHtml(cu.title||'') : ''}"></div>
-            <div class="form-group"><label>내용</label><textarea id="cuContent" rows="5">${cu ? escHtml(cu.content||'') : ''}</textarea></div>
+            <div class="form-group"><label>제목</label><input type="text" id="cuTitle" value="${cu?escHtml(cu.title||''):''}"></div>
+            <div class="form-group"><label>내용</label><textarea id="cuContent" rows="4">${cu?escHtml(cu.content||''):''}</textarea></div>
             <div class="form-group">
                 <label>이미지 URL</label>
-                <input type="text" id="cuImage" value="${cu ? escHtml(cu.image_url||'') : ''}" placeholder="https://...">
+                <input type="text" id="cuImage" value="${cu?escHtml(cu.image_url||''):''}" placeholder="https://...">
                 <small>또는 파일 업로드:</small>
                 <input type="file" id="cuImageFile" accept="image/*">
             </div>`;
-        const footer = `
+        const footer=`
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
             <button class="btn-primary" onclick="curricula.save('${id||''}')"><i class="fas fa-save"></i> 저장</button>`;
-        openGlobalModal(cu ? '커리큘럼 수정' : '커리큘럼 등록', body, footer);
+        openGlobalModal(cu?'커리큘럼 수정':'커리큘럼 직접 등록',body,footer);
     },
     async save(id) {
-        // 저장 버튼 로딩 표시
-        const saveBtn = document.querySelector('#globalModal .btn-primary');
-        if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 저장 중...'; }
-
-        let imageUrl = document.getElementById('cuImage').value.trim();
-        const fileInput = document.getElementById('cuImageFile');
-
-        // 파일 업로드 처리 (Canvas 리사이즈 → JPEG → FormData)
-        if (fileInput && fileInput.files && fileInput.files[0]) {
-            try {
-                const origFile = fileInput.files[0];
-                const blob = await instructors._resizeImage(origFile);
-                const uploadFile = blob
-                    ? new File([blob], 'image.jpg', { type: 'image/jpeg' })
-                    : origFile;
-                const formData = new FormData();
-                formData.append('image', uploadFile);
-                const uploadUrl = window.location.origin + '/api/upload/image';
-                const res = await fetch(uploadUrl, { method: 'POST', body: formData });
-                const result = await res.json().catch(() => ({ success: false, error: 'HTTP ' + res.status }));
-                if (res.ok && result.success && result.url) {
-                    imageUrl = result.url;
-                } else {
-                    throw new Error(result.error || 'HTTP ' + res.status);
-                }
-            } catch(e) {
-                console.error('[curricula] 이미지 업로드 실패:', e);
-                if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
-                showToast('이미지 업로드 실패: ' + e.message, 'error');
-                return;
+        const saveBtn=document.querySelector('#globalModal .btn-primary');
+        if(saveBtn){saveBtn.disabled=true;saveBtn.innerHTML='<i class="fas fa-spinner fa-spin"></i> 저장 중...';}
+        let imageUrl=document.getElementById('cuImage').value.trim();
+        const fileInput=document.getElementById('cuImageFile');
+        if(fileInput&&fileInput.files&&fileInput.files[0]){
+            try{
+                const origFile=fileInput.files[0];
+                const blob=await instructors._resizeImage(origFile);
+                const uploadFile=blob?new File([blob],'image.jpg',{type:'image/jpeg'}):origFile;
+                const fd=new FormData();fd.append('image',uploadFile);
+                const res=await fetch(window.location.origin+'/api/upload/image',{method:'POST',body:fd});
+                const result=await res.json().catch(()=>({success:false,error:'HTTP '+res.status}));
+                if(res.ok&&result.success&&result.url){imageUrl=result.url;}
+                else throw new Error(result.error||'HTTP '+res.status);
+            }catch(e){
+                if(saveBtn){saveBtn.disabled=false;saveBtn.innerHTML='<i class="fas fa-save"></i> 저장';}
+                showToast('이미지 업로드 실패: '+e.message,'error'); return;
             }
         }
-
-        try {
-            const formData = {
-                year: parseInt(document.getElementById('cuYear').value),
-                month: parseInt(document.getElementById('cuMonth').value),
-                title: document.getElementById('cuTitle').value,
-                content: document.getElementById('cuContent').value,
-                image_url: imageUrl
+        try{
+            const formData={
+                year:parseInt(document.getElementById('cuYear').value),
+                month:parseInt(document.getElementById('cuMonth').value),
+                title:document.getElementById('cuTitle').value,
+                content:document.getElementById('cuContent').value,
+                image_url:imageUrl
             };
-
-            if (id) {
-                // 수정: PUT /curricula/:id
-                await API.curricula.update(id, formData);
-                closeGlobalModal();
-                showToast('저장되었습니다');
-                await this.load();
-            } else {
-                // 신규: complex_id 필요
-                const complexId = getEffectiveComplexId();
-                if (!complexId) {
-                    pickComplexForCreate(async (cxId) => {
-                        try {
-                            await API.curricula.create({ complex_id: cxId, ...formData });
-                            closeGlobalModal();
-                            showToast('저장되었습니다');
-                            await curricula.load();
-                        } catch(e) { showToast('저장 실패: ' + e.message, 'error'); }
+            if(id){
+                await API.curricula.update(id,formData);
+                closeGlobalModal();showToast('저장되었습니다');await this.load();
+            }else{
+                const complexId=getEffectiveComplexId();
+                if(!complexId){
+                    pickComplexForCreate(async(cxId)=>{
+                        try{await API.curricula.create({complex_id:cxId,...formData});closeGlobalModal();showToast('저장되었습니다');await curricula.load();}
+                        catch(e){showToast('저장 실패: '+e.message,'error');}
                     });
-                    if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
+                    if(saveBtn){saveBtn.disabled=false;saveBtn.innerHTML='<i class="fas fa-save"></i> 저장';}
                     return;
                 }
-                await API.curricula.create({ complex_id: complexId, ...formData });
-                closeGlobalModal();
-                showToast('저장되었습니다');
-                await this.load();
+                await API.curricula.create({complex_id:complexId,...formData});
+                closeGlobalModal();showToast('저장되었습니다');await this.load();
             }
-        } catch(e) {
-            console.error('[curricula] save 오류:', e);
-            if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
-            showToast('저장 실패: ' + e.message, 'error');
+        }catch(e){
+            if(saveBtn){saveBtn.disabled=false;saveBtn.innerHTML='<i class="fas fa-save"></i> 저장';}
+            showToast('저장 실패: '+e.message,'error');
         }
     },
-    deleteItem(id) {
-        showConfirm('삭제 확인', '커리큘럼을 삭제하시겠습니까?', async () => {
-            try { await API.curricula.delete(id); showToast('삭제되었습니다'); await this.load(); }
-            catch(e) { showToast('삭제 실패: ' + e.message, 'error'); }
+    deleteItem(id){
+        showConfirm('삭제 확인','커리큘럼을 삭제하시겠습니까?',async()=>{
+            try{await API.curricula.delete(id);showToast('삭제되었습니다');await this.load();}
+            catch(e){showToast('삭제 실패: '+e.message,'error');}
         });
     }
 };
+
+/* ── Canvas 전역 유틸 ── */
+// r: 단일 숫자 또는 [tl,tr,br,bl] 배열
+function _cuRoundRect(ctx,x,y,w,h,r){
+    const [tl,tr,br,bl] = Array.isArray(r) ? r : [r,r,r,r];
+    ctx.beginPath();
+    ctx.moveTo(x+tl,y); ctx.lineTo(x+w-tr,y); ctx.arcTo(x+w,y,x+w,y+tr,tr);
+    ctx.lineTo(x+w,y+h-br); ctx.arcTo(x+w,y+h,x+w-br,y+h,br);
+    ctx.lineTo(x+bl,y+h); ctx.arcTo(x,y+h,x,y+h-bl,bl);
+    ctx.lineTo(x,y+tl); ctx.arcTo(x,y,x+tl,y,tl);
+    ctx.closePath();
+}
+function _cuWrapText(ctx,text,maxW){
+    const words=text.split(' ');const lines=[];let cur='';
+    for(const w of words){const t=cur?cur+' '+w:w;if(ctx.measureText(t).width>maxW){if(cur)lines.push(cur);cur=w;}else cur=t;}
+    if(cur)lines.push(cur);return lines;
+}
 
 /** 시간표 관리 */
 const timetables = {

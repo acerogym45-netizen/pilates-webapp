@@ -707,7 +707,7 @@ async function loadTimeSlotStatus() {
 
 // 강사 목록 드롭다운 채우기 (API 조회, 결과 캐시)
 let _instructorCache = null; // { complexCode: [{id, name, phone, assigned_programs},...] }
-async function _fillInstructorOptions(selectEl, programId) {
+async function _fillInstructorOptions(selectEl, programId, isLesson) {
     selectEl.innerHTML = '<option value="">불러오는 중...</option>';
     selectEl.disabled = true;
     try {
@@ -717,12 +717,10 @@ async function _fillInstructorOptions(selectEl, programId) {
             const j = await r.json();
             _instructorCache = { _code: complexCode, list: j.data || [] };
         }
-        // assigned_programs 배열에 해당 programId가 포함된 강사만 필터
-        // assigned_programs 구조: 객체 배열 [{program_id, program_name, ...}]
-        //   또는 구형 문자열 배열 ["프로그램명", ...]
-        // 빈 배열이거나 없는 강사 → 모든 프로그램 담당 가능 → 항상 표시
         let list = _instructorCache.list;
-        if (programId) {
+        // 개인/듀엣 레슨은 assigned_programs 필터 무시 → 전체 강사 표시
+        // 그룹 프로그램만 assigned_programs 기반 필터 적용
+        if (programId && !isLesson) {
             const filtered = list.filter(ins => {
                 const ap = ins.assigned_programs;
                 if (!ap || ap.length === 0) return true; // 담당 미지정 → 전체 노출
@@ -803,8 +801,8 @@ function updateTimeSlotOptions() {
             if (alwaysOpen) {
                 instructorGroup.style.display = 'block';
                 instructorSelect.required = true;
-                // 강사 목록 채우기 (캐시 우선)
-                _fillInstructorOptions(instructorSelect, selectedOption.dataset.programId);
+                // 강사 목록 채우기 — alwaysOpen(개인/듀엣 상시접수)이면 필터 무시, 전체 강사 표시
+                _fillInstructorOptions(instructorSelect, selectedOption.dataset.programId, true);
             } else {
                 instructorGroup.style.display = 'none';
                 instructorSelect.required = false;
@@ -989,31 +987,11 @@ async function searchMyInquiries() {
     const phone4    = document.getElementById('myInqPhone4')?.value.trim();
     const resultEl  = document.getElementById('myInquiryResult');
 
-    // 유효성 검사
-    let hasError = false;
-    if (!dong) {
-        document.getElementById('myInqDong').style.borderColor = '#ef4444';
-        hasError = true;
-    }
-    if (!ho) {
-        document.getElementById('myInqHo').style.borderColor = '#ef4444';
-        hasError = true;
-    }
+    // 유효성 검사 — 전화번호 끝 4자리만 필수, 동·호수는 선택
     if (!phone4 || !/^\d{4}$/.test(phone4)) {
         document.getElementById('myInqPhone4').style.borderColor = '#ef4444';
-        if (!hasError) {
-            resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
-                <i class="fas fa-exclamation-circle"></i> 전화번호 끝 4자리를 숫자로 입력하세요.</p>`;
-        }
-        hasError = true;
-    }
-    if (hasError) {
-        if (dong && ho && phone4 && !/^\d{4}$/.test(phone4)) {
-            // 이미 위에서 처리됨
-        } else if (!dong || !ho) {
-            resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
-                <i class="fas fa-exclamation-circle"></i> 동·호수·전화번호 끝 4자리를 모두 입력해주세요.</p>`;
-        }
+        resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
+            <i class="fas fa-exclamation-circle"></i> 전화번호 끝 4자리를 숫자로 입력하세요.</p>`;
         return;
     }
 
@@ -1023,8 +1001,10 @@ async function searchMyInquiries() {
     try {
         const complexId   = complexContext?.getComplexId?.()   || '';
         const complexCode = complexContext?.getComplexCode?.() || '';
-        // 이름 없이 동+호수+전화번호 뒤4자리로 조회
-        const params = new URLSearchParams({ dong, ho, phoneLast4: phone4 });
+        // 전화번호 끝 4자리 필수, 동·호수는 입력된 경우에만 파라미터 추가
+        const params = new URLSearchParams({ phoneLast4: phone4 });
+        if (dong) params.set('dong', dong);
+        if (ho)   params.set('ho', ho);
         if (complexId)   params.set('complexId', complexId);
         if (complexCode) params.set('complexCode', complexCode);
 
@@ -2997,7 +2977,10 @@ function populateProgramOptions(programs, newApplyIsOpen = null) {
         }
 
         // Check if it's 1:1 or 2:1 lesson
-        const isPersonalLesson = pName.includes('1:1') || pName.includes('2:1');
+        // type 컬럼(personal/duet) 우선, 없으면 프로그램명에서 판별 (하위호환)
+        const pType = program.type || program.program_type || '';
+        const isPersonalLesson = pType === 'personal' || pType === 'duet'
+            || pName.includes('1:1') || pName.includes('2:1') || pName.includes('개인') || pName.includes('듀엣');
 
         // Build display text
         let displayText = pName;
