@@ -16,10 +16,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         // URL에서 단지 코드 읽기
         const params = new URLSearchParams(window.location.search);
-        const complexCode = params.get('complex') || 'apt-demo';
+        let complexCode = params.get('complex') || '';
 
         // 단지 정보 로드
-        const res = await API.complexes.getByCode(complexCode);
+        let res;
+        if (complexCode) {
+            res = await API.complexes.getByCode(complexCode);
+        } else {
+            // complex 파라미터 없으면 첫 번째 활성 단지 자동 선택
+            const listRes = await fetch('/api/complexes');
+            const listData = await listRes.json();
+            const firstActive = (listData.data || []).find(c => c.is_active);
+            if (!firstActive) throw new Error('등록된 단지가 없습니다.');
+            res = { data: firstActive };
+        }
         State.complex = res.data;
 
         // 브랜딩 적용
