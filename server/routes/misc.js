@@ -454,15 +454,36 @@ router.post('/curricula', async (req, res) => {
         if (!complex_id || !year || !month) return res.status(400).json({ success: false, error: '필수 항목 누락' });
         const sb = getSupabase();
 
-        // 동일 월 존재 시 업데이트 (upsert)
-        const { data, error } = await sb
+        const yr = parseInt(year);
+        const mo = parseInt(month);
+
+        // 동일 월 존재 여부 확인 후 INSERT / UPDATE 분기
+        const { data: existing } = await sb
             .from('curricula')
-            .upsert(
-                { complex_id, year: parseInt(year), month: parseInt(month), title: title || '', content: content || '', image_url: image_url || '' },
-                { onConflict: 'complex_id,year,month', ignoreDuplicates: false }
-            )
-            .select()
-            .single();
+            .select('id')
+            .eq('complex_id', complex_id)
+            .eq('year', yr)
+            .eq('month', mo)
+            .maybeSingle();
+
+        let data, error;
+        if (existing) {
+            // 이미 존재 → UPDATE
+            ({ data, error } = await sb
+                .from('curricula')
+                .update({ title: title || '', content: content || '', image_url: image_url || '' })
+                .eq('id', existing.id)
+                .select()
+                .single());
+        } else {
+            // 신규 → INSERT
+            ({ data, error } = await sb
+                .from('curricula')
+                .insert({ complex_id, year: yr, month: mo, title: title || '', content: content || '', image_url: image_url || '' })
+                .select()
+                .single());
+        }
+
         if (error) throw sbErr(error, 'POST /curricula');
         res.status(201).json({ success: true, data });
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
