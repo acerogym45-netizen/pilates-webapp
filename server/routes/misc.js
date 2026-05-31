@@ -431,16 +431,26 @@ router.get('/curricula', async (req, res) => {
         const { complexCode, complexId, year, month } = req.query;
         const sb = getSupabase();
 
+        // complexCode가 오면 complexes 테이블에서 UUID 조회
+        let resolvedComplexId = complexId || null;
+        if (complexCode && !resolvedComplexId) {
+            const { data: cx } = await sb
+                .from('complexes')
+                .select('id')
+                .eq('code', complexCode)
+                .maybeSingle();
+            resolvedComplexId = cx ? cx.id : null;
+        }
+
         let query = sb
             .from('curricula')
-            .select('*, complexes!inner(code)')
+            .select('*')
             .order('year', { ascending: false })
             .order('month', { ascending: false });
 
-        if (complexCode) query = query.eq('complexes.code', complexCode);
-        if (complexId)   query = query.eq('complex_id', complexId);
-        if (year)        query = query.eq('year', parseInt(year));
-        if (month)       query = query.eq('month', parseInt(month));
+        if (resolvedComplexId) query = query.eq('complex_id', resolvedComplexId);
+        if (year)              query = query.eq('year', parseInt(year));
+        if (month)             query = query.eq('month', parseInt(month));
 
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /curricula');

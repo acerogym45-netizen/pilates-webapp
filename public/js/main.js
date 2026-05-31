@@ -1457,28 +1457,23 @@ async function loadCurriculum() {
         }
         
         const [year, month] = selectValue.split('-');
-        const complexId = complexContext.getComplexCode(); // ✅ UUID 대신 complex_code 사용
+        const complexCode = complexContext.getComplexCode(); // URL 파라미터 기반 단지 코드
         
-        console.log(`📅 Loading curriculum for ${year}-${month}, complex: ${complexId}`);
+        console.log(`📅 Loading curriculum for ${year}-${month}, complex: ${complexCode}`);
         
-        // Fetch curriculums
-        const response = await fetch('tables/curriculums?limit=100');
+        // /api/curricula 엔드포인트 — complexCode + year + month 서버 필터링
+        const response = await fetch(
+            `/api/curricula?complexCode=${encodeURIComponent(complexCode)}&year=${year}&month=${month}`
+        );
         const result = await response.json();
         const curriculums = result.data || [];
         
         console.log(`✅ Fetched ${curriculums.length} total curriculums`);
-        console.log('🔍 All curriculums:', curriculums);
         
-        // Filter by complex, year, month, and active status
-        const targetCurriculum = curriculums.find(c => {
-            console.log(`Checking curriculum: complex=${c.complex_id}, year=${c.year}, month=${c.month}, active=${c.is_active}`);
-            return c.complex_id === complexId &&
-                c.year === parseInt(year) &&
-                c.month === parseInt(month) &&
-                c.is_active;
-        });
+        // 이미 서버에서 필터됐으므로 첫 번째 항목 사용
+        const targetCurriculum = curriculums[0] || null;
         
-        console.log('🎯 Target curriculum found:', targetCurriculum);
+        console.log('🎯 Target curriculum found:', targetCurriculum?.id ?? 'none');
         
         if (!targetCurriculum) {
             content.innerHTML = `
@@ -1501,9 +1496,9 @@ async function loadCurriculum() {
                          alt="커리큘럼 이미지" 
                          style="width: 100%; max-width: 600px; border-radius: 8px; margin-bottom: 20px; display: block; margin-left: auto; margin-right: auto;">
                 ` : ''}
-                ${targetCurriculum.description ? `
+                ${targetCurriculum.content ? `
                     <div style="color: #4a5568; line-height: 1.8;">
-                        ${targetCurriculum.description.replace(/\n/g, '<br>')}
+                        ${targetCurriculum.content.replace(/\n/g, '<br>')}
                     </div>
                 ` : ''}
             </div>
