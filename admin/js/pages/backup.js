@@ -48,7 +48,7 @@ const backup = (() => {
 
     // ── 렌더 ─────────────────────────────────────────────────────────────────
     function render() {
-        const main = document.getElementById('mainContent');
+        const main = document.getElementById('pageContent');
         main.innerHTML = `
         <div class="page-header">
             <h2 class="page-title"><i class="fas fa-database"></i> DB 백업 관리</h2>
