@@ -294,12 +294,131 @@ async function sendLessonRequestSms({
     }
 }
 
+/**
+ * 계좌이체/현금결제 신규 접수 대기 안내 SMS — 입주민에게 발송
+ * 신규 접수 직후 입금 계좌번호와 함께 대기 안내
+ *
+ * @param {Object} p
+ * @param {string} p.phone          - 수신 전화번호 (신청자)
+ * @param {string} p.name           - 신청자 이름
+ * @param {string} p.complexName    - 단지명
+ * @param {string} p.programName    - 프로그램명
+ * @param {string} p.accountBank    - 입금 은행명 (예: 국민은행)
+ * @param {string} p.accountNumber  - 계좌번호
+ * @param {string} p.accountHolder  - 예금주
+ * @param {string} p.sender         - 발신번호 (단지 DB)
+ * @param {boolean} p.smsEnabled    - 단지 SMS 활성 여부
+ */
+async function sendPaymentPendingSms({
+    phone, name, complexName, programName,
+    accountBank, accountNumber, accountHolder,
+    sender, smsEnabled
+}) {
+    if (!isSmsEnabled()) return { success: false, skipped: true, reason: 'SMS 전역 비활성화' };
+    if (smsEnabled === false) return { success: false, skipped: true, reason: '해당 단지 SMS 비활성화' };
+
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return { success: false, error: '유효하지 않은 전화번호' };
+
+    const service = getSolapiService();
+    if (!service) return { success: false, error: '솔라피 서비스 초기화 실패' };
+
+    const fromNumber = (sender && sender.trim()) || process.env.SOLAPI_SENDER;
+    if (!fromNumber) return { success: false, error: '발신번호가 설정되지 않았습니다' };
+
+    const complex = complexName ? `[${complexName}] ` : '';
+    const accountLine = (accountBank && accountNumber)
+        ? `\n\n▶ 입금 계좌 안내\n은행: ${accountBank}\n계좌: ${accountNumber}\n예금주: ${accountHolder || ''}`
+        : '';
+
+    const text = `${complex}${name}님, 신청이 접수되었습니다.\n\n` +
+        `■ 프로그램: ${programName || ''}\n` +
+        `■ 처리 상태: 입금 확인 대기 중${accountLine}\n\n` +
+        `입금 확인 후 관리자가 수강 승인 처리를 진행합니다.\n` +
+        `승인 완료 시 안내 문자가 발송됩니다.`;
+
+    try {
+        console.log(`[SMS][입금대기] 발송 시도: ${normalizedPhone} (${name})`);
+        const result = await service.send({ to: normalizedPhone, from: fromNumber, text });
+        const failed = result?.failedMessageList?.length || 0;
+        if (failed > 0) {
+            const reason = result.failedMessageList[0]?.reason || '알 수 없는 오류';
+            console.error(`[SMS][입금대기] 발송 실패: ${reason}`);
+            return { success: false, error: reason };
+        }
+        console.log(`[SMS][입금대기] 발송 성공: groupId=${result?.groupInfo?.id || 'sent'}`);
+        return { success: true, messageId: result?.groupInfo?.id || 'sent' };
+    } catch (err) {
+        console.error('[SMS][입금대기] 발송 실패:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * 관리자 승인 완료 안내 SMS — 입주민에게 발송
+ * 관리자가 입금 확인 후 approved 처리 시 수강 기간 안내
+ *
+ * @param {Object} p
+ * @param {string} p.phone          - 수신 전화번호 (신청자)
+ * @param {string} p.name           - 신청자 이름
+ * @param {string} p.complexName    - 단지명
+ * @param {string} p.programName    - 프로그램명
+ * @param {string} p.startDate      - 수강 시작일 (YYYY-MM-DD, 선택)
+ * @param {string} p.expiryDate     - 수강 만료일 (YYYY-MM-DD, 선택)
+ * @param {string} p.sender         - 발신번호 (단지 DB)
+ * @param {boolean} p.smsEnabled    - 단지 SMS 활성 여부
+ */
+async function sendApprovalConfirmedSms({
+    phone, name, complexName, programName,
+    startDate, expiryDate,
+    sender, smsEnabled
+}) {
+    if (!isSmsEnabled()) return { success: false, skipped: true, reason: 'SMS 전역 비활성화' };
+    if (smsEnabled === false) return { success: false, skipped: true, reason: '해당 단지 SMS 비활성화' };
+
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return { success: false, error: '유효하지 않은 전화번호' };
+
+    const service = getSolapiService();
+    if (!service) return { success: false, error: '솔라피 서비스 초기화 실패' };
+
+    const fromNumber = (sender && sender.trim()) || process.env.SOLAPI_SENDER;
+    if (!fromNumber) return { success: false, error: '발신번호가 설정되지 않았습니다' };
+
+    const complex = complexName ? `[${complexName}] ` : '';
+    const periodLine = (startDate && expiryDate)
+        ? `\n\n■ 수강 기간: ${startDate} ~ ${expiryDate}`
+        : (expiryDate ? `\n\n■ 수강 만료일: ${expiryDate}` : '');
+
+    const text = `${complex}${name}님, 수강 신청이 승인되었습니다. ✅\n\n` +
+        `■ 프로그램: ${programName || ''}${periodLine}\n\n` +
+        `즐거운 수업 되세요!`;
+
+    try {
+        console.log(`[SMS][승인완료] 발송 시도: ${normalizedPhone} (${name})`);
+        const result = await service.send({ to: normalizedPhone, from: fromNumber, text });
+        const failed = result?.failedMessageList?.length || 0;
+        if (failed > 0) {
+            const reason = result.failedMessageList[0]?.reason || '알 수 없는 오류';
+            console.error(`[SMS][승인완료] 발송 실패: ${reason}`);
+            return { success: false, error: reason };
+        }
+        console.log(`[SMS][승인완료] 발송 성공: groupId=${result?.groupInfo?.id || 'sent'}`);
+        return { success: true, messageId: result?.groupInfo?.id || 'sent' };
+    } catch (err) {
+        console.error('[SMS][승인완료] 발송 실패:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
 module.exports = {
     sendInquiryAnswerSms,
     sendRenewalNoticeSms,
     sendRenewalConfirmedSms,
     sendRenewalExpiredSms,
     sendLessonRequestSms,
+    sendPaymentPendingSms,
+    sendApprovalConfirmedSms,
     isSmsEnabled,
     isSmsConfigured,
     getSmsStatus,
