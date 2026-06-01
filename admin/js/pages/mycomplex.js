@@ -495,6 +495,47 @@ const mycomplex = {
                 </div>
             </div>
 
+            <!-- 해지 신청 탭 설정 카드 -->
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <i class="fas fa-file-signature"></i> 해지 신청 기능 설정
+                </div>
+                <div class="settings-card-body">
+                    <p style="font-size:.875rem;color:#666;margin-bottom:16px;line-height:1.6">
+                        <i class="fas fa-info-circle" style="color:#3498db"></i>
+                        입주민 페이지의 <strong>해지 신청</strong> 퀵액션 버튼 표시 여부를 설정합니다.<br>
+                        끄면 버튼이 사라지고 해지 신청을 받지 않습니다.
+                    </p>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8f9fa;border-radius:10px;border:1px solid #e9ecef">
+                        <div>
+                            <div style="font-weight:600;font-size:.95rem;color:#2c3e50">
+                                <i class="fas fa-file-signature" style="color:#e74c3c;margin-right:6px"></i>
+                                해지 신청 버튼
+                            </div>
+                            <div style="font-size:.8rem;color:#888;margin-top:3px">
+                                입주민 페이지 퀵액션에 해지 신청 버튼 표시
+                            </div>
+                        </div>
+                        <label style="position:relative;display:inline-block;width:52px;height:28px;cursor:pointer;flex-shrink:0">
+                            <input type="checkbox" id="showCancelTabToggle"
+                                   ${cx.show_cancel_tab !== false ? 'checked' : ''}
+                                   style="opacity:0;width:0;height:0"
+                                   onchange="mycomplex._saveCancelTabSetting(this.checked)">
+                            <span style="position:absolute;inset:0;background:${cx.show_cancel_tab !== false ? '#10b981' : '#ccc'};border-radius:28px;transition:.3s"
+                                  id="showCancelTabTrack">
+                                <span style="position:absolute;top:3px;left:${cx.show_cancel_tab !== false ? '27px' : '3px'};width:22px;height:22px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2)"
+                                      id="showCancelTabThumb"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <p id="cancelTabSettingHint" style="margin-top:10px;font-size:.8rem;color:${cx.show_cancel_tab !== false ? '#10b981' : '#e74c3c'}">
+                        ${cx.show_cancel_tab !== false
+                            ? '<i class="fas fa-check-circle"></i> 해지 신청 버튼이 표시됩니다'
+                            : '<i class="fas fa-eye-slash"></i> 해지 신청 버튼이 숨겨집니다'}
+                    </p>
+                </div>
+            </div>
+
             <!-- SMS 알림 설정 카드 -->
             <div class="settings-card" id="smsSettingsCard">
                 <div class="settings-card-header">
@@ -658,6 +699,36 @@ const mycomplex = {
         } catch(e) {
             // 실패 시 토글 되돌리기
             const toggle = document.getElementById('showInquiryToggle');
+            if (toggle) toggle.checked = !checked;
+            if (track) track.style.background = !checked ? '#10b981' : '#ccc';
+            if (thumb) thumb.style.left = !checked ? '27px' : '3px';
+            showToast('저장 실패: ' + e.message, 'error');
+        }
+    },
+
+    async _saveCancelTabSetting(checked) {
+        // 토글 UI 즉시 반영
+        const track = document.getElementById('showCancelTabTrack');
+        const thumb = document.getElementById('showCancelTabThumb');
+        const hint  = document.getElementById('cancelTabSettingHint');
+        if (track) track.style.background = checked ? '#10b981' : '#ccc';
+        if (thumb) thumb.style.left = checked ? '27px' : '3px';
+        if (hint) {
+            hint.style.color = checked ? '#10b981' : '#e74c3c';
+            hint.innerHTML = checked
+                ? '<i class="fas fa-check-circle"></i> 해지 신청 버튼이 표시됩니다'
+                : '<i class="fas fa-eye-slash"></i> 해지 신청 버튼이 숨겨집니다';
+        }
+
+        try {
+            // 비밀번호 불필요한 flags 전용 PATCH 엔드포인트 사용
+            const res = await API.complexes.patchFlags(Admin.complex.id, { show_cancel_tab: checked });
+            Admin.complex = res.data;
+            sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
+            showToast(checked ? '해지 신청 버튼이 활성화되었습니다' : '해지 신청 버튼이 숨겨졌습니다');
+        } catch(e) {
+            // 실패 시 토글 되돌리기
+            const toggle = document.getElementById('showCancelTabToggle');
             if (toggle) toggle.checked = !checked;
             if (track) track.style.background = !checked ? '#10b981' : '#ccc';
             if (thumb) thumb.style.left = !checked ? '27px' : '3px';

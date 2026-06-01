@@ -443,7 +443,7 @@ router.delete('/:id', async (req, res) => {
 router.patch('/:id/flags', async (req, res) => {
     try {
         const sb = getSupabase();
-        const allowed = ['show_inquiry', 'share_timeslot_capacity']; // 허용 플래그 목록
+        const allowed = ['show_inquiry', 'share_timeslot_capacity', 'show_cancel_tab']; // 허용 플래그 목록
         const patch = {};
         for (const key of allowed) {
             if (req.body[key] !== undefined) patch[key] = Boolean(req.body[key]);

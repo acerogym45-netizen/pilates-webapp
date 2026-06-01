@@ -41,6 +41,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // 2. 문의하기 퀵액션 표시 여부 적용 (show_inquiry 설정)
     applyInquiryVisibility();
+
+    // 2-1. 해지 신청 버튼 표시 여부 적용 (show_cancel_tab 설정)
+    applyCancelTabVisibility();
     
     // 3. 나머지 초기화
     setupEventListeners();
@@ -81,6 +84,20 @@ function applyInquiryVisibility() {
             rowFive.classList.remove('quick-row--five');
             rowFive.classList.add('quick-row--four');
         }
+    }
+}
+
+// ── 해지 신청 버튼 표시/숨김 적용 ──────────────────────────────────────
+// complexes.show_cancel_tab = false 이면 해지 신청 버튼 숨김
+// null/undefined는 true로 간주 (기본 표시)
+function applyCancelTabVisibility() {
+    const complex = complexContext?.getComplex?.();
+    // show_cancel_tab이 명시적으로 false인 경우만 숨김 (null/undefined는 true로 간주)
+    const show = complex?.show_cancel_tab !== false;
+
+    const btnCancelTab = document.getElementById('quickBtnCancelTab');
+    if (!show) {
+        if (btnCancelTab) btnCancelTab.style.display = 'none';
     }
 }
 
