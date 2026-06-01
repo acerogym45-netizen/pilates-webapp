@@ -1261,11 +1261,39 @@ function closeDuplicateWarningModal() {
 function showSuccessNotificationModal(contractData) {
     const modal = document.getElementById('successNotificationModal');
     const content = document.getElementById('successNotificationContent');
-    
+
+    // 서버에서 받은 실제 status에 따라 아이콘·타이틀·상태 텍스트 결정
+    const status = contractData.status || 'approved';
+
+    const iconEl  = document.getElementById('successNotificationIcon');
+    const titleEl = document.getElementById('successNotificationTitle');
+
+    let statusHtml;
+    if (status === 'waiting') {
+        if (iconEl)  { iconEl.className  = 'fas fa-clock result-icon'; iconEl.style.color  = '#f59e0b'; }
+        if (titleEl) titleEl.textContent = '신청 접수가 완료되었습니다!';
+        statusHtml = `<span style="color:#d97706;font-weight:600">⏳ 승인 대기 중</span>
+            <div style="margin-top:8px;background:#fff7ed;border-left:3px solid #f59e0b;padding:8px 12px;border-radius:6px;font-size:.85rem;color:#92400e">
+                입금 확인 후 관리자가 수동 승인합니다.<br>승인 완료 시 안내 문자가 발송됩니다.
+            </div>`;
+    } else if (status === 'received') {
+        if (iconEl)  { iconEl.className  = 'fas fa-clipboard-check result-icon'; iconEl.style.color = '#6366f1'; }
+        if (titleEl) titleEl.textContent = '신청 접수가 완료되었습니다!';
+        statusHtml = `<span style="color:#6366f1;font-weight:600">📋 접수 완료 (검토 중)</span>
+            <div style="margin-top:8px;background:#f0f4ff;border-left:3px solid #6366f1;padding:8px 12px;border-radius:6px;font-size:.85rem;color:#3730a3">
+                관리자 검토 후 승인 처리됩니다.<br>승인 완료 시 안내 문자가 발송됩니다.
+            </div>`;
+    } else {
+        // approved (카드 결제·자동승인 단지)
+        if (iconEl)  { iconEl.className  = 'fas fa-check-circle result-icon success'; iconEl.style.color = ''; }
+        if (titleEl) titleEl.textContent = '신청이 완료되었습니다!';
+        statusHtml = `<span style="color:#059669;font-weight:600">✅ 승인 완료</span>`;
+    }
+
     content.innerHTML = `
         <p><strong>프로그램:</strong> ${contractData.lesson_type}</p>
         <p><strong>희망 시간:</strong> ${contractData.preferred_time}</p>
-        <p><strong>상태:</strong> 승인 완료</p>
+        <p style="display:flex;flex-direction:column;gap:4px"><strong>상태:</strong> ${statusHtml}</p>
     `;
     
     modal.classList.add('active');
