@@ -19,6 +19,7 @@ const {
     sendRenewalNoticeSms,
     sendRenewalExpiredSms,
 } = require('./sms');
+const { triggerWaitingQueue } = require('./waiting');
 
 // ── 기본 도메인 ───────────────────────────────────────────────────────────────
 function getBaseUrl() {
@@ -169,7 +170,7 @@ async function processExpiredRenewals() {
         const { data: expired, error: fetchErr } = await sb
             .from('applications')
             .select(`
-                id, name, phone, program_name, expiry_date, complex_id,
+                id, name, phone, program_name, program_id, preferred_time, expiry_date, complex_id,
                 complexes!inner(name, sms_sender, sms_enabled)
             `)
             .eq('renewal_status', 'pending')
@@ -213,7 +214,7 @@ async function processExpiredRenewals() {
 
                 results.processed++;
 
-                // 만료 안내 SMS (옵션 — 사용자에게 미응답 처리 안내)
+                // 만료 안내 SMS (현재 회원에게 미응답 처리 안내)
                 const smsResult = await sendRenewalExpiredSms({
                     phone:       app.phone,
                     name:        app.name,
@@ -227,6 +228,25 @@ async function processExpiredRenewals() {
                     ? '✅'
                     : smsResult.skipped ? '⏭(비활성)' : `⚠(${smsResult.error})`;
                 console.log(`[Cron:RenewalExpiry] ${app.name} → expired 처리 완료, SMS: ${smsLog}`);
+
+                // 대기자 공석 안내 TM — 해당 프로그램+시간대의 다음 대기자에게 발송
+                if (app.complex_id && app.preferred_time) {
+                    try {
+                        const triggerResult = await triggerWaitingQueue({
+                            complexId:     app.complex_id,
+                            programId:     app.program_id || null,
+                            programName:   app.program_name,
+                            preferredTime: app.preferred_time,
+                        });
+                        if (triggerResult.triggered) {
+                            console.log(`[Cron:RenewalExpiry] 대기자 공석 안내 TM 발송 완료 — ${triggerResult.waitingName} (${app.program_name} / ${app.preferred_time})`);
+                        } else {
+                            console.log(`[Cron:RenewalExpiry] 대기자 없음 또는 스킵 — ${app.program_name} / ${app.preferred_time}: ${triggerResult.reason || triggerResult.error || ''}`);
+                        }
+                    } catch (trigErr) {
+                        console.error(`[Cron:RenewalExpiry] 대기자 트리거 실패 — ID:${app.id}:`, trigErr.message);
+                    }
+                }
 
             } catch (itemErr) {
                 console.error(`[Cron:RenewalExpiry] ID:${app.id} 예외:`, itemErr.message);
