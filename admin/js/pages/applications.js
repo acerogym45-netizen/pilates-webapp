@@ -1124,6 +1124,28 @@ ${(() => {
             if (!confirmed) return;
         }
 
+        // ── 계좌/현금 결제 단지: 대기→승인 전환 시 수강기간 입력 모달 인터셉트 ──
+        // waiting/received 상태에서 approved로 바꿀 때 start_date/expiry_date를
+        // 함께 입력하지 않으면 안내 SMS에 수강기간이 빠짐 → 모달로 강제 입력 유도
+        if (status === 'approved') {
+            const a = this.data.find(x => x.id === id);
+            const isWaitingTransition = a && (a.status === 'waiting' || a.status === 'received');
+            if (isWaitingTransition) {
+                try {
+                    const complexId = getEffectiveComplexId();
+                    const settingsRes = complexId
+                        ? await fetch(`/api/complexes/${complexId}/apply-settings`).then(r => r.json()).catch(() => null)
+                        : null;
+                    const paymentMode = settingsRes?.complex?.payment_mode || 'management_fee';
+                    if (paymentMode === 'direct' || paymentMode === 'bank_transfer' || paymentMode === 'cash') {
+                        // 수강기간 입력 모달 열기 (함수 내부에서 실제 API 호출까지 담당)
+                        this._showApproveWithPeriodModal(id, a);
+                        return; // 아래 직접 승인 로직 실행하지 않음
+                    }
+                } catch (e) { /* 설정 조회 실패 시 기존 방식으로 폴백 */ }
+            }
+        }
+
         try {
             await API.applications.update(id, { status });
             closeGlobalModal();
@@ -1138,6 +1160,127 @@ ${(() => {
             } else {
                 showToast('변경 실패: ' + msg, 'error');
             }
+        }
+    },
+
+    // ── 수강기간 입력 후 승인 처리 모달 (계좌/현금 결제 단지 전용) ──────────
+    _showApproveWithPeriodModal(id, a) {
+        // 프로그램명으로 duration_days 참조 (editForm 때 캐시된 맵 재사용, 없으면 null)
+        const durationDays = (this._editDurationMap || {})[a.program_name] || null;
+
+        // 기본 시작일: 오늘
+        const today = new Date();
+        const todayStr = today.toISOString().slice(0, 10);
+
+        // 기본 만료일: duration_days가 있으면 자동계산, 없으면 빈 값
+        let defaultExpiry = '';
+        if (durationDays) {
+            const exp = new Date(today);
+            exp.setDate(exp.getDate() + durationDays - 1);
+            defaultExpiry = exp.toISOString().slice(0, 10);
+        }
+
+        const bodyHtml = `
+            <div style="padding:4px 0 8px">
+                <div style="background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:.85rem;color:#92400e">
+                    <i class="fas fa-info-circle" style="color:#d97706;margin-right:6px"></i>
+                    <strong>${a.name}</strong>님 (${a.dong} ${a.ho}) 승인 처리 전<br>
+                    수강 시작일·만료일을 입력하세요. 승인 안내 SMS에 수강기간이 포함됩니다.
+                </div>
+                <div style="background:#f0f4ff;border:1.5px solid #6366f1;border-radius:10px;padding:14px 16px">
+                    <div style="font-size:.8rem;font-weight:700;color:#4338ca;margin-bottom:12px">
+                        <i class="fas fa-calendar-alt"></i> 수강 기간 설정
+                        ${durationDays ? `<span style="margin-left:8px;font-size:.72rem;background:#4f46e5;color:#fff;padding:2px 8px;border-radius:10px">프로그램 기간 ${durationDays}일 자동계산</span>` : ''}
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+                        <div>
+                            <label style="font-size:.78rem;color:#6b7280;font-weight:600;display:block;margin-bottom:4px">수강 시작일</label>
+                            <input type="date" id="approveStartDate" value="${a.start_date || todayStr}"
+                                style="width:100%;padding:8px;border:1px solid #c7d2fe;border-radius:6px;font-size:.9rem;box-sizing:border-box"
+                                oninput="applications._onApproveStartDateChange(this.value)">
+                        </div>
+                        <div>
+                            <label style="font-size:.78rem;color:#6b7280;font-weight:600;display:block;margin-bottom:4px">수강 만료일</label>
+                            <input type="date" id="approveExpiryDate" value="${a.expiry_date || defaultExpiry}"
+                                style="width:100%;padding:8px;border:1px solid #c7d2fe;border-radius:6px;font-size:.9rem;box-sizing:border-box">
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(99,102,241,.07);border-radius:8px">
+                        <i class="fas fa-plus-circle" style="color:#6366f1;font-size:.85rem"></i>
+                        <span style="font-size:.78rem;color:#4338ca;font-weight:600">추가 일수 보정</span>
+                        <input type="number" id="approveExtraDays" value="0" min="0" max="60"
+                            style="width:56px;padding:4px 6px;border:1px solid #c7d2fe;border-radius:6px;font-size:.85rem;text-align:center"
+                            oninput="applications._onApproveExtraDaysChange(this.value)"
+                            onchange="applications._onApproveExtraDaysChange(this.value)">
+                        <span style="font-size:.78rem;color:#6b7280">일 (공휴일 · 결실 보정용)</span>
+                    </div>
+                </div>
+            </div>`;
+
+        const footerHtml = `
+            <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
+            <button class="btn-success" onclick="applications._confirmApproveWithPeriod('${id}')">
+                <i class="fas fa-check"></i> 승인 확정
+            </button>`;
+
+        // 현재 상세 모달을 수강기간 입력 모달로 교체
+        document.getElementById('globalModalBody').innerHTML = bodyHtml;
+        document.getElementById('globalModalFooter').innerHTML = footerHtml;
+
+        // duration_days 캐시 (추가일 보정 계산에 필요)
+        this._approveDurationDays = durationDays;
+        this._approveBaseStartDate = a.start_date || todayStr;
+    },
+
+    // 수강기간 모달: 시작일 변경 시 만료일 자동 계산
+    _onApproveStartDateChange(startVal) {
+        const dur = this._approveDurationDays;
+        if (!dur || !startVal) return;
+        const extraDays = parseInt(document.getElementById('approveExtraDays')?.value || '0') || 0;
+        const exp = new Date(startVal);
+        exp.setDate(exp.getDate() + dur - 1 + extraDays);
+        const expiryEl = document.getElementById('approveExpiryDate');
+        if (expiryEl) expiryEl.value = exp.toISOString().slice(0, 10);
+    },
+
+    // 수강기간 모달: 추가 일수 변경 시 만료일 재계산
+    _onApproveExtraDaysChange(extraVal) {
+        const dur = this._approveDurationDays;
+        const startEl = document.getElementById('approveStartDate');
+        if (!dur || !startEl?.value) return;
+        const extra = parseInt(extraVal || '0') || 0;
+        const exp = new Date(startEl.value);
+        exp.setDate(exp.getDate() + dur - 1 + extra);
+        const expiryEl = document.getElementById('approveExpiryDate');
+        if (expiryEl) expiryEl.value = exp.toISOString().slice(0, 10);
+    },
+
+    // 수강기간 모달: 승인 확정 버튼 클릭
+    async _confirmApproveWithPeriod(id) {
+        const startDate  = document.getElementById('approveStartDate')?.value  || null;
+        const expiryDate = document.getElementById('approveExpiryDate')?.value || null;
+
+        if (!startDate || !expiryDate) {
+            showToast('수강 시작일과 만료일을 모두 입력해주세요', 'error');
+            return;
+        }
+        if (startDate > expiryDate) {
+            showToast('만료일이 시작일보다 앞설 수 없습니다', 'error');
+            return;
+        }
+
+        try {
+            await API.applications.update(id, {
+                status:      'approved',
+                start_date:  startDate,
+                expiry_date: expiryDate,
+            });
+            closeGlobalModal();
+            showToast('승인 완료 및 수강기간이 설정되었습니다');
+            await this.load();
+            loadBadges();
+        } catch (e) {
+            showToast('승인 처리 실패: ' + e.message, 'error');
         }
     },
 
