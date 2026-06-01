@@ -446,10 +446,7 @@ router.post('/', async (req, res) => {
         // ── 중흥S클래스 예외 헬퍼 ──────────────────────────────────────────────────
         // ※ DB complexes.code 기준 — 실제 중흥S클래스 단지 코드에 맞게 수정하세요.
         const JUNGHUNG_SCLASS_CODES = [
-            'junghung-sclass',
-            'apt-sclass',
-            'junghung_sclass',
-            'junghung-s'
+            'apt-sclass'  // 소사벌 중흥 S클래스 (complexes.code 확인값)
         ];
         /** complex_id(UUID)로 단지 code를 조회해 중흥S클래스 여부 반환 */
         async function _isJunghungSClassById(cxId) {

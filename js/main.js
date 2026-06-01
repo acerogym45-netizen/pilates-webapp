@@ -507,10 +507,7 @@ function _getProgramCategory(programName) {
 //   예) 'junghung-sclass', 'apt-sclass', 'junghung_s' 등 실제 코드에 맞게 수정하세요.
 //   여러 코드를 등록해야 할 경우 배열에 추가합니다.
 const JUNGHUNG_SCLASS_CODES = [
-    'junghung-sclass',
-    'apt-sclass',
-    'junghung_sclass',
-    'junghung-s'
+    'apt-sclass'  // 소사벌 중흥 S클래스 (complexes.code 확인값)
 ];
 
 /**
