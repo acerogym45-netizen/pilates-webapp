@@ -38,9 +38,9 @@ function isSmsEnabled() {
 
 // ─── 기본 도메인 (입주민 링크용) ─────────────────────────────
 function getBaseUrl() {
-    return process.env.BASE_URL || process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : 'https://pilates-system.vercel.app'; // 폴백
+    if (process.env.BASE_URL) return process.env.BASE_URL;
+    if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+    return 'https://pilates-system.vercel.app';
 }
 
 /**
