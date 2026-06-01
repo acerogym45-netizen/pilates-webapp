@@ -16,6 +16,10 @@
     {
       "src": "api/backup-trigger.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/renewal-test.js",
+      "use": "@vercel/node"
     }
   ],
   "headers": [
@@ -44,6 +48,10 @@
     {
       "src": "/api/renewal-cron",
       "dest": "/api/renewal-cron.js"
+    },
+    {
+      "src": "/api/renewal-test",
+      "dest": "/api/renewal-test.js"
     },
     {
       "src": "/(.*)",
