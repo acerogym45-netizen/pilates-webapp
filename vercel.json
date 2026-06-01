@@ -10,6 +10,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/renewal-cron.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "api/backup-trigger.js",
       "use": "@vercel/node"
     }
@@ -26,12 +30,20 @@
     {
       "path": "/api/cron",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/renewal-cron",
+      "schedule": "0 0 * * *"
     }
   ],
   "routes": [
     {
       "src": "/api/cron",
       "dest": "/api/cron.js"
+    },
+    {
+      "src": "/api/renewal-cron",
+      "dest": "/api/renewal-cron.js"
     },
     {
       "src": "/(.*)",
