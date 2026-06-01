@@ -502,6 +502,38 @@ function _getProgramCategory(programName) {
     return 'group';
 }
 
+// ── 중흥S클래스 예외 로직 헬퍼 ──────────────────────────────────────────────
+// ※ 중흥S클래스 단지 코드 패턴: DB에 등록된 complexes.code 값 기준
+//   예) 'junghung-sclass', 'apt-sclass', 'junghung_s' 등 실제 코드에 맞게 수정하세요.
+//   여러 코드를 등록해야 할 경우 배열에 추가합니다.
+const JUNGHUNG_SCLASS_CODES = [
+    'junghung-sclass',
+    'apt-sclass',
+    'junghung_sclass',
+    'junghung-s'
+];
+
+/**
+ * 현재 단지가 중흥S클래스인지 확인
+ * @param {string} complexCode - complexContext.getComplexCode() 반환값
+ * @returns {boolean}
+ */
+function _isJunghungSClass(complexCode) {
+    if (!complexCode) return false;
+    const code = complexCode.toLowerCase();
+    return JUNGHUNG_SCLASS_CODES.some(c => code === c.toLowerCase());
+}
+
+/**
+ * 프로그램명이 무료체험 수업인지 확인
+ * @param {string} programName
+ * @returns {boolean}
+ */
+function _isFreeTrialProgram(programName) {
+    if (!programName) return false;
+    return /무료|체험/.test(programName);
+}
+
 // 중복 신청 검사 함수 (같은 카테고리 내에서만 중복 차단)
 // 그룹 수업 수강 중이어도 개인/듀엣 레슨은 추가 신청 가능
 async function checkDuplicateApplication(contractData) {
@@ -510,6 +542,58 @@ async function checkDuplicateApplication(contractData) {
         const { dong, ho, name, phone, lesson_type } = contractData;
 
         console.log(`🔍 중복 검사: ${dong}동 ${ho}호 ${name} (${phone}) → 신청 프로그램: ${lesson_type}`);
+
+        // ── [중흥S클래스 예외] 무료체험 ↔ 정규 수업 교차 중복은 허용 ──────────
+        // 조건: ① 중흥S클래스 단지 AND ② 신청/기존 중 하나라도 무료체험
+        //   - 무료체험 + 정규 수업  → 중복 허용 (신청 방향 무관)
+        //   - 정규 수업 + 정규 수업 → 기존 로직 그대로 차단
+        //   - 무료체험 + 무료체험  → 기존 로직 그대로 차단
+        //   - 다른 단지            → 기존 로직 그대로
+        if (_isJunghungSClass(complexCode)) {
+            // 동+호+이름+전화번호 일치하는 활성 신청 전체 조회
+            const jhParams = new URLSearchParams({ complexCode, dong, ho, limit: 100 });
+            const jhResponse = await fetch(`/api/applications?${jhParams}`);
+            const jhResult = await jhResponse.json();
+            const jhActiveContracts = (jhResult.data || []).filter(c =>
+                c.name  === name  &&
+                c.phone === phone &&
+                (c.status === 'approved' || c.status === 'waiting')
+            );
+
+            const targetIsTrial = _isFreeTrialProgram(lesson_type);
+            const targetCategory = _getProgramCategory(lesson_type);
+
+            if (targetIsTrial) {
+                // [무료체험 신청] 같은 카테고리 중 무료체험끼리만 차단, 정규와는 허용
+                const trialDup = jhActiveContracts.find(c =>
+                    _getProgramCategory(c.program_name) === targetCategory &&
+                    _isFreeTrialProgram(c.program_name)   // 기존 신청도 무료체험일 때만 중복
+                );
+                if (trialDup) {
+                    const categoryLabel = targetCategory === 'individual' ? '개인 레슨'
+                        : targetCategory === 'duet' ? '듀엣 레슨' : '그룹 수업';
+                    console.log(`⚠️ [중흥S클래스] 무료체험 중복 발견 (${categoryLabel}):`, trialDup.program_name);
+                    return { isDuplicate: true, existing: trialDup };
+                }
+                console.log('✅ [중흥S클래스] 무료체험 신청 → 정규 수업과 교차이므로 허용');
+                return { isDuplicate: false };
+            } else {
+                // [정규 수업 신청] 같은 카테고리 중 정규 수업끼리만 차단, 무료체험과는 허용
+                const regularDup = jhActiveContracts.find(c =>
+                    _getProgramCategory(c.program_name) === targetCategory &&
+                    !_isFreeTrialProgram(c.program_name)  // 기존 신청이 정규 수업일 때만 중복
+                );
+                if (regularDup) {
+                    const categoryLabel = targetCategory === 'individual' ? '개인 레슨'
+                        : targetCategory === 'duet' ? '듀엣 레슨' : '그룹 수업';
+                    console.log(`⚠️ [중흥S클래스] 정규 수업 중복 발견 (${categoryLabel}):`, regularDup.program_name);
+                    return { isDuplicate: true, existing: regularDup };
+                }
+                console.log('✅ [중흥S클래스] 정규 수업 신청 → 기존이 무료체험/다른카테고리이므로 허용');
+                return { isDuplicate: false };
+            }
+        }
+        // ── 중흥S클래스 예외 끝 (다른 단지는 기존 로직으로) ──────────────────
 
         // 신청하려는 프로그램의 카테고리
         const targetCategory = _getProgramCategory(lesson_type);

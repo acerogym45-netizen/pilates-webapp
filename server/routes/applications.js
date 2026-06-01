@@ -443,76 +443,166 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ success: false, error: '필수 항목이 누락되었습니다' });
         }
 
+        // ── 중흥S클래스 예외 헬퍼 ──────────────────────────────────────────────────
+        // ※ DB complexes.code 기준 — 실제 중흥S클래스 단지 코드에 맞게 수정하세요.
+        const JUNGHUNG_SCLASS_CODES = [
+            'junghung-sclass',
+            'apt-sclass',
+            'junghung_sclass',
+            'junghung-s'
+        ];
+        /** complex_id(UUID)로 단지 code를 조회해 중흥S클래스 여부 반환 */
+        async function _isJunghungSClassById(cxId) {
+            try {
+                const { data: cx } = await sb.from('complexes').select('code').eq('id', cxId).single();
+                if (!cx?.code) return false;
+                const lc = cx.code.toLowerCase();
+                return JUNGHUNG_SCLASS_CODES.some(c => lc === c.toLowerCase());
+            } catch (_) { return false; }
+        }
+        /** 프로그램명이 무료체험 수업인지 확인 */
+        function _isFreeTrialProgram(pName) {
+            return pName ? /무료|체험/.test(pName) : false;
+        }
+        // ── 중흥S클래스 예외 헬퍼 끝 ─────────────────────────────────────────────
+
         // ── 중복 신청 체크 ─────────────────────────────────────────
         // admin_bypass=true 이면 관리자가 직접 추가하는 경우이므로 중복 체크 생략
         if (!admin_bypass) {
-            // 신청하려는 프로그램의 타입을 먼저 파악
-            // 개인 레슨(1:1) / 듀엣 레슨(2:1)은 그룹 레슨과 병행 수강이 가능하므로
-            // 같은 카테고리(그룹끼리, 개인끼리, 듀엣끼리) 내에서만 중복 차단
-            let targetProgramType = 'group'; // 기본값
-            {
-                let prog = null;
-                if (program_id) {
-                    const { data: p } = await sb.from('programs').select('type, name').eq('id', program_id).single();
-                    prog = p;
-                } else if (program_name && complex_id) {
-                    const { data: ps } = await sb.from('programs').select('type, name')
-                        .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
-                    prog = ps?.[0] || null;
-                }
-                // DB type 컬럼 외에 프로그램명으로도 개인/듀엣 여부 판별 (하위 호환)
-                if (prog) {
-                    if (prog.type === 'individual' || /1:1|개인/.test(prog.name)) targetProgramType = 'individual';
-                    else if (prog.type === 'duet' || /2:1|듀엣/.test(prog.name)) targetProgramType = 'duet';
-                    else targetProgramType = 'group';
+            // ── [중흥S클래스 예외] 무료체험 ↔ 정규 수업 교차 중복 허용 ──────────
+            // 조건: ① 중흥S클래스 단지  AND  ② 신청/기존 중 하나라도 무료체험
+            //       (무료체험+무료체험, 정규+정규는 기존 로직 그대로 차단)
+            // _skipStdDupCheck=true 시 아래 표준 중복 체크 블록을 건너뜁니다.
+            let _skipStdDupCheck = false;
+
+            const isJunghung = await _isJunghungSClassById(complex_id);
+            if (isJunghung) {
+                const targetIsTrial = _isFreeTrialProgram(program_name);
+
+                if (targetIsTrial) {
+                    // 무료체험을 신청하는 경우:
+                    //   - 기존에 정규 수업이 있어도 허용 (교차 허용)
+                    //   - 기존에 무료체험이 있으면 기존 로직(같은 카테고리 차단)이 처리
+                    console.log('[중흥S클래스] 무료체험 신청 → 정규 수업과의 교차 중복 허용, 무료체험끼리는 표준 로직 적용');
+                    // 표준 체크로 진행 (무료체험↔무료체험은 기존 로직이 잡아줌)
+
                 } else {
-                    // program_name만으로 판별
-                    if (/1:1|개인/.test(program_name)) targetProgramType = 'individual';
-                    else if (/2:1|듀엣/.test(program_name)) targetProgramType = 'duet';
+                    // 정규 수업을 신청하는 경우:
+                    //   - 기존 신청이 무료체험뿐이면 허용 → 표준 체크 스킵
+                    //   - 기존에 정규 수업이 있으면 차단
+                    const { data: existForJh } = await sb
+                        .from('applications')
+                        .select('id, program_name, status')
+                        .eq('complex_id', complex_id)
+                        .eq('dong', dong).eq('ho', ho)
+                        .eq('name', name).eq('phone', phone)
+                        .in('status', ['approved', 'waiting']);
+
+                    // 신청 프로그램 카테고리 판별
+                    let tType = 'group';
+                    if (/1:1|개인/.test(program_name)) tType = 'individual';
+                    else if (/2:1|듀엣/.test(program_name)) tType = 'duet';
+
+                    if (existForJh && existForJh.length > 0) {
+                        // 같은 카테고리 기존 신청 중 '진짜 정규 수업'(무료체험 아님)이 있으면 차단
+                        const realDup = existForJh.find(app => {
+                            let eType = 'group';
+                            if (/1:1|개인/.test(app.program_name)) eType = 'individual';
+                            else if (/2:1|듀엣/.test(app.program_name)) eType = 'duet';
+                            return eType === tType && !_isFreeTrialProgram(app.program_name);
+                        });
+                        if (realDup) {
+                            const catLabel = tType === 'individual' ? '개인 레슨'
+                                : tType === 'duet' ? '듀엣 레슨' : '그룹 수업';
+                            console.log(`[중흥S클래스] 정규 수업 중복 차단 (${catLabel}):`, realDup.program_name);
+                            return res.status(409).json({
+                                success: false,
+                                duplicate: true,
+                                error: `이미 ${catLabel} 신청 내역이 있습니다. 중복 수강 희망 시 관리자에게 별도 문의하세요.`,
+                                existingProgram: realDup.program_name,
+                                existingStatus: realDup.status,
+                                existingId: realDup.id
+                            });
+                        }
+                        // 같은 카테고리가 모두 무료체험이거나 다른 카테고리 → 허용
+                        console.log('[중흥S클래스] 정규 수업 신청 → 기존이 무료체험/다른카테고리이므로 허용');
+                    }
+                    // 중흥S클래스 + 정규 수업 분기에서 이미 체크 완료 → 표준 중복 체크 스킵
+                    _skipStdDupCheck = true;
                 }
             }
+            // ── [중흥S클래스 예외] 끝 ─────────────────────────────────────────────
 
-            // 동 + 호 + 이름 + 전화번호가 모두 일치하는 활성 신청 전체 조회
-            const { data: existingApps } = await sb
-                .from('applications')
-                .select('id, program_name, program_id, status')
-                .eq('complex_id', complex_id)
-                .eq('dong', dong)
-                .eq('ho', ho)
-                .eq('name', name)
-                .eq('phone', phone)
-                .in('status', ['approved', 'waiting']);
+            if (!_skipStdDupCheck) {
+                // ── 표준 중복 신청 체크 (중흥S클래스 이외 단지, 또는 무료체험 신청) ──
+                // 신청하려는 프로그램의 타입을 먼저 파악
+                // 개인 레슨(1:1) / 듀엣 레슨(2:1)은 그룹 레슨과 병행 수강이 가능하므로
+                // 같은 카테고리(그룹끼리, 개인끼리, 듀엣끼리) 내에서만 중복 차단
+                let targetProgramType = 'group'; // 기본값
+                {
+                    let prog = null;
+                    if (program_id) {
+                        const { data: p } = await sb.from('programs').select('type, name').eq('id', program_id).single();
+                        prog = p;
+                    } else if (program_name && complex_id) {
+                        const { data: ps } = await sb.from('programs').select('type, name')
+                            .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
+                        prog = ps?.[0] || null;
+                    }
+                    // DB type 컬럼 외에 프로그램명으로도 개인/듀엣 여부 판별 (하위 호환)
+                    if (prog) {
+                        if (prog.type === 'individual' || /1:1|개인/.test(prog.name)) targetProgramType = 'individual';
+                        else if (prog.type === 'duet' || /2:1|듀엣/.test(prog.name)) targetProgramType = 'duet';
+                        else targetProgramType = 'group';
+                    } else {
+                        // program_name만으로 판별
+                        if (/1:1|개인/.test(program_name)) targetProgramType = 'individual';
+                        else if (/2:1|듀엣/.test(program_name)) targetProgramType = 'duet';
+                    }
+                }
 
-            if (existingApps && existingApps.length > 0) {
-                // 기존 신청들의 타입 분류 (이름 기반 heuristic)
-                const isSameCategory = existingApps.some(app => {
-                    let existType = 'group';
-                    if (/1:1|개인/.test(app.program_name)) existType = 'individual';
-                    else if (/2:1|듀엣/.test(app.program_name)) existType = 'duet';
-                    return existType === targetProgramType;
-                });
+                // 동 + 호 + 이름 + 전화번호가 모두 일치하는 활성 신청 전체 조회
+                const { data: existingApps } = await sb
+                    .from('applications')
+                    .select('id, program_name, program_id, status')
+                    .eq('complex_id', complex_id)
+                    .eq('dong', dong)
+                    .eq('ho', ho)
+                    .eq('name', name)
+                    .eq('phone', phone)
+                    .in('status', ['approved', 'waiting']);
 
-                if (isSameCategory) {
-                    // 같은 카테고리의 신청이 이미 존재 → 중복 차단
-                    const sameApp = existingApps.find(app => {
+                if (existingApps && existingApps.length > 0) {
+                    // 기존 신청들의 타입 분류 (이름 기반 heuristic)
+                    const isSameCategory = existingApps.some(app => {
                         let existType = 'group';
                         if (/1:1|개인/.test(app.program_name)) existType = 'individual';
                         else if (/2:1|듀엣/.test(app.program_name)) existType = 'duet';
                         return existType === targetProgramType;
                     });
-                    const categoryLabel = targetProgramType === 'individual' ? '개인 레슨'
-                        : targetProgramType === 'duet' ? '듀엣 레슨' : '그룹 수업';
-                    return res.status(409).json({
-                        success: false,
-                        duplicate: true,
-                        error: `이미 ${categoryLabel} 신청 내역이 있습니다. 중복 수강 희망 시 관리자에게 별도 문의하세요.`,
-                        existingProgram: sameApp.program_name,
-                        existingStatus: sameApp.status,
-                        existingId: sameApp.id
-                    });
+
+                    if (isSameCategory) {
+                        // 같은 카테고리의 신청이 이미 존재 → 중복 차단
+                        const sameApp = existingApps.find(app => {
+                            let existType = 'group';
+                            if (/1:1|개인/.test(app.program_name)) existType = 'individual';
+                            else if (/2:1|듀엣/.test(app.program_name)) existType = 'duet';
+                            return existType === targetProgramType;
+                        });
+                        const categoryLabel = targetProgramType === 'individual' ? '개인 레슨'
+                            : targetProgramType === 'duet' ? '듀엣 레슨' : '그룹 수업';
+                        return res.status(409).json({
+                            success: false,
+                            duplicate: true,
+                            error: `이미 ${categoryLabel} 신청 내역이 있습니다. 중복 수강 희망 시 관리자에게 별도 문의하세요.`,
+                            existingProgram: sameApp.program_name,
+                            existingStatus: sameApp.status,
+                            existingId: sameApp.id
+                        });
+                    }
+                    // 다른 카테고리(예: 그룹 신청이 있는데 개인/듀엣 신청) → 허용 (fall-through)
                 }
-                // 다른 카테고리(예: 그룹 신청이 있는데 개인/듀엣 신청) → 허용 (fall-through)
-            }
+            } // end !_skipStdDupCheck
         }
 
         // ── 개인/듀엣 레슨: always_open_lesson 상시 접수 분기 ──────────────────
