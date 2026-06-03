@@ -166,14 +166,15 @@ async function processExpiredRenewals() {
         const now = new Date().toISOString();
         console.log(`[Cron:RenewalExpiry] 실행 — 기준 시각: ${now}`);
 
-        // renewal_deadline 초과 + pending 상태 조회
+        // renewal_deadline 초과 + pending 상태 조회 (direct 단지만)
         const { data: expired, error: fetchErr } = await sb
             .from('applications')
             .select(`
                 id, name, phone, program_name, program_id, preferred_time, expiry_date, complex_id,
-                complexes!inner(name, sms_sender, sms_enabled)
+                complexes!inner(name, payment_mode, sms_sender, sms_enabled)
             `)
             .eq('renewal_status', 'pending')
+            .eq('complexes.payment_mode', 'direct')
             .lt('renewal_deadline', now)
             .order('renewal_deadline', { ascending: true });
 
@@ -229,8 +230,8 @@ async function processExpiredRenewals() {
                     : smsResult.skipped ? '⏭(비활성)' : `⚠(${smsResult.error})`;
                 console.log(`[Cron:RenewalExpiry] ${app.name} → expired 처리 완료, SMS: ${smsLog}`);
 
-                // 대기자 공석 안내 TM — 해당 프로그램+시간대의 다음 대기자에게 발송
-                if (app.complex_id && app.preferred_time) {
+                // 대기자 공석 안내 TM — direct 단지 + preferred_time 있을 때만
+                if (app.complex_id && app.preferred_time && cx.payment_mode === 'direct') {
                     try {
                         const triggerResult = await triggerWaitingQueue({
                             complexId:     app.complex_id,

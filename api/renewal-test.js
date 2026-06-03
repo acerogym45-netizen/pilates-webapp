@@ -307,6 +307,19 @@ async function modePhase5(sb, id) {
 // ══════════════════════════════════════════════════════════════════════════════
 async function modeFullFlow(sb, id) {
     const log = [];
+
+    // 테스트 재실행 대비: 대기자 waiting_sms_sent_at 초기화 (중복 발송 방지)
+    const app0 = await fetchApp(sb, id);
+    if (app0.preferred_time) {
+        await sb
+            .from('applications')
+            .update({ waiting_sms_sent_at: null, waiting_expires_at: null })
+            .eq('complex_id', app0.complex_id)
+            .eq('status', 'waiting')
+            .eq('preferred_time', app0.preferred_time);
+        log.push(`🔄 대기자 SMS 발송 기록 초기화 완료 (재테스트용)`);
+    }
+
     log.push('=== Phase 4 시작 (D-14 TM 발송) ===');
     const p4 = await modePhase4(sb, id);
     log.push(...p4.log);
