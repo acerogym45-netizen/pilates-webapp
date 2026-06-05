@@ -255,6 +255,7 @@ router.get('/:id/apply-settings', async (req, res) => {
             { key: 'cancel',     label: '해지 신청 (차월)' },
             { key: 'mid_cancel', label: '중도 해지'       },
             { key: 'refund',     label: '환불 신청'       },
+            { key: 'change',     label: '취소·변경'       },
         ];
 
         const settings = DEFAULT_APPLY_TYPES_LOCAL.map(type => {

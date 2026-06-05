@@ -1438,7 +1438,7 @@ async function loadPublicInquiries() {
 /* ═══════════════════════════════════════════════════════════════
    [공통 헬퍼] 내 신청 취소·변경 기간 설정 조회
    - 서버 apply-settings 우선, 실패 시 22~26일 기본값 폴백
-   - 반환: { isOpen, periodLabel, cancelPeriodLabel }
+   - 반환: { isOpen, periodLabel, cancelPeriodLabel, changePeriodLabel }
    ═══════════════════════════════════════════════════════════════ */
 async function _getManagePeriodSetting() {
     const now    = new Date();
@@ -1498,26 +1498,35 @@ async function _getManagePeriodSetting() {
             if (jsonS.success) {
                 const newSetting    = (jsonS.data || []).find(x => x.apply_type_key === 'new');
                 const cancelSetting = (jsonS.data || []).find(x => x.apply_type_key === 'cancel');
+                const changeSetting = (jsonS.data || []).find(x => x.apply_type_key === 'change');
                 // is_open은 서버에서 global 설정 포함해 정확히 계산된 값
                 const isOpen = newSetting ? newSetting.is_open : (jsonP.data?.is_open ?? autoIsOpen);
+                // 취소·변경 기간: change 타입 설정이 있으면 사용, 없으면 auto(22일~26일 폴백)
+                const changeIsOpen = changeSetting ? changeSetting.is_open : autoIsOpen;
                 return {
                     isOpen,
-                    periodLabel:       makePeriodLabel(newSetting, globalLabel),
-                    cancelPeriodLabel: makePeriodLabel(cancelSetting, globalLabel),
+                    periodLabel:        makePeriodLabel(newSetting, globalLabel),
+                    cancelPeriodLabel:  makePeriodLabel(cancelSetting, globalLabel),
+                    changePeriodLabel:  makePeriodLabel(changeSetting, globalLabel),
+                    changeIsOpen,
                     globalLabel,
                     newSetting,
                     cancelSetting,
+                    changeSetting,
                 };
             }
         } catch(_) { /* 폴백 */ }
     }
     return {
-        isOpen:            autoIsOpen,
-        periodLabel:       DEFAULT_LABEL,
-        cancelPeriodLabel: DEFAULT_LABEL,
-        globalLabel:       DEFAULT_LABEL,
-        newSetting:        null,
-        cancelSetting:     null,
+        isOpen:             autoIsOpen,
+        periodLabel:        DEFAULT_LABEL,
+        cancelPeriodLabel:  DEFAULT_LABEL,
+        changePeriodLabel:  DEFAULT_LABEL,
+        changeIsOpen:       autoIsOpen,
+        globalLabel:        DEFAULT_LABEL,
+        newSetting:         null,
+        cancelSetting:      null,
+        changeSetting:      null,
     };
 }
 
@@ -1595,8 +1604,8 @@ async function _updateContractPeriodLabels() {
    ─ 서버 apply-settings 기반으로 탭바/배지/헤더 버튼 활성화
    ═══════════════════════════════════════════════════════════════ */
 async function initManageTabBar() {
-    // 서버 설정 기반 기간 조회 (비동기)
-    const { isOpen } = await _getManagePeriodSetting();
+    // 서버 설정 기반 기간 조회 (비동기) — 취소·변경 탭은 change 타입 기준
+    const { changeIsOpen: isOpen } = await _getManagePeriodSetting();
 
     // ① 탭바 버튼 스타일
     const tabBtn = document.getElementById('manageTabBtn');
@@ -1651,18 +1660,18 @@ async function showMyManageModal() {
     modal.style.display = 'flex';
 
     // 비동기로 실제 기간 설정 조회
-    const { isOpen, periodLabel } = await _getManagePeriodSetting();
+    const { changeIsOpen, changePeriodLabel } = await _getManagePeriodSetting();
     if (banner) {
-        banner.innerHTML = isOpen
+        banner.innerHTML = changeIsOpen
             ? `<div style="background:#dcfce7;border:1px solid #22c55e;border-radius:8px;
                            padding:10px 13px;font-size:.82rem;color:#166534;margin-bottom:8px">
                    <i class="fas fa-calendar-check"></i>
-                   <strong> 신청 취소·변경 가능 기간입니다 (${periodLabel})</strong>
+                   <strong> 신청 취소·변경 가능 기간입니다 (${changePeriodLabel})</strong>
                </div>`
             : `<div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;
                            padding:10px 13px;font-size:.82rem;color:#92400e;margin-bottom:8px">
                    <i class="fas fa-clock"></i>
-                   <strong> 신청 취소·변경은 ${periodLabel}에만 가능합니다</strong><br>
+                   <strong> 신청 취소·변경은 ${changePeriodLabel}에만 가능합니다</strong><br>
                    <span style="font-size:.78rem">현재는 조회만 가능합니다</span>
                </div>`;
     }
@@ -1713,8 +1722,8 @@ async function loadMyManageList() {
             return;
         }
 
-        // 서버 설정 기반으로 기간 조회
-        const { isOpen, periodLabel, cancelPeriodLabel } = await _getManagePeriodSetting();
+        // 서버 설정 기반으로 기간 조회 (취소·변경 기간은 change 타입 사용)
+        const { changeIsOpen: isOpen, changePeriodLabel: periodLabel, cancelPeriodLabel } = await _getManagePeriodSetting();
 
         const fmtTime = t => {
             if (!t) return '-';

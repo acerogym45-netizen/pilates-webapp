@@ -1231,7 +1231,7 @@ router.post('/:id/cancel-waiting', async (req, res) => {
     }
 });
 
-// ── 입주민 승인 신청 취소 (접수기간 20~27일, 본인 인증) ─────────
+// ── 입주민 승인 신청 취소 (취소·변경 기간, 본인 인증) ─────────
 // POST /api/applications/:id/cancel-approved
 // body: { phone4, complexCode }
 router.post('/:id/cancel-approved', async (req, res) => {
@@ -1243,22 +1243,21 @@ router.post('/:id/cancel-approved', async (req, res) => {
             return res.status(400).json({ success: false, error: '전화번호 뒷 4자리를 입력하세요' });
         }
 
-        // 접수기간(매월 20~27일) 체크
-        const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-        const dayKst = nowKst.getUTCDate();
-        if (dayKst < 20 || dayKst > 27) {
-            return res.status(400).json({ success: false, error: '신청 취소는 매월 20일~27일에만 가능합니다' });
-        }
-
         const sb = getSupabase();
         const { data: app, error: fetchErr } = await sb
             .from('applications')
-            .select('id, phone, status, program_id, program_name, preferred_time, dong, ho, name, notes')
+            .select('id, phone, status, program_id, program_name, preferred_time, dong, ho, name, notes, complex_id')
             .eq('id', id)
             .single();
 
         if (fetchErr || !app) {
             return res.status(404).json({ success: false, error: '신청 내역을 찾을 수 없습니다' });
+        }
+
+        // 취소·변경 기간 체크 (DB 설정 우선, 없으면 20~27일 기본)
+        const changeCheck = await checkApplyTypeSetting(app.complex_id, 'change');
+        if (!changeCheck.isOpen) {
+            return res.status(400).json({ success: false, error: '신청 취소는 ' + (changeCheck.message || '접수 기간에만 가능합니다') });
         }
 
         // 전화번호 뒷 4자리 검증
@@ -1273,16 +1272,12 @@ router.post('/:id/cancel-approved', async (req, res) => {
         }
 
         // ── 삭제 대신 status='cancelled' 로 변경 (수강 기록 보존) ──
-        // cancel_type 구분:
-        //   'pre_start' = 수강 시작 전 신청 철회 (20~27일, 관리비 부과 없음, 정산 제외)
-        //   'approved'  = (구버전 호환용, pre_start 와 동일하게 취급)
-        //   → cancellations 테이블의 해지(3~10일 접수)와 완전히 별개
         const cancelledAt = new Date().toISOString();
         const cancelMeta = JSON.stringify({
             cancelled_at: cancelledAt,
             cancelled_by: 'user',
             cancel_type: 'pre_start',
-            cancel_reason: '입주민 신청 철회 (20~27일 접수기간, 수강 시작 전)'
+            cancel_reason: '입주민 신청 철회 (취소·변경 기간, 수강 시작 전)'
         });
         const prevNotes = app.notes || '';
         const newNotes = prevNotes
@@ -1425,7 +1420,7 @@ router.get('/:id/available-slots', async (req, res) => {
     }
 });
 
-// ── 입주민 프로그램·시간대 변경 (접수기간 20~27일, 본인 인증) ────
+// ── 입주민 프로그램·시간대 변경 (취소·변경 기간, 본인 인증) ────
 // POST /api/applications/:id/change-time
 // body: { phone4, new_program_id, new_preferred_time }
 // ※ 대기 시스템 폐기: 정원 마감 슬롯은 변경 불가 (기존 대기자는 유지)
@@ -1441,13 +1436,6 @@ router.post('/:id/change-time', async (req, res) => {
             return res.status(400).json({ success: false, error: '변경할 시간대를 선택하세요' });
         }
 
-        // 접수기간(매월 20~27일) 체크
-        const nowKst = new Date(new Date().getTime() + 9 * 60 * 60 * 1000);
-        const dayKst = nowKst.getUTCDate();
-        if (dayKst < 20 || dayKst > 27) {
-            return res.status(400).json({ success: false, error: '변경은 매월 20일~27일에만 가능합니다' });
-        }
-
         const sb = getSupabase();
         const { data: app, error: fetchErr } = await sb
             .from('applications')
@@ -1457,6 +1445,12 @@ router.post('/:id/change-time', async (req, res) => {
 
         if (fetchErr || !app) {
             return res.status(404).json({ success: false, error: '신청 내역을 찾을 수 없습니다' });
+        }
+
+        // 취소·변경 기간 체크 (DB 설정 우선, 없으면 기본값)
+        const changeCheck = await checkApplyTypeSetting(app.complex_id, 'change');
+        if (!changeCheck.isOpen) {
+            return res.status(400).json({ success: false, error: '변경은 ' + (changeCheck.message || '접수 기간에만 가능합니다') });
         }
 
         // 전화번호 검증

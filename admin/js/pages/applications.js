@@ -2872,6 +2872,7 @@ ${(() => {
             { key: 'cancel',     label: '차월 해지',         icon: 'fa-times-circle',         color: '#c0392b' },
             { key: 'mid_cancel', label: '중도 해지',         icon: 'fa-cut',                  color: '#e67e22' },
             { key: 'refund',     label: '환불 신청',         icon: 'fa-file-invoice-dollar',  color: '#7f8c8d' },
+            { key: 'change',     label: '취소·변경',         icon: 'fa-exchange-alt',         color: '#0891b2' },
         ];
 
         // 각 타입의 현재 설정 매핑
@@ -3043,9 +3044,9 @@ ${(() => {
     _switchPeriodTab(key) {
         const COLORS = {
             global:'#8e44ad', new:'#2980b9', waiting:'#16a085',
-            cancel:'#c0392b', mid_cancel:'#e67e22', refund:'#7f8c8d'
+            cancel:'#c0392b', mid_cancel:'#e67e22', refund:'#7f8c8d', change:'#0891b2'
         };
-        const TYPES = ['global','new','waiting','cancel','mid_cancel','refund'];
+        const TYPES = ['global','new','waiting','cancel','mid_cancel','refund','change'];
         TYPES.forEach(k => {
             const btn = document.getElementById(`aptab-${k}`);
             const panel = document.getElementById(`appanel-${k}`);
@@ -3063,7 +3064,7 @@ ${(() => {
     _onPeriodModeChange(key, mode) {
         const COLORS = {
             global:'#8e44ad', new:'#2980b9', waiting:'#16a085',
-            cancel:'#c0392b', mid_cancel:'#e67e22', refund:'#7f8c8d'
+            cancel:'#c0392b', mid_cancel:'#e67e22', refund:'#7f8c8d', change:'#0891b2'
         };
         const accent = COLORS[key] || '#8e44ad';
         ['auto','always','closed','custom'].forEach(m => {
@@ -3137,7 +3138,7 @@ ${(() => {
         } catch(e) { showToast('저장 실패: ' + e.message, 'error'); return; }
 
         // ── [2] 신청 종류별 기간 저장 ───────────────────────────
-        const TYPE_KEYS = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund'];
+        const TYPE_KEYS = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund', 'change'];
         const settings = TYPE_KEYS.map(key => {
             const modeRadio  = document.querySelector(`input[name="pm-${key}"]:checked`);
             const periodMode = modeRadio?.value || 'auto';
@@ -3465,7 +3466,7 @@ ${(() => {
 
     // 일괄 ON/OFF
     _bulkToggleApplyTypes(enable) {
-        const keys = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund'];
+        const keys = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund', 'change'];
         keys.forEach(key => {
             const row = document.getElementById(`atr-${key}`);
             if (!row) return;
@@ -3504,7 +3505,7 @@ ${(() => {
 
     // 저장
     async _saveApplySettings(complexId) {
-        const keys = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund'];
+        const keys = ['new', 'waiting', 'cancel', 'mid_cancel', 'refund', 'change'];
 
         // 각 신청 종류 설정 수집
         const settings = keys.map(key => {
