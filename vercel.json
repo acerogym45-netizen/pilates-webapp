@@ -20,6 +20,10 @@
     {
       "src": "api/renewal-test.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/debug-slots.js",
+      "use": "@vercel/node"
     }
   ],
   "headers": [
@@ -52,6 +56,10 @@
     {
       "src": "/api/renewal-test",
       "dest": "/api/renewal-test.js"
+    },
+    {
+      "src": "/api/debug-slots",
+      "dest": "/api/debug-slots.js"
     },
     {
       "src": "/(.*)",
