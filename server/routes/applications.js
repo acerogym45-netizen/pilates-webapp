@@ -1342,10 +1342,18 @@ router.get('/:id/available-slots', async (req, res) => {
             return res.status(403).json({ success: false, error: '전화번호가 일치하지 않습니다' });
         }
 
-        // 해당 단지의 모든 활성 프로그램 조회
+        // 단지 share_timeslot_capacity 설정 조회
+        const { data: slotCxData } = await sb
+            .from('complexes')
+            .select('share_timeslot_capacity')
+            .eq('id', app.complex_id)
+            .single();
+        const shareCapacity = slotCxData?.share_timeslot_capacity || false;
+
+        // 해당 단지의 모든 활성 프로그램 조회 (days 포함 — share_timeslot_capacity 분기용)
         const { data: programs } = await sb
             .from('programs')
-            .select('id, name, capacity, time_slots')
+            .select('id, name, capacity, time_slots, days')
             .eq('complex_id', app.complex_id)
             .eq('is_active', true)
             .order('name');
@@ -1363,8 +1371,10 @@ router.get('/:id/available-slots', async (req, res) => {
 
         // program name → id 역매핑 (null program_id 레코드를 name으로 연결하기 위함)
         const nameToId = {};
+        const idToDays = {};
         for (const prog of programs) {
             nameToId[prog.name] = prog.id;
+            idToDays[prog.id]   = prog.days || null;
         }
 
         // 프로그램별·시간대별 승인 카운트 맵 구성
@@ -1379,7 +1389,6 @@ router.get('/:id/available-slots', async (req, res) => {
 
         // 현재 신청자가 점유하고 있는 슬롯 키 (본인 제외 카운트를 위해)
         const myProgramId = app.program_id || nameToId[app.program_name] || null;
-        const myKey = myProgramId && app.preferred_time ? `${myProgramId}::${app.preferred_time}` : null;
 
         // 변경 가능 슬롯 구성
         const result = [];
@@ -1394,11 +1403,21 @@ router.get('/:id/available-slots', async (req, res) => {
                     : (prog.name === app.program_name);
                 if (isSameProg && slot === app.preferred_time) continue;
 
-                const key = `${prog.id}::${slot}`;
-                let approvedCnt = countMap[key] || 0;
-
-                // 현재 슬롯 카운트에 본인이 포함되어 있는 경우 1 차감 (이미 위에서 제외했지만 안전장치)
-                // (이 슬롯이 본인 슬롯이 아니므로 차감 불필요 — 위 continue로 처리됨)
+                // ★ share_timeslot_capacity 설정에 따라 정원 카운트 분기
+                // change-time 라우터와 동일한 로직 적용 (UI↔서버 불일치 방지)
+                let approvedCnt = 0;
+                if (shareCapacity && prog.days) {
+                    // ON: 같은 단지 + 같은 요일(days) 프로그램 전체의 해당 시간대 합산
+                    const sameDayIds = programs
+                        .filter(p => p.days && p.days === prog.days)
+                        .map(p => p.id);
+                    for (const pid of sameDayIds) {
+                        approvedCnt += countMap[`${pid}::${slot}`] || 0;
+                    }
+                } else {
+                    // OFF: 해당 프로그램만 카운트 (program_id=null 레코드는 name 역매핑으로 집계됨)
+                    approvedCnt = countMap[`${prog.id}::${slot}`] || 0;
+                }
 
                 const isFull = approvedCnt >= (prog.capacity || 1);
 
