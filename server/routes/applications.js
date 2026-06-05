@@ -1543,37 +1543,58 @@ router.post('/:id/change-time', async (req, res) => {
             .single();
         const shareCapacity = changeCxData?.share_timeslot_capacity || false;
 
-        let changeApprovedQuery = sb
-            .from('applications')
-            .select('*', { count: 'exact', head: true })
-            .eq('complex_id', targetProgram.complex_id)
-            .eq('preferred_time', new_preferred_time)
-            .eq('status', 'approved');
-        if (shareCapacity) {
-            // ON: 같은 단지 + 같은 days(요일) 프로그램끼리만 합산
-            if (targetProgram.days) {
-                const { data: changeSameDayProgs } = await sb
-                    .from('programs')
-                    .select('id')
+        // ── 정원 카운트 (approved 상태 + 해당 시간대) ─────────────────────
+        // ★ 핵심 규칙: is_active=true인 프로그램만 합산 (비활성 프로그램의 이전 승인자 제외)
+        // ★ shareCapacity=OFF 시 .or() PostgREST 파싱 문제(특수문자/공백 포함 프로그램명) 회피
+        //   → program_id 기준 count + program_id=null 기준 count 분리 후 합산
+        let approvedCnt = 0;
+
+        if (shareCapacity && targetProgram.days) {
+            // ON: 같은 단지 + 같은 days + is_active=true 프로그램만 합산
+            const { data: changeSameDayProgs } = await sb
+                .from('programs')
+                .select('id')
+                .eq('complex_id', targetProgram.complex_id)
+                .eq('days', targetProgram.days)
+                .eq('is_active', true);   // ★ 비활성 프로그램 제외
+            const changeSameDayIds = (changeSameDayProgs || []).map(p => p.id);
+            if (changeSameDayIds.length > 0) {
+                const { count: c1 } = await sb
+                    .from('applications')
+                    .select('*', { count: 'exact', head: true })
                     .eq('complex_id', targetProgram.complex_id)
-                    .eq('days', targetProgram.days);
-                const changeSameDayIds = (changeSameDayProgs || []).map(p => p.id);
-                if (changeSameDayIds.length > 0) {
-                    changeApprovedQuery = changeApprovedQuery.in('program_id', changeSameDayIds);
-                }
+                    .eq('preferred_time', new_preferred_time)
+                    .eq('status', 'approved')
+                    .in('program_id', changeSameDayIds);
+                approvedCnt = c1 || 0;
             }
         } else {
-            // OFF: 해당 프로그램 건만 카운트
-            // ★ 버그 수정: program_id=null 레코드는 .eq('program_id', id)에 걸리지 않으므로
-            //   program_id=null AND program_name 일치 케이스도 함께 카운트
-            changeApprovedQuery = changeApprovedQuery.or(
-                `program_id.eq.${targetProgramId},and(program_id.is.null,program_name.eq.${targetProgram.name})`
-            );
+            // OFF: 해당 프로그램(program_id 일치) 건만 카운트
+            // ★ program_id=null 레코드 대비: id 쿼리와 null+name 쿼리 분리 후 합산
+            //   (or() PostgREST 문법에서 특수문자 포함 program_name이 파싱 오류 유발)
+            const { count: c1 } = await sb
+                .from('applications')
+                .select('*', { count: 'exact', head: true })
+                .eq('complex_id', targetProgram.complex_id)
+                .eq('preferred_time', new_preferred_time)
+                .eq('status', 'approved')
+                .eq('program_id', targetProgramId);
+            approvedCnt += (c1 || 0);
+
+            // program_id=null인 레코드 중 같은 프로그램명 카운트
+            const { count: c2 } = await sb
+                .from('applications')
+                .select('*', { count: 'exact', head: true })
+                .eq('complex_id', targetProgram.complex_id)
+                .eq('preferred_time', new_preferred_time)
+                .eq('status', 'approved')
+                .is('program_id', null)
+                .eq('program_name', targetProgram.name);
+            approvedCnt += (c2 || 0);
         }
-        const { count: approvedCnt } = await changeApprovedQuery;
 
         const capacity = targetProgram.capacity || 1;
-        if ((approvedCnt || 0) >= capacity) {
+        if (approvedCnt >= capacity) {
             return res.status(400).json({
                 success: false,
                 error: `선택한 시간대(${new_preferred_time})는 정원이 마감되었습니다. 다른 시간대를 선택해 주세요.`,
