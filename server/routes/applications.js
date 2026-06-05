@@ -1491,7 +1491,7 @@ router.post('/:id/change-time', async (req, res) => {
         if (targetProgramId) {
             const { data: prog } = await sb
                 .from('programs')
-                .select('id, name, capacity, time_slots, complex_id')
+                .select('id, name, capacity, time_slots, complex_id, days')  // ★ days 추가 (share_timeslot_capacity 분기용)
                 .eq('id', targetProgramId)
                 .single();
             targetProgram = prog;
@@ -1501,7 +1501,7 @@ router.post('/:id/change-time', async (req, res) => {
         if (!targetProgram && app.program_name) {
             const { data: progs } = await sb
                 .from('programs')
-                .select('id, name, capacity, time_slots, complex_id')
+                .select('id, name, capacity, time_slots, complex_id, days')  // ★ days 추가
                 .eq('complex_id', app.complex_id)
                 .ilike('name', app.program_name)
                 .limit(1);
@@ -1553,12 +1553,14 @@ router.post('/:id/change-time', async (req, res) => {
             // ON: 같은 단지 + 같은 days + is_active=true 프로그램만 합산
             const { data: changeSameDayProgs } = await sb
                 .from('programs')
-                .select('id')
+                .select('id, name')
                 .eq('complex_id', targetProgram.complex_id)
                 .eq('days', targetProgram.days)
                 .eq('is_active', true);   // ★ 비활성 프로그램 제외
-            const changeSameDayIds = (changeSameDayProgs || []).map(p => p.id);
+            const changeSameDayIds  = (changeSameDayProgs || []).map(p => p.id);
+            const changeSameDayNames = (changeSameDayProgs || []).map(p => p.name);
             if (changeSameDayIds.length > 0) {
+                // program_id 있는 레코드
                 const { count: c1 } = await sb
                     .from('applications')
                     .select('*', { count: 'exact', head: true })
@@ -1566,7 +1568,21 @@ router.post('/:id/change-time', async (req, res) => {
                     .eq('preferred_time', new_preferred_time)
                     .eq('status', 'approved')
                     .in('program_id', changeSameDayIds);
-                approvedCnt = c1 || 0;
+                approvedCnt += c1 || 0;
+
+                // ★ program_id=null이지만 같은 days의 활성 프로그램명인 레코드도 합산
+                // (available-slots countMap과 동일한 집계 기준 유지)
+                if (changeSameDayNames.length > 0) {
+                    const { count: c2 } = await sb
+                        .from('applications')
+                        .select('*', { count: 'exact', head: true })
+                        .eq('complex_id', targetProgram.complex_id)
+                        .eq('preferred_time', new_preferred_time)
+                        .eq('status', 'approved')
+                        .is('program_id', null)
+                        .in('program_name', changeSameDayNames);
+                    approvedCnt += c2 || 0;
+                }
             }
         } else {
             // OFF: 해당 프로그램(program_id 일치) 건만 카운트
