@@ -118,20 +118,21 @@ app.get('/admin/css/:file', (req, res) => {
 
 // ── HOTEL 정적 페이지 (catch-all 보다 위, additive) ──────────────────────────
 // /hotel, /hotel/, /hotel/xxx.html 및 /hotel/{css,js,img}/* 직접 서빙
-app.get('/hotel', (req, res) => {
-    res.redirect(301, '/hotel/');
-});
-
-app.get(/^\/hotel\/([a-zA-Z0-9_\-]+\.html)?$/, (req, res) => {
-    const file = req.params[0] || 'index.html';
-    const filePath = path.join(ROOT_DIR, 'public', 'hotel', file);
+// 리다이렉트 없음 (무한 루프 방지) — 모든 경로를 직접 처리
+function serveHotelHtml(req, res) {
+    const reqFile = (req.params && req.params.file) ? req.params.file : 'index.html';
+    const filePath = path.join(ROOT_DIR, 'public', 'hotel', reqFile);
     if (fs.existsSync(filePath)) {
         res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-        res.sendFile(filePath);
-    } else {
-        res.status(404).send('Not found');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+        return res.sendFile(filePath);
     }
-});
+    return res.status(404).send('Hotel page not found');
+}
+
+app.get('/hotel',                serveHotelHtml);
+app.get('/hotel/',               serveHotelHtml);
+app.get('/hotel/:file(*.html)',  serveHotelHtml);
 
 app.get('/hotel/css/:file', (req, res) => {
     const filePath = path.join(ROOT_DIR, 'public', 'hotel', 'css', req.params.file);
@@ -183,6 +184,21 @@ app.get('/api/debug-files', (req, res) => {
         jsDirExists: fs.existsSync(jsDir),
         jsFiles: safeRead(jsDir),
         mainJsExists: fs.existsSync(path.join(jsDir, 'main.js')),
+    });
+});
+
+// 호텔 디렉터리 디버그
+app.get('/api/debug-hotel', (req, res) => {
+    const hotelDir = path.join(ROOT_DIR, 'public', 'hotel');
+    const safeRead = (dir) => {
+        try { return fs.readdirSync(dir); } catch(e) { return `ERROR: ${e.message}`; }
+    };
+    res.json({
+        ROOT_DIR,
+        hotelDir,
+        hotelDirExists: fs.existsSync(hotelDir),
+        hotelFiles: safeRead(hotelDir),
+        indexHtmlExists: fs.existsSync(path.join(hotelDir, 'index.html')),
     });
 });
 
