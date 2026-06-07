@@ -293,22 +293,48 @@ app.get('*', async (req, res) => {
         ? pathMatch[1]
         : req.query.complex;
 
+    // venue_type: 호텔 테마 분기에 사용 ('hotel' | 기타)
+    let venueType = null;
+
     if (complexCode) {
         try {
             const sb = getSupabase();
             const { data } = await sb
                 .from('complexes')
-                .select('name')
+                .select('name, venue_type')
                 .eq('code', complexCode)
                 .single();
             if (data?.name) {
                 complexName = data.name;
                 pageTitle   = `레슨 신청 - ${data.name}`;
                 pageDesc    = `${data.name} 수업 신청, 취소, 변경을 간편하게 처리하세요.`;
+                venueType   = data.venue_type ?? null;
             }
         } catch (_) {
             // DB 오류 시 기본값 유지
         }
+    }
+
+    // ── 호텔 테마 주입 ──────────────────────────────────────────────────────────
+    // venue_type === 'hotel' 인 경우 <body> 태그에 theme-hotel 클래스 추가.
+    // 기존 body 클래스가 있으면 보존하고 추가. 아파트 단지는 건드리지 않음.
+    if (venueType === 'hotel') {
+        // <body> 또는 <body class="기존클래스"> 모두 처리
+        html = html.replace(
+            /<body([^>]*)>/,
+            (match, attrs) => {
+                const classMatch = attrs.match(/class="([^"]*)"/);
+                if (classMatch) {
+                    // 이미 class 속성이 있으면 theme-hotel 추가
+                    const existing = classMatch[1].trim();
+                    const newClass = existing ? `${existing} theme-hotel` : 'theme-hotel';
+                    return `<body${attrs.replace(/class="[^"]*"/, `class="${newClass}"`)} >`;
+                } else {
+                    // class 속성 없으면 새로 추가
+                    return `<body class="theme-hotel"${attrs}>`;
+                }
+            }
+        );
     }
 
     // OG 메타태그 블록 (중복 삽입 방지: </head> 바로 앞에 한 번만 삽입)
