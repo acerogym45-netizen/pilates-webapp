@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>리프레시 PT 예약 — 아세로짐 라마다 대전점</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <style>
+        /* ── 이 페이지 전용 추가 스타일 ── */
+
+        /* 헤더 */
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 24px 0 20px;
+        }
+        .back-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.08);
+            color: var(--color-text-on-dark);
+            font-size: 1.1rem;
+            flex-shrink: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .back-btn:hover { background: rgba(255,255,255,.14); }
+        .page-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+        }
+
+        /* ── 프로그램 설명 카드 ── */
+        .program-card {
+            background: var(--color-card-secondary);
+            border: 1px solid rgba(201,168,76,.25);
+            border-radius: var(--card-radius);
+            padding: 18px 16px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .program-icon {
+            font-size: 2.2rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .program-info { flex: 1; }
+        .program-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+            margin-bottom: 4px;
+        }
+        .program-meta {
+            font-size: 0.85rem;
+            color: var(--color-text-desc);
+        }
+        .program-price {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--color-text-on-dark);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* ── 섹션 공통 ── */
+        .section-block {
+            margin-bottom: 24px;
+        }
+        .section-title {
+            font-size: 0.82rem;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        /* ── 트레이너 가로 스크롤 ── */
+        .instructor-scroll {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            /* 스크롤바 숨김 */
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        .instructor-scroll::-webkit-scrollbar { display: none; }
+
+        .instructor-card {
+            flex-shrink: 0;
+            width: 120px;
+            background: var(--color-card-muted);
+            border: 2px solid rgba(255,255,255,.06);
+            border-radius: 14px;
+            padding: 14px 10px 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .18s, background .18s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .instructor-card:active { transform: scale(0.96); }
+        .instructor-card.selected {
+            border-color: var(--color-gold);
+            background: rgba(201,168,76,.12);
+        }
+        @media (hover: hover) {
+            .instructor-card:hover:not(.selected) {
+                border-color: rgba(201,168,76,.4);
+                background: rgba(255,255,255,.06);
+            }
+        }
+
+        .instructor-photo {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.1);
+            margin: 0 auto 10px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            /* 사진 미제공 시 이모지 fallback */
+        }
+        .instructor-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .instructor-name {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--color-text-on-dark);
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .instructor-specialty {
+            font-size: 0.72rem;
+            color: var(--color-text-muted);
+            line-height: 1.4;
+            word-break: keep-all;
+        }
+        .instructor-card.selected .instructor-name {
+            color: var(--color-gold-light);
+        }
+        .instructor-card.selected .instructor-specialty {
+            color: var(--color-text-desc);
+        }
+
+        /* 트레이너 없음 / 로딩 */
+        .instructor-placeholder {
+            font-size: 0.88rem;
+            color: var(--color-text-muted);
+            padding: 12px 0;
+        }
+
+        /* ── 날짜 선택 버튼 그리드 ── */
+        .date-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        .date-btn {
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 10px;
+            padding: 10px 4px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color .18s, background .18s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+            color: var(--color-text-on-dark);
+        }
+        .date-btn:active { transform: scale(0.95); }
+        .date-btn.selected {
+            border-color: var(--color-gold);
+            background: rgba(201,168,76,.15);
+        }
+        @media (hover: hover) {
+            .date-btn:hover:not(.selected) {
+                border-color: rgba(201,168,76,.35);
+                background: rgba(255,255,255,.09);
+            }
+        }
+        .date-btn-day {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--color-text-muted);
+            margin-bottom: 3px;
+        }
+        .date-btn.selected .date-btn-day { color: var(--color-gold-light); }
+        .date-btn-num {
+            display: block;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+        .date-btn-month {
+            display: block;
+            font-size: 0.7rem;
+            color: var(--color-text-muted);
+            margin-top: 2px;
+        }
+        .date-btn.selected .date-btn-month { color: var(--color-gold-light); }
+
+        /* ── 시간 슬롯 그리드 ── */
+        .slot-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .slot-btn {
+            background: rgba(255,255,255,.06);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 10px;
+            padding: 12px 6px;
+            text-align: center;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--color-text-on-dark);
+            transition: border-color .18s, background .18s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .slot-btn:active { transform: scale(0.95); }
+        .slot-btn.selected {
+            border-color: var(--color-gold);
+            background: rgba(201,168,76,.15);
+            color: var(--color-gold-light);
+        }
+        @media (hover: hover) {
+            .slot-btn:hover:not(.selected) {
+                border-color: rgba(201,168,76,.35);
+                background: rgba(255,255,255,.09);
+            }
+        }
+
+        /* 슬롯 없음 / 로딩 상태 */
+        .slot-empty {
+            grid-column: 1 / -1;
+            text-align: center;
+            font-size: 0.88rem;
+            color: var(--color-text-muted);
+            padding: 16px 0;
+        }
+        .slot-hint {
+            font-size: 0.78rem;
+            color: var(--color-text-muted);
+            margin-top: 8px;
+        }
+
+        /* ── 입력 폼 ── */
+        .form-section { margin-bottom: 20px; }
+        .form-group { margin-bottom: 16px; }
+        .form-label {
+            display: block;
+            font-size: 0.82rem;
+            color: var(--color-text-muted);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255,255,255,.07);
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 12px;
+            color: var(--color-text-on-dark);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color .18s;
+            -webkit-appearance: none;
+        }
+        .form-input::placeholder { color: var(--color-text-muted); }
+        .form-input:focus { border-color: var(--color-gold); }
+
+        /* ── 결제 방법 ── */
+        .payment-box {
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 12px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .payment-icon { font-size: 1.3rem; flex-shrink: 0; }
+        .payment-label {
+            flex: 1;
+            font-size: 0.9rem;
+            color: var(--color-text-on-dark);
+            font-weight: 600;
+        }
+        .payment-badge {
+            font-size: 0.72rem;
+            background: rgba(201,168,76,.2);
+            color: var(--color-gold-light);
+            border: 1px solid rgba(201,168,76,.3);
+            border-radius: 6px;
+            padding: 2px 7px;
+            font-weight: 600;
+        }
+
+        /* ── 약관 토글 ── */
+        .terms-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 14px 0;
+            border-top: 1px solid rgba(255,255,255,.07);
+        }
+        .terms-checkbox {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            accent-color: var(--color-gold);
+            margin-top: 1px;
+            cursor: pointer;
+        }
+        .terms-text {
+            font-size: 0.82rem;
+            color: var(--color-text-muted);
+            line-height: 1.5;
+        }
+        .terms-detail {
+            display: none;
+            margin-top: 8px;
+            font-size: 0.78rem;
+            color: var(--color-text-muted);
+            background: rgba(0,0,0,.2);
+            border-radius: 8px;
+            padding: 10px 12px;
+            line-height: 1.6;
+        }
+        .terms-toggle-btn {
+            background: none;
+            border: none;
+            color: var(--color-gold);
+            font-size: 0.78rem;
+            cursor: pointer;
+            padding: 0;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+        }
+
+        /* ── 예약 버튼 ── */
+        .submit-btn {
+            width: 100%;
+            min-height: 56px;
+            background: var(--color-gold);
+            color: var(--color-navy-d);
+            border: none;
+            border-radius: 14px;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background .18s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+            margin-bottom: 32px;
+        }
+        .submit-btn:active { transform: scale(0.97); }
+        .submit-btn:hover  { background: var(--color-gold-light); }
+        .submit-btn:disabled {
+            background: rgba(255,255,255,.15);
+            color: var(--color-text-muted);
+            cursor: not-allowed;
+        }
+
+        /* ── 상태 박스 ── */
+        .status-box {
+            border-radius: 12px;
+            padding: 16px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .status-box.error   { background: rgba(235,87,87,.15);  color: #f8a0a0; border: 1px solid rgba(235,87,87,.3); }
+        .status-box.success { background: rgba(111,207,151,.15); color: #a0f0c0; border: 1px solid rgba(111,207,151,.3); }
+        .status-box.info    { background: rgba(201,168,76,.12);  color: var(--color-gold-light); border: 1px solid rgba(201,168,76,.25); }
+        .status-box.show    { display: block; }
+
+        /* ── 완료 화면 ── */
+        .done-screen { display: none; text-align: center; padding: 32px 0; }
+        .done-screen.show { display: block; }
+        .done-icon  { font-size: 3.5rem; margin-bottom: 16px; }
+        .done-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+            margin-bottom: 10px;
+        }
+        .done-desc  {
+            font-size: 0.9rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+        /* 예약 확인 상자 */
+        .done-confirm-box {
+            background: var(--color-card-secondary);
+            border: 1px solid rgba(201,168,76,.25);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .done-confirm-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.88rem;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255,255,255,.05);
+        }
+        .done-confirm-row:last-child { border-bottom: none; }
+        .done-confirm-label { color: var(--color-text-muted); }
+        .done-confirm-value { color: var(--color-text-on-dark); font-weight: 600; }
+        /* 카카오 알림 안내 */
+        .kakao-notice {
+            background: rgba(254,229,0,.08);
+            border: 1px solid rgba(254,229,0,.2);
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-size: 0.82rem;
+            color: #ffe066;
+            line-height: 1.6;
+            margin-bottom: 24px;
+            text-align: left;
+        }
+        .kakao-notice-icon { font-size: 1.1rem; margin-right: 4px; }
+        .back-link  {
+            display: inline-block;
+            padding: 12px 28px;
+            border: 1px solid rgba(255,255,255,.2);
+            border-radius: 12px;
+            color: var(--color-text-on-dark);
+            font-size: 0.9rem;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .back-link:hover { background: rgba(255,255,255,.08); }
+
+        /* ── 로딩 스피너 ── */
+        .spinner {
+            display: inline-block;
+            width: 18px; height: 18px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-top-color: var(--color-navy-d);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── 선택 요약 배지 (트레이너 + 날짜 + 시간 선택 후 표시) ── */
+        .selection-summary {
+            background: rgba(201,168,76,.1);
+            border: 1px solid rgba(201,168,76,.25);
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 0.85rem;
+            color: var(--color-gold-light);
+            margin-bottom: 20px;
+            display: none;
+        }
+        .selection-summary.show { display: block; }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+
+    <!-- ── 헤더 ────────────────────────────────────────────────── -->
+    <div class="page-header">
+        <a href="./index.html" class="back-btn" aria-label="뒤로">‹</a>
+        <h1 class="page-title">리프레시 PT 예약</h1>
+    </div>
+
+    <!-- ── 신청 폼 영역 ─────────────────────────────────────────── -->
+    <div id="formArea">
+
+        <!-- 프로그램 설명 카드 -->
+        <div class="program-card">
+            <div class="program-icon">🏋️</div>
+            <div class="program-info">
+                <p class="program-name">리프레시 PT</p>
+                <p class="program-meta">45분 · 출장 피로 케어</p>
+            </div>
+            <div class="program-price">₩40,000</div>
+        </div>
+
+        <!-- 상태 메시지 박스 -->
+        <div class="status-box" id="statusBox"></div>
+
+        <!-- ① 트레이너 선택 -->
+        <div class="section-block">
+            <p class="section-title">트레이너 선택</p>
+            <div class="instructor-scroll" id="instructorList">
+                <p class="instructor-placeholder">트레이너 정보를 불러오는 중…</p>
+            </div>
+        </div>
+
+        <!-- ② 날짜 선택 -->
+        <div class="section-block">
+            <p class="section-title">날짜 선택</p>
+            <div class="date-grid" id="dateGrid">
+                <!-- JS로 오늘 ~ +7일 버튼 렌더링 -->
+            </div>
+        </div>
+
+        <!-- ③ 시간 선택 -->
+        <div class="section-block">
+            <p class="section-title">시간 선택</p>
+            <div class="slot-grid" id="slotGrid">
+                <p class="slot-empty">트레이너와 날짜를 먼저 선택해 주세요.</p>
+            </div>
+            <p class="slot-hint" id="slotHint">예약된 시간은 표시되지 않습니다.</p>
+        </div>
+
+        <!-- 선택 요약 -->
+        <div class="selection-summary" id="selectionSummary"></div>
+
+        <!-- ④ 입력 폼 -->
+        <div class="form-section">
+            <div class="form-group">
+                <label class="form-label" for="inputName">이름</label>
+                <input id="inputName" class="form-input" type="text"
+                       placeholder="홍길동" autocomplete="name" maxlength="20">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="inputPhone">휴대폰 번호</label>
+                <input id="inputPhone" class="form-input" type="tel"
+                       placeholder="010-0000-0000" autocomplete="tel" maxlength="13">
+            </div>
+        </div>
+
+        <!-- ⑤ 결제 방법 (카드 default) -->
+        <div id="paymentCard" class="payment-box">
+            <span class="payment-icon">💳</span>
+            <span class="payment-label">카드 결제</span>
+            <span class="payment-badge">기본</span>
+        </div>
+
+        <!-- ⑥ 약관 동의 -->
+        <div class="terms-row">
+            <input type="checkbox" id="termsCheck" class="terms-checkbox">
+            <div class="terms-text">
+                <label for="termsCheck">
+                    개인정보 수집·이용에 동의합니다 (필수)
+                </label>
+                <button type="button" class="terms-toggle-btn" id="termsToggleBtn">내용 보기</button>
+                <div class="terms-detail" id="termsDetail">
+                    수집 항목: 이름, 휴대폰 번호<br>
+                    수집 목적: 리프레시 PT 예약 및 결제 처리<br>
+                    보유 기간: 이용 완료 후 1개월<br>
+                    귀하는 동의를 거부할 수 있으나, 거부 시 예약이 불가합니다.
+                </div>
+            </div>
+        </div>
+
+        <!-- ⑦ 예약 버튼 -->
+        <button type="button" class="submit-btn" id="submitBtn" disabled>
+            예약하기
+        </button>
+
+    </div>
+    <!-- / #formArea -->
+
+    <!-- ── 완료 화면 (예약 성공 후 표시) ──────────────────────── -->
+    <div class="done-screen" id="doneScreen">
+        <div class="done-icon">✅</div>
+        <p class="done-title">예약이 완료되었습니다!</p>
+        <p class="done-desc">아래 일정을 확인해 주세요.</p>
+
+        <!-- 예약 확인 상자 -->
+        <div class="done-confirm-box" id="doneConfirmBox">
+            <div class="done-confirm-row">
+                <span class="done-confirm-label">트레이너</span>
+                <span class="done-confirm-value" id="doneInstructor">—</span>
+            </div>
+            <div class="done-confirm-row">
+                <span class="done-confirm-label">일시</span>
+                <span class="done-confirm-value" id="doneSchedule">—</span>
+            </div>
+            <div class="done-confirm-row">
+                <span class="done-confirm-label">소요 시간</span>
+                <span class="done-confirm-value">45분</span>
+            </div>
+            <div class="done-confirm-row">
+                <span class="done-confirm-label">결제 금액</span>
+                <span class="done-confirm-value">₩40,000</span>
+            </div>
+            <div class="done-confirm-row">
+                <span class="done-confirm-label">결제 방법</span>
+                <span class="done-confirm-value">카드 결제 (현장)</span>
+            </div>
+        </div>
+
+        <!-- 카카오 알림 안내 -->
+        <div class="kakao-notice">
+            <span class="kakao-notice-icon">💬</span>
+            예약 확인 문자가 입력하신 번호로 발송됩니다.<br>
+            당일 취소 또는 변경은 피트니스 센터에 직접 문의해 주세요.
+        </div>
+
+        <a href="./index.html" class="back-link">처음 화면으로</a>
+    </div>
+
+</div>
+<!-- / .page-wrap -->
+
+<script src="./js/api-client.js"></script>
+<script src="./js/refresh-pt.js"></script>
+</body>
+</html>
