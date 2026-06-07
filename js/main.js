@@ -3605,6 +3605,23 @@ function initHotelMode() {
         console.log('🎨 body.theme-hotel class ensured by initHotelMode');
     }
 
+    /* 0-b. 브랜드 로고 헤더 교체 */
+    const brandHeader   = document.getElementById('hotelBrandHeader');
+    const defaultLogo   = document.getElementById('defaultHeaderLogo');
+    if (brandHeader && defaultLogo) {
+        defaultLogo.style.display = 'none';
+        defaultLogo.setAttribute('aria-hidden', 'true');
+        brandHeader.style.display = 'flex';
+        brandHeader.removeAttribute('aria-hidden');
+        /* 단지명을 아세로짐 tagline에 반영 */
+        const complexName = complex?.name || complex?.complex_name || '';
+        if (complexName) {
+            const aceroTag = brandHeader.querySelector('.hotel-brand-acerogym .hotel-brand-tagline');
+            if (aceroTag) aceroTag.textContent = complexName;
+        }
+        console.log('🏨 Brand header switched to RAMADA × ACEROGYM');
+    }
+
     /* 1. CTA 오버레이 표시 / 아파트 퀵액션 숨김 */
     const overlay   = document.getElementById('hotelCtaOverlay');
     const quickWrap = document.querySelector('.quick-actions-wrap');
@@ -3624,9 +3641,10 @@ function initHotelMode() {
     /* 3. 폼 커스터마이징 */
     _hotelCustomizeForm();
 
-    /* 4. 헤더 서브라인 */
+    /* 4. 헤더 서브라인 — 브랜드 헤더가 없을 때만 삽입 (fallback) */
     const headerEl = document.querySelector('.header');
-    if (headerEl && !headerEl.querySelector('.hotel-header-sub')) {
+    const brandHeaderActive = document.getElementById('hotelBrandHeader')?.style.display !== 'none';
+    if (headerEl && !brandHeaderActive && !headerEl.querySelector('.hotel-header-sub')) {
         const sub = document.createElement('p');
         sub.className = 'hotel-header-sub';
         sub.style.cssText =

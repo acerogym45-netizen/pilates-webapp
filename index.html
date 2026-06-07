@@ -38,7 +38,61 @@
 
         <!-- 헤더 -->
         <header class="header" id="mainHeader">
-            <div class="header-logo">
+
+            <!-- ══════════════════════════════════════════════════════════════
+                 🏨 호텔 브랜드 로고 헤더 (venue_type='hotel' 전용)
+                 initHotelMode()에서 display:flex 전환 — 기본값 display:none
+            ══════════════════════════════════════════════════════════════ -->
+            <div class="hotel-brand-header" id="hotelBrandHeader" style="display:none" aria-hidden="true">
+
+                <!-- 라마다 로고 -->
+                <div class="hotel-brand-item hotel-brand-ramada" id="hotelLogoRamada">
+                    <div class="hotel-brand-emblem">
+                        <!-- R 심볼 — 라마다 고딕 세리프 엠블럼 -->
+                        <svg class="hotel-brand-svg" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Ramada 엠블럼">
+                            <rect width="44" height="44" rx="6" fill="#0E1A2B" stroke="#C8A864" stroke-width="1.5"/>
+                            <text x="22" y="32" text-anchor="middle"
+                                  font-family="'Noto Serif KR', Georgia, serif"
+                                  font-size="24" font-weight="700"
+                                  fill="#C8A864" letter-spacing="-0.5">R</text>
+                        </svg>
+                    </div>
+                    <div class="hotel-brand-wordmark">
+                        <span class="hotel-brand-name">RAMADA</span>
+                        <span class="hotel-brand-tagline">by Wyndham</span>
+                    </div>
+                </div>
+
+                <!-- 구분자 × -->
+                <div class="hotel-brand-divider" aria-hidden="true">
+                    <span class="hotel-brand-cross">×</span>
+                </div>
+
+                <!-- 아세로짐 로고 -->
+                <div class="hotel-brand-item hotel-brand-acerogym" id="hotelLogoAcero">
+                    <div class="hotel-brand-emblem">
+                        <!-- A 심볼 — 아세로짐 아이콘 엠블럼 -->
+                        <svg class="hotel-brand-svg" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="ACEROGYM 엠블럼">
+                            <rect width="44" height="44" rx="6" fill="#0E1A2B" stroke="#C8A864" stroke-width="1.5"/>
+                            <!-- 덤벨 아이콘 대체: A 문자 + 하단 바 -->
+                            <text x="22" y="30" text-anchor="middle"
+                                  font-family="'Noto Sans KR', Arial, sans-serif"
+                                  font-size="19" font-weight="800"
+                                  fill="#C8A864" letter-spacing="1">A</text>
+                            <rect x="10" y="34" width="24" height="2" rx="1" fill="#C8A864" opacity="0.6"/>
+                        </svg>
+                    </div>
+                    <div class="hotel-brand-wordmark">
+                        <span class="hotel-brand-name">ACEROGYM</span>
+                        <span class="hotel-brand-tagline">Wellness &amp; Fitness</span>
+                    </div>
+                </div>
+
+            </div>
+            <!-- /hotel-brand-header -->
+
+            <!-- ── 기본 로고 (비호텔 단지 / 로딩 전 기본값) ── -->
+            <div class="header-logo" id="defaultHeaderLogo">
                 <div class="header-icon-wrap">
                     <i class="fas fa-building"></i>
                 </div>
@@ -46,6 +100,7 @@
                     <h1 id="logoText">청주SK뷰자이</h1>
                 </div>
             </div>
+
             <div class="header-actions">
                 <!-- pageTitle: main.js에서 텍스트 변경용, 화면엔 보이지 않음 -->
                 <span id="pageTitle" style="display:none">필라테스 레슨 신청서</span>
