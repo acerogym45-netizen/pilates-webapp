@@ -247,12 +247,19 @@ app.use('/',                 renewalRouter);
 app.use(express.static(ROOT_DIR, { index: false, dotfiles: 'ignore' }));
 
 // ── HTML 파일 직접 서빙 ──────────────────────────────────────────────────────
-// 루트에 있는 *.html 파일을 직접 서빙 (master-admin.html 등)
+// ── HTML 파일 직접 서빙 ──────────────────────────────────────────────────────
+// 루트 → public/ 순으로 fallback 탐색
+// 예) /admin-complex.html → ROOT_DIR/admin-complex.html 없으면 ROOT_DIR/public/admin-complex.html
 app.get('/:file([^/]+\\.html)', (req, res) => {
-    const filePath = path.join(ROOT_DIR, req.params.file);
-    if (fs.existsSync(filePath)) {
+    const fileName = req.params.file;
+    const candidates = [
+        path.join(ROOT_DIR, fileName),               // /var/task/admin-complex.html
+        path.join(ROOT_DIR, 'public', fileName),     // /var/task/public/admin-complex.html
+    ];
+    const found = candidates.find(p => fs.existsSync(p));
+    if (found) {
         res.setHeader('Content-Type', 'text/html; charset=UTF-8');
-        res.sendFile(filePath);
+        res.sendFile(found);
     } else {
         res.sendFile(path.join(ROOT_DIR, 'index.html'));
     }
