@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="description" content="아세로짐 라마다 대전점 — 호텔 투숙객 전용 피트니스 서비스">
+    <title>아세로짐 라마다 대전점</title>
+    <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+    <!-- ── 전체 레이아웃 ───────────────────────────────────────── -->
+    <div class="page-wrap">
+
+        <!-- ── 헤더 ────────────────────────────────────────────── -->
+        <header class="site-header">
+            <div class="header-inner">
+                <div class="logo">
+                    <span class="logo-icon" aria-hidden="true">🏋️</span>
+                    <div class="logo-text">
+                        <span class="logo-name">아세로짐</span>
+                        <span class="logo-sub">라마다 대전점</span>
+                    </div>
+                </div>
+                <p class="welcome-msg" id="welcomeMsg">환영합니다</p>
+            </div>
+        </header>
+
+        <!-- ── 메인 콘텐츠 ─────────────────────────────────────── -->
+        <main class="main-content">
+
+            <!-- 안내 문구 -->
+            <p class="intro-text">
+                투숙 중 이용 가능한 피트니스 서비스를<br>
+                아래에서 바로 신청하세요.
+            </p>
+
+            <!-- ── CTA 카드 3개 ──────────────────────────────── -->
+            <div class="cta-list" role="list">
+
+                <!-- CTA 1: 무료 클래스 -->
+                <a href="./quick-class.html" class="cta-card cta-card--primary" role="listitem">
+                    <div class="cta-icon" aria-hidden="true">💎</div>
+                    <div class="cta-body">
+                        <span class="cta-title">무료 클래스 신청하기</span>
+                        <span class="cta-desc">매주 월·수 오전 10시</span>
+                    </div>
+                    <span class="cta-arrow" aria-hidden="true">›</span>
+                </a>
+
+                <!-- CTA 2: 리프레시 PT -->
+                <a href="./refresh-pt.html" class="cta-card cta-card--secondary" role="listitem">
+                    <div class="cta-icon" aria-hidden="true">💪</div>
+                    <div class="cta-body">
+                        <span class="cta-title">리프레시 PT 예약하기</span>
+                        <span class="cta-desc">₩40,000 / 45분 · 출장 피로 케어</span>
+                    </div>
+                    <span class="cta-arrow" aria-hidden="true">›</span>
+                </a>
+
+                <!-- CTA 3: 마이페이지 -->
+                <a href="./member.html" class="cta-card cta-card--muted" role="listitem" id="memberCta">
+                    <div class="cta-icon" aria-hidden="true">🪪</div>
+                    <div class="cta-body">
+                        <span class="cta-title">회원 마이페이지</span>
+                        <span class="cta-desc" id="memberCtaDesc">PT 잔여 · 예약 변경</span>
+                    </div>
+                    <span class="cta-arrow" aria-hidden="true">›</span>
+                </a>
+
+            </div>
+            <!-- / .cta-list -->
+
+        </main>
+
+        <!-- ── 푸터: 임직원 링크 (작은 텍스트) ─────────────────── -->
+        <footer class="site-footer">
+            <a href="./staff-login.html" class="staff-link">
+                라마다 임직원이신가요?
+            </a>
+        </footer>
+
+    </div>
+    <!-- / .page-wrap -->
+
+    <script src="./js/landing.js"></script>
+</body>
+</html>

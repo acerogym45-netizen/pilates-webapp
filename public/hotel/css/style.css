@@ -1,0 +1,345 @@
+/*
+ * public/hotel/css/style.css
+ * 아세로짐 라마다 대전점 — 호텔 랜딩 페이지 스타일
+ *
+ * 설계 원칙:
+ *   - 모바일 우선 반응형
+ *   - 라마다 브랜드 톤: 차분한 네이비 + 골드 포인트
+ *   - CTA 버튼 최소 64px 높이 (넉넉한 터치 영역)
+ *   - 본문 폰트 최소 16px
+ *   - 혼잡도 / 실시간 인원 표시 스타일 없음
+ *
+ * 단계: C-1 / 작성일: 2026-06-07
+ */
+
+/* ── CSS 변수 ─────────────────────────────────────────────────── */
+:root {
+    /* 브랜드 컬러 */
+    --color-navy:        #1a2744;   /* 라마다 네이비 */
+    --color-navy-d:      #111b33;   /* 더 진한 네이비 (헤더 배경) */
+    --color-navy-light:  #253358;   /* 카드 hover */
+    --color-gold:        #c9a84c;   /* 골드 포인트 */
+    --color-gold-light:  #e2c97e;   /* 밝은 골드 */
+
+    /* 카드 컬러 */
+    --color-card-primary:   #1e3a5f;  /* 무료 클래스 카드 */
+    --color-card-secondary: #2a3f6f;  /* 리프레시 PT 카드 */
+    --color-card-muted:     #1f2e4a;  /* 마이페이지 카드 */
+
+    /* 텍스트 */
+    --color-text-on-dark:   #f0f0f0;
+    --color-text-muted:     #a8b4c8;
+    --color-text-desc:      #c0cad8;
+
+    /* 레이아웃 */
+    --max-width:       480px;
+    --page-padding:    20px;
+    --card-radius:     16px;
+    --card-gap:        14px;
+    --cta-min-height:  64px;        /* 최소 터치 영역 */
+
+    /* 그림자 */
+    --shadow-card:  0 4px 20px rgba(0, 0, 0, 0.35);
+    --shadow-hover: 0 8px 28px rgba(0, 0, 0, 0.45);
+
+    /* 전환 */
+    --transition: 0.18s ease;
+}
+
+/* ── 리셋 & 기본 ──────────────────────────────────────────────── */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Apple SD Gothic Neo',
+                 'Noto Sans KR', sans-serif;
+    background: var(--color-navy);
+    color: var(--color-text-on-dark);
+    min-height: 100dvh;
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    text-decoration: none;
+    color: inherit;
+}
+
+/* ── 레이아웃 ─────────────────────────────────────────────────── */
+.page-wrap {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    min-height: 100vh;
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 var(--page-padding);
+}
+
+/* ── 헤더 ─────────────────────────────────────────────────────── */
+.site-header {
+    padding: 28px 0 20px;
+}
+
+.header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo-icon {
+    font-size: 28px;
+    line-height: 1;
+}
+
+.logo-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+}
+
+.logo-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--color-gold-light);
+    letter-spacing: -0.01em;
+}
+
+.logo-sub {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    font-weight: 400;
+    letter-spacing: 0.01em;
+}
+
+.welcome-msg {
+    font-size: 0.88rem;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    /* 토큰 보유 시 JS가 개인화 텍스트로 교체 */
+    transition: color var(--transition);
+}
+
+.welcome-msg.is-personalized {
+    color: var(--color-gold-light);
+    font-weight: 600;
+}
+
+/* ── 메인 콘텐츠 ──────────────────────────────────────────────── */
+.main-content {
+    flex: 1;
+    padding: 8px 0 24px;
+}
+
+.intro-text {
+    font-size: 0.95rem;
+    color: var(--color-text-muted);
+    line-height: 1.7;
+    margin-bottom: 24px;
+}
+
+/* ── CTA 카드 리스트 ──────────────────────────────────────────── */
+.cta-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--card-gap);
+    list-style: none;
+}
+
+/* CTA 카드 공통 */
+.cta-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: var(--cta-min-height);
+    padding: 18px 16px;
+    border-radius: var(--card-radius);
+    box-shadow: var(--shadow-card);
+    cursor: pointer;
+    transition:
+        transform var(--transition),
+        box-shadow var(--transition),
+        background var(--transition);
+
+    /* 터치 피드백 */
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+.cta-card:active {
+    transform: scale(0.97);
+}
+
+@media (hover: hover) {
+    .cta-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-hover);
+    }
+}
+
+/* 카드 색상 변형 */
+.cta-card--primary {
+    background: var(--color-card-primary);
+    border: 1px solid rgba(201, 168, 76, 0.3);  /* 골드 테두리 강조 */
+}
+
+.cta-card--secondary {
+    background: var(--color-card-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cta-card--muted {
+    background: var(--color-card-muted);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+@media (hover: hover) {
+    .cta-card--primary:hover   { background: #254e82; }
+    .cta-card--secondary:hover { background: #334f88; }
+    .cta-card--muted:hover     { background: #273d62; }
+}
+
+/* 카드 아이콘 */
+.cta-icon {
+    font-size: 2rem;
+    line-height: 1;
+    flex-shrink: 0;
+    width: 44px;
+    text-align: center;
+}
+
+/* 카드 텍스트 영역 */
+.cta-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.cta-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--color-text-on-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cta-card--primary .cta-title {
+    color: var(--color-gold-light);
+}
+
+.cta-desc {
+    font-size: 0.82rem;
+    color: var(--color-text-desc);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 카드 화살표 */
+.cta-arrow {
+    font-size: 1.6rem;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+    line-height: 1;
+    margin-left: 4px;
+    transition: transform var(--transition), color var(--transition);
+}
+
+@media (hover: hover) {
+    .cta-card:hover .cta-arrow {
+        transform: translateX(3px);
+        color: var(--color-gold-light);
+    }
+}
+
+/* 마이페이지 카드 개인화 상태 */
+.cta-card--muted.is-member .cta-title {
+    color: var(--color-gold-light);
+}
+.cta-card--muted.is-member .cta-desc {
+    color: var(--color-text-on-dark);
+}
+
+/* ── 푸터 ─────────────────────────────────────────────────────── */
+.site-footer {
+    padding: 16px 0 32px;
+    text-align: center;
+}
+
+.staff-link {
+    font-size: 0.78rem;
+    color: var(--color-text-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    padding: 8px 12px;    /* 터치 영역 확보 */
+    display: inline-block;
+    transition: color var(--transition);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.staff-link:hover,
+.staff-link:active {
+    color: var(--color-text-on-dark);
+}
+
+/* ── 반응형 — 태블릿/데스크탑 ───────────────────────────────── */
+@media (min-width: 520px) {
+    .page-wrap {
+        padding: 0 24px;
+    }
+
+    .logo-name {
+        font-size: 1.35rem;
+    }
+
+    .cta-title {
+        font-size: 1.12rem;
+    }
+
+    .cta-icon {
+        font-size: 2.2rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .page-wrap {
+        padding: 0 32px;
+    }
+
+    .site-header {
+        padding: 36px 0 24px;
+    }
+
+    .cta-card {
+        padding: 20px 20px;
+    }
+}
+
+/* ── 접근성: 포커스 링 ────────────────────────────────────────── */
+.cta-card:focus-visible,
+.staff-link:focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 3px;
+    border-radius: var(--card-radius);
+}
+
+/* ── 다크 모드: 이미 다크 테마이므로 추가 조정 없음 ─────────── */
