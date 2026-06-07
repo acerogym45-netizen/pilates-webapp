@@ -35,15 +35,7 @@ body.theme-minimal .header {
     background: #111111;
     border-bottom: 2px solid var(--minimal-red);
 }
-body.theme-minimal .header::before {
-    content: 'FITNESS & PILATES';
-    display: block;
-    font-size: .6rem;
-    letter-spacing: .25em;
-    color: var(--minimal-red);
-    margin-bottom: 8px;
-    text-transform: uppercase;
-}
+body.theme-minimal .header::before { content: ''; display: none; }
 body.theme-minimal .header h1 { font-weight: 700; letter-spacing: -.01em; }
 body.theme-minimal .header-icon,
 body.theme-minimal .header-subtitle { color: #aaa; }

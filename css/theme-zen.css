@@ -40,15 +40,7 @@ body.theme-zen .header {
     background: linear-gradient(135deg, #3D3580 0%, #5e56b0 100%);
     border-bottom: 1px solid rgba(255,255,255,.2);
 }
-body.theme-zen .header::before {
-    content: '🧘 ZEN PILATES & YOGA';
-    display: block;
-    font-size: .63rem;
-    letter-spacing: .18em;
-    color: #c8c4f0;
-    margin-bottom: 8px;
-    opacity: .85;
-}
+body.theme-zen .header::before { content: ''; display: none; }
 body.theme-zen .header h1 { font-family: 'Noto Serif KR', serif; font-weight: 600; }
 body.theme-zen .header-icon,
 body.theme-zen .header-subtitle { color: #c8c4f0; }

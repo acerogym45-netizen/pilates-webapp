@@ -39,15 +39,7 @@ body.theme-nature .header {
     background: linear-gradient(135deg, #2D5016 0%, #3A7D1E 100%);
     border-bottom: 2px solid #c8e89a;
 }
-body.theme-nature .header::before {
-    content: '🌿 WELLNESS & PILATES';
-    display: block;
-    font-size: .65rem;
-    letter-spacing: .15em;
-    color: #c8e89a;
-    margin-bottom: 8px;
-    opacity: .9;
-}
+body.theme-nature .header::before { content: ''; display: none; }
 body.theme-nature .header h1 { font-family: 'Noto Serif KR', serif; font-weight: 600; }
 body.theme-nature .header-icon,
 body.theme-nature .header-subtitle { color: #c8e89a; }

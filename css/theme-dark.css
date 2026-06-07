@@ -38,14 +38,7 @@ body.theme-dark .header {
     background: #111111;
     border-bottom: 2px solid var(--dark-mint);
 }
-body.theme-dark .header::before {
-    content: '⚡ NIGHT FITNESS';
-    display: block;
-    font-size: .63rem;
-    letter-spacing: .2em;
-    color: var(--dark-mint);
-    margin-bottom: 8px;
-}
+body.theme-dark .header::before { content: ''; display: none; }
 body.theme-dark .header h1 { font-weight: 700; color: #fff; }
 body.theme-dark .header-icon,
 body.theme-dark .header-subtitle { color: var(--dark-mint); }

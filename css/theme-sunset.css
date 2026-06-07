@@ -39,15 +39,7 @@ body.theme-sunset .header {
     background: linear-gradient(135deg, #2C1810 0%, #6b2d0f 100%);
     border-bottom: 3px solid var(--sunset-orange);
 }
-body.theme-sunset .header::before {
-    content: '🌅 ENERGY FITNESS';
-    display: block;
-    font-size: .63rem;
-    letter-spacing: .16em;
-    color: var(--sunset-amber);
-    margin-bottom: 8px;
-    opacity: .9;
-}
+body.theme-sunset .header::before { content: ''; display: none; }
 body.theme-sunset .header h1 { font-weight: 700; }
 body.theme-sunset .header-icon,
 body.theme-sunset .header-subtitle { color: var(--sunset-amber); }
