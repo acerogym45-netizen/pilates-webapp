@@ -84,3 +84,17 @@ body.theme-modern fieldset.form-fieldset legend { color: var(--modern-cyan); fon
 body.theme-modern .modal-content { border-top: 3px solid var(--modern-cyan); }
 body.theme-modern .policy-box { border-left: 3px solid var(--modern-cyan); }
 body.theme-modern .policy-box-header i { color: var(--modern-cyan); }
+
+/* ── 내 문의 조회 버튼 가독성 보정 ── */
+body.theme-modern .quick-btn--inquiry-main {
+    background: linear-gradient(135deg, var(--modern-charcoal) 0%, #2a3f55 100%) !important;
+    color: #fff !important;
+    border: 1.5px solid var(--modern-cyan) !important;
+    box-shadow: 0 2px 10px rgba(0,206,201,.25) !important;
+}
+body.theme-modern .quick-btn--inquiry-main i,
+body.theme-modern .quick-btn--inquiry-main span { color: #fff !important; }
+body.theme-modern .quick-btn--inquiry-main:hover {
+    background: linear-gradient(135deg, #2a3f55 0%, var(--modern-cyan) 100%) !important;
+    color: #fff !important;
+}

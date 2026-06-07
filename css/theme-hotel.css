@@ -823,3 +823,17 @@ body.theme-hotel .btn-primary.btn-full:hover {
     background: var(--hotel-gold-light);
     color: var(--hotel-navy);
 }
+
+/* ── 내 문의 조회 버튼 가독성 보정 ── */
+body.theme-hotel .quick-btn--inquiry-main {
+    background: linear-gradient(135deg, var(--hotel-navy-card, #1e3a5f) 0%, #0a2040 100%) !important;
+    color: var(--hotel-gold) !important;
+    border: 1.5px solid var(--hotel-gold) !important;
+    box-shadow: 0 2px 10px rgba(200,168,100,.25) !important;
+}
+body.theme-hotel .quick-btn--inquiry-main i,
+body.theme-hotel .quick-btn--inquiry-main span { color: var(--hotel-gold) !important; }
+body.theme-hotel .quick-btn--inquiry-main:hover {
+    background: linear-gradient(135deg, #0a2040 0%, var(--hotel-navy-card, #1e3a5f) 100%) !important;
+    border-color: var(--hotel-gold-light) !important;
+}

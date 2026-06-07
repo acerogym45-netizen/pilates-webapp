@@ -80,3 +80,19 @@ body.theme-royal .policy-box-header { font-family: 'Noto Serif KR', serif; color
 body.theme-royal .policy-box-header i { color: var(--royal-gold); }
 body.theme-royal .terms-box { background: #fdf8f0; }
 body.theme-royal .signature-canvas-wrapper { border: 1.5px solid var(--royal-gold); }
+
+/* ── 내 문의 조회 버튼 가독성 보정 ── */
+body.theme-royal .quick-btn--inquiry-main {
+    background: linear-gradient(135deg, var(--royal-burgundy) 0%, #7a0f30 100%) !important;
+    color: var(--royal-gold) !important;
+    border: 1.5px solid var(--royal-gold) !important;
+    box-shadow: 0 2px 10px rgba(191,155,48,.25) !important;
+}
+body.theme-royal .quick-btn--inquiry-main i,
+body.theme-royal .quick-btn--inquiry-main span { color: var(--royal-gold) !important; }
+body.theme-royal .quick-btn--inquiry-main:hover {
+    background: linear-gradient(135deg, #7a0f30 0%, var(--royal-gold) 100%) !important;
+    color: var(--royal-burgundy) !important;
+}
+body.theme-royal .quick-btn--inquiry-main:hover i,
+body.theme-royal .quick-btn--inquiry-main:hover span { color: var(--royal-burgundy) !important; }
