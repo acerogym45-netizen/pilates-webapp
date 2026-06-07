@@ -149,13 +149,8 @@ app.use('/api/complexes',    complexesRouter);
 app.use('/api/programs',     programsRouter);
 app.use('/api/applications', applicationsRouter);
 app.use('/api/backup',       backupRouter);       // ← DB 백업
-app.use('/api',              miscRouter);          // ← 와일드카드 마지막
 
-// ── 연장 라우터 (GET /renew/:token + POST /api/renewal/*) ─────────────────────
-// SPA 폴백보다 앞에 위치해야 /renew/:token HTML이 정상 응답됨
-app.use('/',                 renewalRouter);
-
-// ── HOTEL ROUTES MOUNT (additive, feature-flagged, MUST be BEFORE catch-all) ─
+// ── HOTEL ROUTES MOUNT (additive, feature-flagged, MUST be BEFORE /api wildcard) ─
 // master flag(ENABLE_HOTEL_MODE)가 켜진 경우에만 마운트.
 // 하위 flag는 각 라우터 내부에서 개별 체크하므로 OFF 상태에서도 안전(403 반환).
 if (flags.hotelMode) {
@@ -169,6 +164,12 @@ if (flags.hotelMode) {
 } else {
     console.log('[HOTEL] Routes NOT mounted: hotelMode=OFF');
 }
+
+app.use('/api',              miscRouter);          // ← 와일드카드 마지막
+
+// ── 연장 라우터 (GET /renew/:token + POST /api/renewal/*) ─────────────────────
+// SPA 폴백보다 앞에 위치해야 /renew/:token HTML이 정상 응답됨
+app.use('/',                 renewalRouter);
 
 // ── 나머지 정적파일 (express.static) ─────────────────────────────────────────
 app.use(express.static(ROOT_DIR, { index: false, dotfiles: 'ignore' }));
