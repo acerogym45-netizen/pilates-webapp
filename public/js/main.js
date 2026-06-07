@@ -1562,7 +1562,13 @@ function initHotelMode() {
     if (!complexContext.isHotel()) return;
 
     const complex = complexContext.getComplex();
-    console.log('🏨 Hotel mode activated for:', complex?.complex_name);
+    console.log('🏨 Hotel mode activated for:', complex?.name || complex?.complex_name);
+
+    /* ── 0. body 테마 클래스 보장 (applyBranding()에서 이미 처리하지만 안전 확인) ── */
+    if (!document.body.classList.contains('theme-hotel')) {
+        document.body.classList.add('theme-hotel');
+        console.log('🎨 body.theme-hotel class ensured by initHotelMode');
+    }
 
     /* ── 1. 오버레이 표시 / 퀵액션 숨김 ── */
     const overlay   = document.getElementById('hotelCtaOverlay');
