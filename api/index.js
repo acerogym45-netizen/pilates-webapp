@@ -116,6 +116,62 @@ app.get('/admin/css/:file', (req, res) => {
     }
 });
 
+// ── HOTEL 정적 페이지 (catch-all 보다 위, additive) ──────────────────────────
+// /hotel, /hotel/, /hotel/xxx.html 및 /hotel/{css,js,img}/* 직접 서빙
+app.get('/hotel', (req, res) => {
+    res.redirect(301, '/hotel/');
+});
+
+app.get(/^\/hotel\/([a-zA-Z0-9_\-]+\.html)?$/, (req, res) => {
+    const file = req.params[0] || 'index.html';
+    const filePath = path.join(ROOT_DIR, 'public', 'hotel', file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'text/html; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/hotel/css/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'public', 'hotel', 'css', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'text/css; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/hotel/js/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'public', 'hotel', 'js', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/hotel/img/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'public', 'hotel', 'img', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
+app.get('/hotel/manifest.json', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'public', 'hotel', 'manifest.json');
+    if (fs.existsSync(filePath)) {
+        res.setHeader('Content-Type', 'application/json; charset=UTF-8');
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
 // ── 디버그 ────────────────────────────────────────────────────────────────────
 app.get('/api/debug-files', (req, res) => {
     const jsDir = path.join(ROOT_DIR, 'js');
