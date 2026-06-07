@@ -39,13 +39,16 @@ document.addEventListener('DOMContentLoaded', async function() {
     await initializeComplexContext();
     console.log('✅ Complex context initialized');
 
-    // 2. 문의하기 퀵액션 표시 여부 적용 (show_inquiry 설정)
+    // 2. 호텔 모드 초기화 (venue_type='hotel' 단지 전용)
+    initHotelMode();
+
+    // 3. 문의하기 퀵액션 표시 여부 적용 (show_inquiry 설정)
     applyInquiryVisibility();
 
-    // 2-1. 해지 신청 버튼 표시 여부 적용 (show_cancel_tab 설정)
+    // 3-1. 해지 신청 버튼 표시 여부 적용 (show_cancel_tab 설정)
     applyCancelTabVisibility();
     
-    // 3. 나머지 초기화
+    // 4. 나머지 초기화
     setupEventListeners();
     setMinDate();
     setSignatureDate();
@@ -253,9 +256,12 @@ function handlePage1Submit(e) {
     }
 
     // Collect form data
+    // 호텔 모드: 객실 번호를 dong에 매핑, ho는 '호텔' 고정
+    const isHotelMode = complexContext && complexContext.isHotel ? complexContext.isHotel() : false;
+    const roomVal = isHotelMode ? (document.getElementById('hotelRoom')?.value?.trim() || '') : '';
     formData = {
-        dong: document.getElementById('dong').value.trim(),
-        ho: document.getElementById('ho').value.trim(),
+        dong: isHotelMode ? roomVal : document.getElementById('dong').value.trim(),
+        ho:   isHotelMode ? '호텔'  : document.getElementById('ho').value.trim(),
         name: document.getElementById('name').value.trim(),
         phone: document.getElementById('phone').value.trim(),
         lesson_type: lessonType,
@@ -270,8 +276,19 @@ function handlePage1Submit(e) {
         alert('개인정보 수집 및 이용에 동의해주세요.');
         return;
     }
+
+    // 호텔 모드 전용 검증
+    if (isHotelMode) {
+        if (!roomVal) { alert('객실 번호를 입력해주세요.'); document.getElementById('hotelRoom')?.focus(); return; }
+        if (!formData.name)  { alert('이름을 입력해주세요.'); return; }
+        if (!formData.phone) { alert('전화번호를 입력해주세요.'); return; }
+        if (!formData.lesson_type) { alert('프로그램을 선택해주세요.'); return; }
+        if (!formData.preferred_time) { alert('희망 시간대를 선택해주세요.'); return; }
+        goToPage2();
+        return;
+    }
     
-    // Validate all required fields
+    // 일반(아파트) 모드: 모든 필수 항목 검증
     const requiredFields = ['dong', 'ho', 'name', 'phone', 'lesson_type', 'preferred_time'];
     for (const field of requiredFields) {
         if (!formData[field]) {
@@ -306,8 +323,13 @@ function goToPage2() {
     if (subtitleEl) subtitleEl.textContent = '계약 내용을 확인하고 서명해주세요';
     
     // Display form data
+    const _isHotel = complexContext && complexContext.isHotel ? complexContext.isHotel() : false;
+    const dongLabel = document.querySelector('#page2 .summary-row span:first-child');
+    if (_isHotel && dongLabel && dongLabel.textContent.trim() === '동호수') {
+        dongLabel.textContent = '객실 번호';
+    }
     document.getElementById('displayDong').textContent  = formData.dong;
-    document.getElementById('displayHo').textContent    = formData.ho;
+    document.getElementById('displayHo').textContent    = _isHotel ? '' : formData.ho;
     document.getElementById('displayName').textContent  = formData.name;
     document.getElementById('displayPhone').textContent = formData.phone;
     document.getElementById('displayLesson').textContent = formData.lesson_type;
@@ -3565,4 +3587,190 @@ async function submitRefundRequest() {
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-paper-plane"></i> 환불 신청 접수'; }
     }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🏨 호텔 모드 — initHotelMode() / _hotelCustomizeForm() / hotelSelectPT()
+   venue_type='hotel' 단지일 때 DOMContentLoaded 직후 호출됨
+   ═══════════════════════════════════════════════════════════════════════════ */
+function initHotelMode() {
+    if (!complexContext || !complexContext.isHotel || !complexContext.isHotel()) return;
+
+    const complex = complexContext.getComplex();
+    console.log('🏨 Hotel mode activated for:', complex?.name || complex?.complex_name);
+
+    /* 0. body 테마 클래스 보장 */
+    if (!document.body.classList.contains('theme-hotel')) {
+        document.body.classList.add('theme-hotel');
+        console.log('🎨 body.theme-hotel class ensured by initHotelMode');
+    }
+
+    /* 1. CTA 오버레이 표시 / 아파트 퀵액션 숨김 */
+    const overlay   = document.getElementById('hotelCtaOverlay');
+    const quickWrap = document.querySelector('.quick-actions-wrap');
+    if (overlay)   { overlay.setAttribute('aria-hidden', 'false'); overlay.style.display = 'block'; }
+    if (quickWrap) quickWrap.style.display = 'none';
+
+    /* 2. CTA 안내 문구 개인화 */
+    const intro = document.getElementById('hotelCtaIntro');
+    if (intro && (complex?.name || complex?.complex_name)) {
+        intro.innerHTML = `${complex.name || complex.complex_name} 피트니스 서비스를<br>아래에서 바로 신청하세요.`;
+    }
+    const lessonDesc = document.getElementById('hotelCtaLessonDesc');
+    if (lessonDesc && Array.isArray(complex?.lesson_types) && complex.lesson_types.length) {
+        lessonDesc.textContent = complex.lesson_types.slice(0, 3).join(' · ');
+    }
+
+    /* 3. 폼 커스터마이징 */
+    _hotelCustomizeForm();
+
+    /* 4. 헤더 서브라인 */
+    const headerEl = document.querySelector('.header');
+    if (headerEl && !headerEl.querySelector('.hotel-header-sub')) {
+        const sub = document.createElement('p');
+        sub.className = 'hotel-header-sub';
+        sub.style.cssText =
+            'font-size:.68rem;letter-spacing:.16em;color:var(--hotel-gold,#C8A864);' +
+            'opacity:.85;margin-top:4px;font-family:"Noto Serif KR",serif;';
+        sub.textContent = 'WELLNESS CONCIERGE SERVICE';
+        const h1 = headerEl.querySelector('h1');
+        if (h1) h1.after(sub);
+    }
+
+    /* 5. 로딩 아이콘 변경 */
+    const loadingIcon = document.querySelector('.loading-logo i');
+    if (loadingIcon) loadingIcon.className = 'fas fa-hotel';
+
+    console.log('✅ Hotel mode UI applied');
+}
+
+function _hotelCustomizeForm() {
+    /* Step1 섹션 헤더 */
+    const step1Header = document.querySelector('#page1 .section-header h3');
+    if (step1Header) step1Header.innerHTML = '<i class="fas fa-concierge-bell"></i> 피트니스 이용 신청';
+
+    /* 동/호수 행 숨기고 객실 번호 필드 삽입 */
+    const dongHoRow = document.querySelector('.form-row:has(#dong)');
+    if (dongHoRow) dongHoRow.style.display = 'none';
+    const dongConfirmRow = document.getElementById('dongHoConfirmRow');
+    if (dongConfirmRow) dongConfirmRow.style.display = 'none';
+
+    const basicFieldset = document.querySelector('#page1 fieldset');
+    if (basicFieldset && !document.getElementById('hotelRoomRow')) {
+        const roomRow = document.createElement('div');
+        roomRow.id = 'hotelRoomRow';
+        roomRow.className = 'form-group';
+        roomRow.innerHTML = `
+            <label for="hotelRoom">객실 번호 <span class="required">*</span></label>
+            <input type="text" id="hotelRoom" placeholder="예: 1204" inputmode="numeric" autocomplete="off"
+                   oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+            <small style="color:#7f8c8d;font-size:.78rem;margin-top:4px;display:block">
+                투숙 중인 객실 번호를 입력하세요
+            </small>`;
+        basicFieldset.insertBefore(roomRow, basicFieldset.firstChild);
+    }
+
+    /* fieldset legend 변경 */
+    const legendBasic = document.querySelector('#page1 fieldset:first-of-type legend');
+    if (legendBasic) legendBasic.innerHTML = '<i class="fas fa-user"></i> 투숙객 정보';
+    const legendLesson = document.querySelector('#page1 fieldset:nth-of-type(2) legend');
+    if (legendLesson) legendLesson.innerHTML = '<i class="fas fa-dumbbell"></i> 이용 서비스 선택';
+
+    /* 개인정보 동의 문구 */
+    const consentDetail = document.querySelector('#page1 .consent-detail');
+    if (consentDetail) {
+        consentDetail.innerHTML =
+            '수집항목: 객실번호, 이름, 전화번호 &nbsp;|&nbsp; 목적: 피트니스 이용 신청 처리 &nbsp;|&nbsp; 보유기간: 체크아웃 후 30일';
+    }
+
+    /* Step1 → Step2 버튼 */
+    const submitBtn = document.querySelector('#contractForm button[type="submit"]');
+    if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-arrow-right"></i> 이용 약관 확인';
+
+    /* Step2 헤더 */
+    const step2Header = document.querySelector('#page2 .section-header h3');
+    if (step2Header) step2Header.innerHTML = '<i class="fas fa-file-contract"></i> 피트니스 이용 동의서';
+
+    /* 신청·해지 기간 안내 박스 숨김 */
+    const periodBox = document.querySelector('.period-notice-box');
+    if (periodBox) periodBox.style.display = 'none';
+
+    /* 계약 요약 동호수 → 객실 번호 */
+    document.querySelectorAll('#page2 .summary-row').forEach(row => {
+        const lbl = row.querySelector('span:first-child');
+        if (lbl && lbl.textContent.trim() === '동호수') lbl.textContent = '객실 번호';
+    });
+
+    /* 환불 정책 교체 */
+    const refundBox = document.querySelector('.policy-box.policy-refund');
+    if (refundBox) {
+        refundBox.innerHTML = `
+            <div class="policy-box-header">
+                <i class="fas fa-exclamation-circle"></i>
+                이용 취소 및 환불 정책 <span class="policy-required-tag">필독 · 필수 동의</span>
+            </div>
+            <div class="policy-content">
+                <div class="policy-sub-title">📋 이용 취소 방법</div>
+                <ul>
+                    <li>이용 취소는 <strong>본 시스템(온라인)</strong>을 통해서만 접수 가능합니다.</li>
+                    <li>취소 신청 접수 후 <strong>즉시 자동 처리</strong>됩니다.</li>
+                    <li>취소 확인 후 <strong>번복이 불가</strong>하며, 신중하게 신청해 주세요.</li>
+                </ul>
+                <div class="policy-sub-title policy-mt">💰 환불 정책</div>
+                <ul>
+                    <li>이용 시작 <strong>24시간 전까지</strong> 취소 시 <strong>전액 환불</strong>됩니다.</li>
+                    <li>이용 시작 <strong>24시간 이내</strong> 취소 또는 노쇼 시 환불이 제한될 수 있습니다.</li>
+                    <li>서비스 이용 후에는 환불이 불가합니다.</li>
+                </ul>
+                <div class="policy-notice">
+                    ※ 취소 신청은 반드시 본 시스템을 통해 제출해야 하며, SMS · 통화 등 구두 요청은 인정되지 않습니다.
+                </div>
+            </div>
+            <label class="policy-consent-label">
+                <input type="checkbox" id="refundAgreement" required>
+                <span>위 <strong>이용 취소 및 환불 정책</strong>을 모두 읽고 동의합니다 <span class="required">*</span></span>
+            </label>`;
+    }
+
+    /* 이용약관 교체 */
+    const termsBox = document.querySelector('.terms-box');
+    if (termsBox) {
+        termsBox.innerHTML = `
+            <div class="terms-section"><strong>① 본인 이용 원칙</strong>
+                <p>본 서비스는 투숙객 본인만 이용 가능하며, 타인에게 양도하거나 공유할 수 없습니다.</p></div>
+            <div class="terms-section"><strong>② 이용 시간 준수</strong>
+                <p>예약된 시간을 준수해 주세요. 무단 지각 또는 노쇼 시 이용 요금이 청구될 수 있습니다.</p></div>
+            <div class="terms-section"><strong>③ 시설 이용 수칙</strong>
+                <p>피트니스 시설 내에서는 안전 수칙을 준수하고, 타 투숙객에게 불편을 주는 행동을 삼가주세요.</p></div>
+            <div class="terms-section"><strong>④ 사고 면책</strong>
+                <p>본인 부주의로 발생한 사고에 대해서는 시설 측의 책임을 묻지 않습니다.</p></div>
+            <div class="terms-section"><strong>⑤ 개인 물품 관리</strong>
+                <p>귀중품 및 개인 소지품은 직접 관리해 주세요. 분실·도난에 대해 시설 측은 책임지지 않습니다.</p></div>
+            <div class="terms-section"><strong>⑥ 이용 취소 및 변경</strong>
+                <p>이용 취소 또는 일정 변경은 이용 시작 24시간 전까지 본 시스템을 통해 신청해 주세요.</p></div>`;
+    }
+
+    /* 이용약관 동의 레이블 */
+    const termsAgreeLabel = document.getElementById('termsAgreeLabel');
+    if (termsAgreeLabel) {
+        termsAgreeLabel.innerHTML = '위 이용약관 전체 (①~⑥)를 모두 읽고 동의합니다 <span class="required">*</span>';
+    }
+
+    /* 자동재등록 안내 행 숨김 */
+    const autoRenewRow = document.getElementById('contractAutoRenewRow');
+    if (autoRenewRow) autoRenewRow.style.display = 'none';
+
+    console.log('✅ Hotel form customization applied');
+}
+
+/* PT 예약 버튼: PT 타입 자동 선택 후 폼 스크롤 */
+function hotelSelectPT() {
+    const select = document.getElementById('lessonType');
+    if (select) {
+        const ptOption = Array.from(select.options).find(o =>
+            o.text.toLowerCase().includes('pt') || o.text.includes('피티')
+        );
+        if (ptOption) select.value = ptOption.value;
+    }
+    document.getElementById('page1')?.scrollIntoView({ behavior: 'smooth' });
 }
