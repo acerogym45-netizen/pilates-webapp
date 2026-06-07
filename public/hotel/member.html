@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a2744">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="아세로짐">
+    <link rel="manifest" href="./manifest.json">
+    <title>내 멤버십 — 아세로짐 라마다 대전점</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <style>
+        /* ── 이 페이지 전용 스타일 ── */
+
+        /* 헤더 */
+        .page-header {
+            padding: 24px 0 16px;
+        }
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+        .back-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.08);
+            color: var(--color-text-on-dark);
+            font-size: 1.1rem;
+            flex-shrink: 0;
+            -webkit-tap-highlight-color: transparent;
+            transition: background .18s;
+        }
+        .back-btn:hover { background: rgba(255,255,255,.14); }
+        .page-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+            flex: 1;
+        }
+        .member-name-badge {
+            font-size: 0.82rem;
+            color: var(--color-text-muted);
+            background: rgba(255,255,255,.07);
+            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 20px;
+            padding: 4px 12px;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        /* ── 토큰 없음 안내 화면 ── */
+        .no-token-screen {
+            display: none;
+            text-align: center;
+            padding: 60px 0 40px;
+        }
+        .no-token-screen.show { display: block; }
+        .no-token-icon  { font-size: 3rem; margin-bottom: 20px; }
+        .no-token-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+            margin-bottom: 12px;
+        }
+        .no-token-desc  {
+            font-size: 0.88rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 28px;
+            word-break: keep-all;
+        }
+        .no-token-desc strong {
+            color: var(--color-text-on-dark);
+            font-weight: 600;
+        }
+
+        /* ── 카드 공통 ── */
+        .info-card {
+            background: var(--color-card-secondary);
+            border: 1px solid rgba(255,255,255,.07);
+            border-radius: var(--card-radius);
+            padding: 18px 16px;
+            margin-bottom: 14px;
+        }
+        .card-label {
+            font-size: 0.72rem;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .card-label-icon { font-size: 0.95rem; }
+
+        /* ── 카드 1: 다음 PT 예약 ── */
+        .next-pt-card {
+            border-color: rgba(201,168,76,.25);
+            background: var(--color-card-primary);
+        }
+        .next-pt-main {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--color-text-on-dark);
+            margin-bottom: 4px;
+        }
+        .next-pt-sub {
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+            margin-bottom: 14px;
+        }
+        .next-pt-empty {
+            font-size: 0.9rem;
+            color: var(--color-text-muted);
+            margin-bottom: 14px;
+        }
+        .pt-btn-row {
+            display: flex;
+            gap: 8px;
+        }
+        .pt-action-btn {
+            flex: 1;
+            height: 38px;
+            border-radius: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: background .18s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .pt-action-btn:active { transform: scale(0.96); }
+        .pt-action-btn--change {
+            background: rgba(201,168,76,.2);
+            color: var(--color-gold-light);
+            border: 1px solid rgba(201,168,76,.35);
+        }
+        .pt-action-btn--change:hover { background: rgba(201,168,76,.3); }
+        .pt-action-btn--cancel {
+            background: rgba(255,255,255,.07);
+            color: var(--color-text-muted);
+            border: 1px solid rgba(255,255,255,.1);
+        }
+        .pt-action-btn--cancel:hover { background: rgba(255,255,255,.12); }
+
+        /* ── 카드 2: PT 잔여 게이지 ── */
+        .pt-count-row {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+        .pt-remaining-num {
+            font-size: 2.4rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+            line-height: 1;
+        }
+        .pt-total-text {
+            font-size: 0.88rem;
+            color: var(--color-text-muted);
+        }
+        /* 게이지 막대 */
+        .pt-gauge-wrap {
+            background: rgba(255,255,255,.08);
+            border-radius: 6px;
+            height: 10px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        .pt-gauge-bar {
+            height: 100%;
+            border-radius: 6px;
+            background: linear-gradient(90deg, #c9a84c, #e2c97e);
+            transition: width .6s cubic-bezier(.4,0,.2,1);
+            min-width: 4px;
+        }
+        .pt-gauge-bar.low   { background: linear-gradient(90deg, #eb5757, #f28b8b); }
+        .pt-gauge-bar.medium{ background: linear-gradient(90deg, #f2c94c, #f6e08a); }
+        /* D-day 만료일 */
+        .pt-dday-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.83rem;
+        }
+        .pt-expires-label { color: var(--color-text-muted); }
+        .pt-expires-val   { color: var(--color-text-on-dark); font-weight: 600; }
+        .pt-dday-badge {
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 8px;
+        }
+        .pt-dday-badge.ok     { background: rgba(111,207,151,.15); color: #6fcf97; }
+        .pt-dday-badge.warn   { background: rgba(242,201,76,.15);  color: #f2c94c; }
+        .pt-dday-badge.urgent { background: rgba(235,87,87,.18);   color: #eb5757; }
+        .pt-dday-badge.today  { background: rgba(235,87,87,.25);   color: #ff7070; }
+
+        /* ── 카드 3: 라마다 할인 코드 ── */
+        .discount-card {
+            border-color: rgba(201,168,76,.2);
+        }
+        .discount-desc {
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+            margin-bottom: 14px;
+            line-height: 1.6;
+        }
+        /* 발급된 코드 표시 박스 */
+        .discount-code-box {
+            background: rgba(201,168,76,.12);
+            border: 1px solid rgba(201,168,76,.3);
+            border-radius: 12px;
+            padding: 14px 16px;
+            display: none;
+            margin-bottom: 12px;
+        }
+        .discount-code-box.show { display: block; }
+        .discount-code-label {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            margin-bottom: 6px;
+        }
+        .discount-code-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+            letter-spacing: .1em;
+            font-family: 'Courier New', monospace;
+            margin-bottom: 4px;
+        }
+        .discount-code-expires {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+        }
+        /* 발급 버튼 */
+        .issue-btn {
+            width: 100%;
+            height: 46px;
+            background: rgba(201,168,76,.15);
+            border: 1px solid rgba(201,168,76,.35);
+            border-radius: 12px;
+            color: var(--color-gold-light);
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background .18s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .issue-btn:hover  { background: rgba(201,168,76,.25); }
+        .issue-btn:active { transform: scale(0.97); }
+        .issue-btn:disabled {
+            background: rgba(255,255,255,.05);
+            color: var(--color-text-muted);
+            border-color: rgba(255,255,255,.08);
+            cursor: not-allowed;
+        }
+
+        /* ── 카드 4: 운동 리포트 ── */
+        .report-list {
+            list-style: none;
+        }
+        .report-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,.05);
+        }
+        .report-item:last-child { border-bottom: none; }
+        .report-phase {
+            font-size: 0.88rem;
+            color: var(--color-text-on-dark);
+            font-weight: 600;
+        }
+        .report-date {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            margin-top: 2px;
+        }
+        .report-dl-btn {
+            font-size: 0.8rem;
+            color: var(--color-gold);
+            background: rgba(201,168,76,.1);
+            border: 1px solid rgba(201,168,76,.25);
+            border-radius: 8px;
+            padding: 5px 10px;
+            text-decoration: none;
+            flex-shrink: 0;
+            -webkit-tap-highlight-color: transparent;
+            transition: background .18s;
+        }
+        .report-dl-btn:hover { background: rgba(201,168,76,.2); }
+        .report-empty {
+            font-size: 0.88rem;
+            color: var(--color-text-muted);
+            text-align: center;
+            padding: 8px 0 4px;
+        }
+
+        /* ── 카드 5: 다가오는 예약 목록 ── */
+        .reservation-list { list-style: none; }
+        .reservation-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 11px 0;
+            border-bottom: 1px solid rgba(255,255,255,.05);
+        }
+        .reservation-item:last-child { border-bottom: none; }
+        .res-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--color-gold);
+            flex-shrink: 0;
+            margin-top: 5px;
+        }
+        .res-info { flex: 1; }
+        .res-program {
+            font-size: 0.88rem;
+            color: var(--color-text-on-dark);
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .res-schedule {
+            font-size: 0.78rem;
+            color: var(--color-text-muted);
+        }
+        .res-instructor {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            margin-top: 2px;
+        }
+        .reservation-empty {
+            font-size: 0.88rem;
+            color: var(--color-text-muted);
+            text-align: center;
+            padding: 8px 0 4px;
+        }
+
+        /* ── 상태 박스 ── */
+        .status-box {
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            margin-bottom: 14px;
+            display: none;
+        }
+        .status-box.error   { background: rgba(235,87,87,.15);  color: #f8a0a0; border: 1px solid rgba(235,87,87,.3); }
+        .status-box.info    { background: rgba(201,168,76,.12);  color: var(--color-gold-light); border: 1px solid rgba(201,168,76,.25); }
+        .status-box.show    { display: block; }
+
+        /* ── 로딩 스켈레톤 ── */
+        .skeleton {
+            background: linear-gradient(90deg, rgba(255,255,255,.06) 25%, rgba(255,255,255,.1) 50%, rgba(255,255,255,.06) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+            border-radius: 8px;
+            height: 16px;
+        }
+        @keyframes shimmer { to { background-position: -200% 0; } }
+        .skeleton-row { margin-bottom: 8px; }
+        .skeleton-wide  { width: 70%; }
+        .skeleton-short { width: 40%; }
+
+        /* ── 로딩 스피너 ── */
+        .spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,.25);
+            border-top-color: var(--color-gold);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── 콘텐츠 영역 전체 ── */
+        .member-content {
+            display: none;
+            padding-bottom: 36px;
+        }
+        .member-content.show { display: block; }
+
+        /* ── 토큰 갱신 배너 ── */
+        .refresh-banner {
+            background: rgba(242,201,76,.1);
+            border: 1px solid rgba(242,201,76,.25);
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 0.82rem;
+            color: #f2c94c;
+            margin-bottom: 14px;
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+        .refresh-banner.show { display: flex; }
+        .refresh-banner-icon { font-size: 1rem; flex-shrink: 0; }
+        .refresh-banner-text { flex: 1; line-height: 1.5; }
+        .refresh-banner-btn {
+            background: rgba(242,201,76,.2);
+            border: 1px solid rgba(242,201,76,.3);
+            border-radius: 8px;
+            color: #f2c94c;
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 5px 10px;
+            cursor: pointer;
+            flex-shrink: 0;
+            -webkit-tap-highlight-color: transparent;
+            transition: background .18s;
+        }
+        .refresh-banner-btn:hover { background: rgba(242,201,76,.3); }
+
+        /* ── 하단 로그아웃 링크 ── */
+        .logout-row {
+            text-align: center;
+            padding: 8px 0 28px;
+        }
+        .logout-btn {
+            background: none;
+            border: none;
+            color: var(--color-text-muted);
+            font-size: 0.78rem;
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            padding: 8px 12px;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .logout-btn:hover { color: var(--color-text-on-dark); }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+
+    <!-- ── 헤더 ────────────────────────────────────────────────── -->
+    <div class="page-header">
+        <div class="header-top">
+            <a href="./index.html" class="back-btn" aria-label="뒤로">‹</a>
+            <h1 class="page-title">내 멤버십</h1>
+            <span class="member-name-badge" id="memberNameBadge">로딩 중…</span>
+        </div>
+    </div>
+
+    <!-- ── 토큰 없음 안내 화면 ─────────────────────────────────── -->
+    <div class="no-token-screen" id="noTokenScreen">
+        <div class="no-token-icon">🔑</div>
+        <p class="no-token-title">마이페이지 접근 불가</p>
+        <p class="no-token-desc">
+            마이페이지는 <strong>카카오톡으로 받은 링크</strong>를 통해서만 접근할 수 있습니다.<br><br>
+            링크가 없으신 경우<br>
+            피트니스 센터 프런트에 문의해 주세요.
+        </p>
+        <a href="./index.html" class="back-link"
+           style="display:inline-block;padding:12px 28px;border:1px solid rgba(255,255,255,.2);border-radius:12px;color:var(--color-text-on-dark);font-size:.9rem;">
+            처음 화면으로
+        </a>
+    </div>
+
+    <!-- ── 회원 정보 콘텐츠 (토큰 확인 후 표시) ────────────────── -->
+    <div class="member-content" id="memberContent">
+
+        <!-- 토큰 만료 임박 배너 -->
+        <div class="refresh-banner" id="refreshBanner">
+            <span class="refresh-banner-icon">⏳</span>
+            <span class="refresh-banner-text" id="refreshBannerText">멤버십 링크가 곧 만료됩니다.</span>
+            <button type="button" class="refresh-banner-btn" id="refreshTokenBtn">갱신</button>
+        </div>
+
+        <!-- 글로벌 상태 박스 -->
+        <div class="status-box" id="statusBox"></div>
+
+        <!-- ─── 카드 1: 다음 PT 예약 ────────────────────────── -->
+        <div class="info-card next-pt-card" id="card1">
+            <p class="card-label">
+                <span class="card-label-icon">📅</span>다음 PT 예약
+            </p>
+            <div id="nextPtBody">
+                <div class="skeleton skeleton-row skeleton-wide"></div>
+                <div class="skeleton skeleton-row skeleton-short"></div>
+            </div>
+        </div>
+
+        <!-- ─── 카드 2: PT 잔여 게이지 ──────────────────────── -->
+        <div class="info-card" id="card2">
+            <p class="card-label">
+                <span class="card-label-icon">💪</span>PT 잔여 횟수
+            </p>
+            <div id="ptGaugeBody">
+                <div class="skeleton skeleton-row skeleton-wide"></div>
+                <div class="skeleton skeleton-row skeleton-short"></div>
+            </div>
+        </div>
+
+        <!-- ─── 카드 3: 라마다 할인 코드 ────────────────────── -->
+        <div class="info-card discount-card" id="card3">
+            <p class="card-label">
+                <span class="card-label-icon">🏷️</span>라마다 객실 10% 할인
+            </p>
+            <p class="discount-desc">
+                아세로짐 회원 전용 특별 혜택입니다.<br>
+                발급된 코드를 프런트에 제시하시면 10% 할인을 받으실 수 있습니다.
+            </p>
+            <!-- 발급된 코드 표시 박스 -->
+            <div class="discount-code-box" id="discountCodeBox">
+                <p class="discount-code-label">발급된 할인 코드</p>
+                <p class="discount-code-value" id="discountCodeValue">—</p>
+                <p class="discount-code-expires" id="discountCodeExpires"></p>
+            </div>
+            <!-- 발급 버튼 -->
+            <button type="button" class="issue-btn" id="issueBtn" disabled>
+                할인 코드 발급받기
+            </button>
+        </div>
+
+        <!-- ─── 카드 4: 운동 리포트 ──────────────────────────── -->
+        <div class="info-card" id="card4">
+            <p class="card-label">
+                <span class="card-label-icon">📋</span>운동 리포트
+            </p>
+            <div id="reportBody">
+                <div class="skeleton skeleton-row skeleton-wide"></div>
+                <div class="skeleton skeleton-row skeleton-short"></div>
+            </div>
+        </div>
+
+        <!-- ─── 카드 5: 다가오는 예약 목록 ──────────────────── -->
+        <div class="info-card" id="card5">
+            <p class="card-label">
+                <span class="card-label-icon">🗓️</span>다가오는 예약
+            </p>
+            <div id="reservationBody">
+                <div class="skeleton skeleton-row skeleton-wide"></div>
+                <div class="skeleton skeleton-row skeleton-short"></div>
+            </div>
+        </div>
+
+        <!-- 하단 로그아웃 -->
+        <div class="logout-row">
+            <button type="button" class="logout-btn" id="logoutBtn">
+                이 기기에서 로그아웃
+            </button>
+        </div>
+
+    </div>
+    <!-- / #memberContent -->
+
+</div>
+<!-- / .page-wrap -->
+
+<script src="./js/api-client.js"></script>
+<script src="./js/member.js"></script>
+</body>
+</html>

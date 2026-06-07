@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="robots" content="noindex, nofollow">
+    <title>임직원 전용 로그인 — 아세로짐 라마다 대전점</title>
+    <link rel="stylesheet" href="./css/style.css">
+    <style>
+        /* ── 이 페이지 전용 스타일 ── */
+
+        /* 헤더 */
+        .page-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 24px 0 20px;
+        }
+        .back-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.08);
+            color: var(--color-text-on-dark);
+            font-size: 1.1rem;
+            flex-shrink: 0;
+            -webkit-tap-highlight-color: transparent;
+            transition: background .18s;
+        }
+        .back-btn:hover { background: rgba(255,255,255,.14); }
+        .page-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+        }
+
+        /* 격리 배지 */
+        .staff-only-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(201,168,76,.1);
+            border: 1px solid rgba(201,168,76,.25);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            color: var(--color-gold-light);
+            margin-bottom: 20px;
+        }
+
+        /* 안내 텍스트 */
+        .staff-desc {
+            font-size: 0.88rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+            margin-bottom: 24px;
+            word-break: keep-all;
+        }
+
+        /* 폼 */
+        .form-group { margin-bottom: 16px; }
+        .form-label {
+            display: block;
+            font-size: 0.82rem;
+            color: var(--color-text-muted);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+        .form-input {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255,255,255,.07);
+            border: 1px solid rgba(255,255,255,.12);
+            border-radius: 12px;
+            color: var(--color-text-on-dark);
+            font-size: 1rem;
+            outline: none;
+            transition: border-color .18s;
+            -webkit-appearance: none;
+        }
+        .form-input::placeholder { color: var(--color-text-muted); }
+        .form-input:focus { border-color: var(--color-gold); }
+
+        /* 로그인 버튼 */
+        .submit-btn {
+            width: 100%;
+            min-height: 52px;
+            background: var(--color-gold);
+            color: var(--color-navy-d);
+            border: none;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background .18s, transform .1s;
+            -webkit-tap-highlight-color: transparent;
+            margin-top: 4px;
+        }
+        .submit-btn:active { transform: scale(0.97); }
+        .submit-btn:hover  { background: var(--color-gold-light); }
+        .submit-btn:disabled {
+            background: rgba(255,255,255,.15);
+            color: var(--color-text-muted);
+            cursor: not-allowed;
+        }
+
+        /* 상태 박스 */
+        .status-box {
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 0.88rem;
+            line-height: 1.6;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .status-box.error   { background: rgba(235,87,87,.15);  color: #f8a0a0; border: 1px solid rgba(235,87,87,.3); }
+        .status-box.show    { display: block; }
+
+        /* ── 성공 후 안내 카드 ── */
+        .staff-done-screen { display: none; }
+        .staff-done-screen.show { display: block; }
+
+        /* 환영 카드 */
+        .welcome-card {
+            background: var(--color-card-primary);
+            border: 1px solid rgba(201,168,76,.3);
+            border-radius: var(--card-radius);
+            padding: 22px 18px;
+            margin-bottom: 14px;
+            text-align: center;
+        }
+        .welcome-icon  { font-size: 2.8rem; margin-bottom: 12px; }
+        .welcome-name  {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+            margin-bottom: 4px;
+        }
+        .welcome-sub   {
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+        }
+
+        /* 할인 안내 카드 */
+        .discount-info-card {
+            background: var(--color-card-secondary);
+            border: 1px solid rgba(255,255,255,.07);
+            border-radius: var(--card-radius);
+            padding: 18px 16px;
+            margin-bottom: 14px;
+        }
+        .discount-card-label {
+            font-size: 0.72rem;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            font-weight: 600;
+            margin-bottom: 14px;
+        }
+        /* 가격 행 */
+        .price-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid rgba(255,255,255,.05);
+        }
+        .price-row:last-child { border-bottom: none; }
+        .price-program {
+            font-size: 0.9rem;
+            color: var(--color-text-on-dark);
+            font-weight: 600;
+        }
+        .price-meta {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            margin-top: 2px;
+        }
+        .price-col {
+            text-align: right;
+        }
+        .price-original {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            text-decoration: line-through;
+        }
+        .price-discounted {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--color-gold-light);
+        }
+        .price-badge {
+            font-size: 0.7rem;
+            background: rgba(201,168,76,.2);
+            color: var(--color-gold-light);
+            border: 1px solid rgba(201,168,76,.3);
+            border-radius: 6px;
+            padding: 1px 6px;
+            margin-left: 6px;
+        }
+
+        /* 이용 안내 카드 */
+        .notice-card {
+            background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.07);
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 24px;
+            font-size: 0.82rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+        .notice-card li {
+            list-style: none;
+            padding-left: 14px;
+            position: relative;
+            margin-bottom: 4px;
+        }
+        .notice-card li::before {
+            content: '·';
+            position: absolute;
+            left: 0;
+            color: var(--color-gold);
+        }
+
+        /* 다시 로그인 링크 */
+        .re-login-row {
+            text-align: center;
+            padding-bottom: 32px;
+        }
+        .re-login-btn {
+            background: none;
+            border: none;
+            color: var(--color-text-muted);
+            font-size: 0.78rem;
+            cursor: pointer;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            padding: 8px 12px;
+        }
+        .re-login-btn:hover { color: var(--color-text-on-dark); }
+
+        /* 스피너 */
+        .spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,.25);
+            border-top-color: var(--color-navy-d);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            vertical-align: middle;
+            margin-right: 5px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="page-wrap">
+
+    <!-- ── 헤더 ────────────────────────────────────────────────── -->
+    <div class="page-header">
+        <a href="./index.html" class="back-btn" aria-label="뒤로">‹</a>
+        <h1 class="page-title">임직원 전용 로그인</h1>
+    </div>
+
+    <!-- ── 로그인 폼 영역 ─────────────────────────────────────── -->
+    <div id="loginArea">
+        <div class="staff-only-badge">🔒 라마다 대전 임직원 전용</div>
+
+        <p class="staff-desc">
+            라마다 호텔 임직원이신 경우<br>
+            사번과 휴대폰 번호 뒤 4자리를 입력하시면<br>
+            <strong style="color:var(--color-gold-light)">30% 할인</strong>이 적용됩니다.
+        </p>
+
+        <!-- 상태 박스 -->
+        <div class="status-box" id="statusBox"></div>
+
+        <!-- 폼 -->
+        <div class="form-group">
+            <label class="form-label" for="inputStaffNo">사번</label>
+            <input id="inputStaffNo" class="form-input" type="text"
+                   placeholder="사번 입력 (예: EMP-1234)"
+                   autocomplete="username" maxlength="20">
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="inputPhoneLast4">휴대폰 번호 뒤 4자리</label>
+            <input id="inputPhoneLast4" class="form-input" type="tel"
+                   placeholder="0000" autocomplete="off"
+                   maxlength="4" inputmode="numeric">
+        </div>
+
+        <button type="button" class="submit-btn" id="loginBtn" disabled>
+            임직원 확인
+        </button>
+    </div>
+    <!-- / #loginArea -->
+
+    <!-- ── 성공 후 안내 카드 (로그인 성공 시 표시) ─────────────── -->
+    <div class="staff-done-screen" id="staffDoneScreen">
+
+        <!-- 환영 카드 -->
+        <div class="welcome-card">
+            <div class="welcome-icon">🎉</div>
+            <p class="welcome-name">임직원 확인 완료!</p>
+            <p class="welcome-sub">아래 할인 요금으로 이용 가능합니다.</p>
+        </div>
+
+        <!-- 30% 할인 안내 카드 -->
+        <div class="discount-info-card">
+            <p class="discount-card-label">임직원 할인 요금표 (30%)</p>
+
+            <div class="price-row">
+                <div>
+                    <p class="price-program">리프레시 PT</p>
+                    <p class="price-meta">45분 · 1회 이용</p>
+                </div>
+                <div class="price-col">
+                    <p class="price-original">₩40,000</p>
+                    <p class="price-discounted">
+                        ₩28,000
+                        <span class="price-badge">30% OFF</span>
+                    </p>
+                </div>
+            </div>
+
+            <div class="price-row">
+                <div>
+                    <p class="price-program">무료 클래스</p>
+                    <p class="price-meta">그룹 운동 · 참가비 없음</p>
+                </div>
+                <div class="price-col">
+                    <p class="price-discounted" style="color:#6fcf97;">무료</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 이용 안내 -->
+        <div class="notice-card">
+            <ul>
+                <li>예약 시 피트니스 센터 프런트에 임직원 확인을 요청해 주세요.</li>
+                <li>리프레시 PT는 현장 카드 결제로 진행됩니다.</li>
+                <li>무료 클래스는 별도 신청 없이 당일 참가 가능합니다.</li>
+                <li>이 혜택은 라마다 대전 소속 임직원에게만 적용됩니다.</li>
+            </ul>
+        </div>
+
+        <!-- PT 예약 바로가기 -->
+        <a href="./refresh-pt.html" class="submit-btn"
+           style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-bottom:12px;">
+            리프레시 PT 예약하기 →
+        </a>
+
+        <div class="re-login-row">
+            <button type="button" class="re-login-btn" id="reLoginBtn">
+                다른 사번으로 다시 확인
+            </button>
+        </div>
+
+    </div>
+    <!-- / #staffDoneScreen -->
+
+</div>
+<!-- / .page-wrap -->
+
+<script src="./js/api-client.js"></script>
+<script src="./js/staff-login.js"></script>
+</body>
+</html>
