@@ -121,6 +121,23 @@ class ComplexContext {
     getComplexIdForSave() {
         return this.currentComplex ? this.currentComplex.id : null;
     }
+
+    // venue_type 반환 ('apartment' | 'hotel' | null)
+    getVenueType() {
+        return this.currentComplex ? (this.currentComplex.venue_type || 'apartment') : null;
+    }
+
+    // theme_name 반환 ('default' | 'hotel' | 'modern' | ...)
+    getThemeName() {
+        return this.currentComplex ? (this.currentComplex.theme_name || 'default') : 'default';
+    }
+
+    // 호텔 모드 여부: theme_name='hotel' 또는 venue_type='hotel' 이면 true
+    isHotel() {
+        if (!this.currentComplex) return false;
+        return this.currentComplex.theme_name === 'hotel' ||
+               this.currentComplex.venue_type  === 'hotel';
+    }
 }
 
 // 전역 인스턴스 생성

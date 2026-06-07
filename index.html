@@ -74,6 +74,91 @@
         <!-- 📅 접수 기간 안내 배너 (동적 표시) -->
         <div id="periodBanner" style="display:none"></div>
 
+        <!-- ═══════════════════════════════════════════════════════════════
+             🏨 호텔 모드 CTA 랜딩 오버레이
+             venue_type='hotel' 또는 theme_name='hotel' 단지 전용
+             JS(initHotelMode)가 .show 클래스를 추가해 노출,
+             CSS(body.theme-hotel .hotel-cta-overlay)로 display:block 제어
+             기존 퀵액션(.quick-actions-wrap)은 hotel 테마 CSS에서 숨김
+        ════════════════════════════════════════════════════════════════ -->
+        <div class="hotel-cta-overlay" id="hotelCtaOverlay" aria-hidden="true">
+            <p class="hotel-cta-intro" id="hotelCtaIntro">
+                투숙 중 이용 가능한 피트니스 서비스를<br>
+                아래에서 바로 신청하세요.
+            </p>
+            <ul class="hotel-cta-list" role="list">
+
+                <!-- CTA 1: 레슨 신청 (기존 신청 폼으로 스크롤) -->
+                <li>
+                    <button class="hotel-cta-card hotel-cta-card--primary"
+                            id="hotelCtaLesson"
+                            onclick="document.getElementById('page1').scrollIntoView({behavior:'smooth'})"
+                            aria-label="레슨 신청하기">
+                        <span class="hotel-cta-icon" aria-hidden="true">💎</span>
+                        <span class="hotel-cta-body">
+                            <span class="hotel-cta-title">레슨 신청하기</span>
+                            <span class="hotel-cta-desc" id="hotelCtaLessonDesc">필라테스 · PT · 그룹 수업</span>
+                        </span>
+                        <span class="hotel-cta-arrow" aria-hidden="true">›</span>
+                    </button>
+                </li>
+
+                <!-- CTA 2: 내 신청 조회·취소·변경 -->
+                <li>
+                    <button class="hotel-cta-card hotel-cta-card--secondary"
+                            onclick="showMyManageModal()"
+                            aria-label="내 예약 조회·취소·변경">
+                        <span class="hotel-cta-icon" aria-hidden="true">🪪</span>
+                        <span class="hotel-cta-body">
+                            <span class="hotel-cta-title">내 예약 조회·변경</span>
+                            <span class="hotel-cta-desc">신청 내역 확인 · 취소 · 변경</span>
+                        </span>
+                        <span class="hotel-cta-arrow" aria-hidden="true">›</span>
+                    </button>
+                </li>
+
+                <!-- CTA 3: 공지사항 / 시간표 -->
+                <li>
+                    <button class="hotel-cta-card hotel-cta-card--accent"
+                            onclick="showTimetableModal()"
+                            aria-label="시간표 보기">
+                        <span class="hotel-cta-icon" aria-hidden="true">📅</span>
+                        <span class="hotel-cta-body">
+                            <span class="hotel-cta-title">시간표 · 공지사항</span>
+                            <span class="hotel-cta-desc">수업 일정 · 이용 안내</span>
+                        </span>
+                        <span class="hotel-cta-arrow" aria-hidden="true">›</span>
+                    </button>
+                </li>
+
+            </ul>
+
+            <!-- 구분선 -->
+            <div class="hotel-cta-divider">
+                <span>기타 서비스</span>
+            </div>
+
+            <!-- 인라인 서브 버튼 행 (문의·커리큘럼·강사) -->
+            <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; justify-content:center;">
+                <button onclick="showInquiryForm()"
+                        style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+                               color:#a8b8cc;border-radius:8px;padding:8px 16px;font-size:.78rem;cursor:pointer;">
+                    ✏️ 문의하기
+                </button>
+                <button onclick="showCurriculumModal()"
+                        style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+                               color:#a8b8cc;border-radius:8px;padding:8px 16px;font-size:.78rem;cursor:pointer;">
+                    📋 커리큘럼
+                </button>
+                <button onclick="openInstructorsModal()"
+                        style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+                               color:#a8b8cc;border-radius:8px;padding:8px 16px;font-size:.78rem;cursor:pointer;">
+                    👤 강사 소개
+                </button>
+            </div>
+        </div>
+        <!-- / .hotel-cta-overlay -->
+
         <!-- 퀵 액션 버튼 (3행 구성) -->
         <div class="quick-actions-wrap">
 

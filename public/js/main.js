@@ -10,7 +10,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     await initializeComplexContext();
     console.log('✅ Complex context initialized');
     
-    // 2. 나머지 초기화
+    // 2. 호텔 모드 초기화 (venue_type='hotel' 또는 theme_name='hotel' 단지)
+    initHotelMode();
+
+    // 3. 나머지 초기화
     setupEventListeners();
     setMinDate();
     setSignatureDate();
@@ -1515,5 +1518,70 @@ async function loadCurriculum() {
             </div>
         `;
     }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🏨 initHotelMode()
+   venue_type='hotel' 또는 theme_name='hotel' 단지일 때 호출됨.
+   역할:
+     1. 호텔 CTA 오버레이(#hotelCtaOverlay)를 aria-hidden=false 로 전환
+        → CSS body.theme-hotel .hotel-cta-overlay { display:block } 과 조합
+     2. 기존 퀵액션(.quick-actions-wrap)은 CSS에서 display:none 처리됨
+        (JS로 숨기지 않아도 되지만, 혹시 class 누락 대비 보험용 hide 추가)
+     3. 단지명·서비스 문구를 단지 정보로 개인화
+     4. 헤더에 브랜딩 서브라인 추가
+   ═══════════════════════════════════════════════════════════════════════════ */
+function initHotelMode() {
+    if (!complexContext.isHotel()) return;   // 호텔 단지가 아니면 무시
+
+    const complex = complexContext.getComplex();
+    console.log('🏨 Hotel mode activated for:', complex?.complex_name);
+
+    /* ── 1. 오버레이 활성화 ── */
+    const overlay = document.getElementById('hotelCtaOverlay');
+    if (overlay) {
+        overlay.setAttribute('aria-hidden', 'false');
+        // CSS가 body.theme-hotel 스코프로 display:block을 제어하지만
+        // 서버 body class 주입이 늦거나 없을 때 대비해 인라인도 보장
+        overlay.style.display = 'block';
+    }
+
+    /* ── 2. 퀵액션 래퍼 숨김 (CSS 만으로 충분하나 JS 보험) ── */
+    const quickWrap = document.querySelector('.quick-actions-wrap');
+    if (quickWrap) quickWrap.style.display = 'none';
+
+    /* ── 3. CTA 안내 문구 개인화 ── */
+    const intro = document.getElementById('hotelCtaIntro');
+    if (intro && complex?.complex_name) {
+        intro.innerHTML =
+            `${complex.complex_name}의 피트니스 서비스를<br>아래에서 바로 신청하세요.`;
+    }
+
+    /* ── 4. 레슨 신청 CTA 설명 — 단지 lesson_types 반영 ── */
+    const lessonDesc = document.getElementById('hotelCtaLessonDesc');
+    if (lessonDesc && Array.isArray(complex?.lesson_types) && complex.lesson_types.length) {
+        lessonDesc.textContent = complex.lesson_types.slice(0, 3).join(' · ');
+    }
+
+    /* ── 5. 헤더 서브라인 (호텔 브랜딩) ── */
+    const headerEl = document.querySelector('.header');
+    if (headerEl && !headerEl.querySelector('.hotel-header-sub')) {
+        const sub = document.createElement('p');
+        sub.className = 'hotel-header-sub';
+        sub.style.cssText =
+            'font-size:.68rem;letter-spacing:.16em;color:var(--hotel-gold,#C8A864);' +
+            'opacity:.85;margin-top:4px;font-family:"Noto Serif KR",serif;';
+        sub.textContent = 'WELLNESS CONCIERGE SERVICE';
+        const h1 = headerEl.querySelector('h1');
+        if (h1) h1.after(sub);
+    }
+
+    /* ── 6. 로딩 화면 아이콘 변경 (건물 → 호텔) ── */
+    const loadingIcon = document.querySelector('.loading-logo i');
+    if (loadingIcon) {
+        loadingIcon.className = 'fas fa-hotel';
+    }
+
+    console.log('✅ Hotel mode UI applied');
 }
 
