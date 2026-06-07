@@ -139,6 +139,34 @@
                     라마다 임직원이신가요?
                 </button>
             </div>
+
+            <!-- 기타 서비스 (아파트와 동일한 기능 모두 제공) -->
+            <div class="hotel-sub-actions" id="hotelSubActions">
+                <button class="hotel-sub-btn" onclick="showMyInquiryModal()">
+                    <i class="fas fa-search"></i><span>내 문의 조회</span>
+                </button>
+                <button class="hotel-sub-btn" onclick="showTimetableModal()">
+                    <i class="fas fa-table"></i><span>시간표</span>
+                </button>
+                <button class="hotel-sub-btn" onclick="showCurriculumModal()">
+                    <i class="fas fa-calendar-alt"></i><span>커리큘럼</span>
+                </button>
+                <button class="hotel-sub-btn" onclick="openInstructorsModal()">
+                    <i class="fas fa-user-tie"></i><span>강사 소개</span>
+                </button>
+                <button class="hotel-sub-btn" onclick="scrollToNotices()">
+                    <i class="fas fa-bullhorn"></i><span>공지사항</span>
+                </button>
+                <button class="hotel-sub-btn" onclick="showInquiryForm()">
+                    <i class="fas fa-pen"></i><span>문의하기</span>
+                </button>
+                <button class="hotel-sub-btn hotel-sub-btn--accent" onclick="showMyManageModal()">
+                    <i class="fas fa-list-check"></i><span>내 신청 조회·변경</span>
+                </button>
+                <button class="hotel-sub-btn hotel-sub-btn--accent" onclick="showCancellationForm()">
+                    <i class="fas fa-file-signature"></i><span>해지 신청</span>
+                </button>
+            </div>
         </div>
         <!-- / .hotel-cta-overlay -->
 
@@ -1179,9 +1207,57 @@
         if (el && el.style.display !== 'none') {
             el.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else {
-            // 공지가 없을 때는 맨 위로
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
+    }
+
+    /* ── 시간표 모달 ── */
+    function showTimetableModal() {
+        const m = document.getElementById('timetableModal');
+        if (m) {
+            m.classList.add('active');
+            m.style.display = 'flex';
+            // main.js loadTimeSlotStatus 가 이미 로드했을 경우 그대로 표시
+        } else {
+            alert('시간표 모달을 찾을 수 없습니다.');
+        }
+    }
+    function closeTimetableModal() {
+        const m = document.getElementById('timetableModal');
+        if (m) { m.classList.remove('active'); m.style.display = 'none'; }
+    }
+
+    /* ── 내 예약 조회·취소·변경 모달 ── */
+    function showMyManageModal() {
+        const m = document.getElementById('myManageModal');
+        if (m) {
+            m.style.display = 'flex';
+            m.style.zIndex  = '2000';
+            // 기존 myManageModal 내부 탭 초기화 (있으면)
+            const firstTab = m.querySelector('[data-tab]');
+            if (firstTab) firstTab.click();
+        } else {
+            alert('내 예약 모달을 찾을 수 없습니다.');
+        }
+    }
+    function closeMyManageModal() {
+        const m = document.getElementById('myManageModal');
+        if (m) m.style.display = 'none';
+    }
+
+    /* ── 내 문의 조회 모달 ── */
+    function showMyInquiryModal() {
+        const m = document.getElementById('myInquiryModal');
+        if (m) {
+            m.classList.add('active');
+            m.style.display = 'flex';
+        } else {
+            alert('내 문의 모달을 찾을 수 없습니다.');
+        }
+    }
+    function closeMyInquiryModal() {
+        const m = document.getElementById('myInquiryModal');
+        if (m) { m.classList.remove('active'); m.style.display = 'none'; }
     }
 
     /* ────────────────────────────────────────────────────
@@ -1269,6 +1345,8 @@
             closeImageModal();
             closeInstructorsModal();
             closeTimetableModal();
+            closeMyManageModal();
+            closeMyInquiryModal();
         }
     });
 

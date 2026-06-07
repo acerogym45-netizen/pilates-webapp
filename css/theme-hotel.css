@@ -608,3 +608,63 @@ body.theme-hotel .notice-title {
 body.theme-hotel .notice-date {
     color: #7a90a8;
 }
+
+/* ── 서브 액션 버튼 그리드 ── */
+body.theme-hotel .hotel-sub-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,.1);
+}
+body.theme-hotel .hotel-sub-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    padding: 10px 4px;
+    background: rgba(255,255,255,.05);
+    border: 1px solid rgba(255,255,255,.1);
+    border-radius: 10px;
+    color: #a8b8cc;
+    font-size: .62rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .18s, color .18s, border-color .18s;
+    word-break: keep-all;
+    text-align: center;
+    line-height: 1.3;
+    -webkit-tap-highlight-color: transparent;
+    font-family: inherit;
+}
+body.theme-hotel .hotel-sub-btn i {
+    font-size: 1rem;
+    color: #7a90a8;
+    transition: color .18s;
+}
+body.theme-hotel .hotel-sub-btn:active,
+body.theme-hotel .hotel-sub-btn:hover {
+    background: rgba(200,168,100,.12);
+    border-color: rgba(200,168,100,.3);
+    color: var(--hotel-gold-light, #e2c97e);
+}
+body.theme-hotel .hotel-sub-btn:active i,
+body.theme-hotel .hotel-sub-btn:hover i {
+    color: var(--hotel-gold);
+}
+/* 어센트 (조회·변경, 해지) */
+body.theme-hotel .hotel-sub-btn--accent {
+    background: rgba(14,26,43,.6);
+    border-color: rgba(200,168,100,.25);
+    color: var(--hotel-gold-light, #e2c97e);
+    grid-column: span 2;
+}
+body.theme-hotel .hotel-sub-btn--accent i {
+    color: var(--hotel-gold);
+}
+body.theme-hotel .hotel-sub-btn--accent:active,
+body.theme-hotel .hotel-sub-btn--accent:hover {
+    background: rgba(200,168,100,.18);
+    border-color: var(--hotel-gold);
+}
