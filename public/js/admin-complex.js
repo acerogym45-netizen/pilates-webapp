@@ -229,6 +229,12 @@ function openEditModal(complexId) {
     document.getElementById('editAdminPassword').value = complex.admin_password || '';
     document.getElementById('editIsActive').value = complex.is_active ? 'true' : 'false';
 
+    // 호텔 모드 토글 세팅
+    const hotelModeChk = document.getElementById('editHotelMode');
+    if (hotelModeChk) {
+        hotelModeChk.checked = complex.venue_type === 'hotel';
+    }
+
     // 테마 선택 세팅
     const themeSelect = document.getElementById('editThemeName');
     if (themeSelect) {
@@ -278,7 +284,8 @@ async function saveComplex() {
         admin_password: document.getElementById('editAdminPassword').value.trim() || 'admin1234',
         is_active: document.getElementById('editIsActive').value === 'true',
         lesson_types: lessonTypes,
-        theme_name: document.getElementById('editThemeName')?.value || 'default'
+        theme_name: document.getElementById('editThemeName')?.value || 'default',
+        venue_type: document.getElementById('editHotelMode')?.checked ? 'hotel' : 'apartment'
     };
     
     try {

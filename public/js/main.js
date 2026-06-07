@@ -1585,3 +1585,16 @@ function initHotelMode() {
     console.log('✅ Hotel mode UI applied');
 }
 
+/* 리프레시 PT 버튼: PT 수업 타입 자동 선택 후 폼 스크롤 */
+function hotelSelectPT() {
+    const select = document.getElementById('lessonType');
+    if (select) {
+        // 옵션 중 'PT' 포함된 것 자동 선택
+        const ptOption = Array.from(select.options).find(o =>
+            o.text.toLowerCase().includes('pt') || o.text.includes('피티')
+        );
+        if (ptOption) select.value = ptOption.value;
+    }
+    document.getElementById('page1')?.scrollIntoView({ behavior: 'smooth' });
+}
+

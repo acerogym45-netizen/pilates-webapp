@@ -397,7 +397,7 @@ router.post('/', async (req, res) => {
 // ── 단지 수정 ─────────────────────────────────────────────────
 router.put('/:id', async (req, res) => {
     try {
-        const { masterPassword, name, address, primary_color, admin_password, is_active, theme_name } = req.body;
+        const { masterPassword, name, address, primary_color, admin_password, is_active, theme_name, venue_type } = req.body;
         if (masterPassword !== process.env.MASTER_PASSWORD) {
             return res.status(403).json({ success: false, error: '마스터 비밀번호가 올바르지 않습니다' });
         }
@@ -407,8 +407,13 @@ router.put('/:id', async (req, res) => {
         const safeTheme = (theme_name && VALID_THEMES.includes(theme_name))
             ? theme_name : undefined;
 
+        const VALID_VENUE_TYPES = ['apartment', 'hotel'];
+        const safeVenueType = (venue_type && VALID_VENUE_TYPES.includes(venue_type))
+            ? venue_type : undefined;
+
         const updatePayload = { name, address, primary_color, admin_password, is_active: Boolean(is_active) };
-        if (safeTheme !== undefined) updatePayload.theme_name = safeTheme;
+        if (safeTheme     !== undefined) updatePayload.theme_name  = safeTheme;
+        if (safeVenueType !== undefined) updatePayload.venue_type  = safeVenueType;
 
         const sb = getSupabase();
         const { data, error } = await sb
