@@ -53,24 +53,96 @@ body.theme-hotel .loading-spinner {
 body.theme-hotel .header {
     background: linear-gradient(135deg, #0E1A2B 0%, #1c2e45 100%);
     border-bottom: 2px solid var(--hotel-gold);
-    padding: 20px 20px 16px;
+    padding: 16px 20px 14px;
     position: relative;
+    /* 브랜드 헤더 표시 시 flex-direction 변경 */
+    flex-wrap: wrap;
+    gap: 0;
 }
 
-/* 헤더 상단: 협업 라벨 (pseudo-element) */
+/* 기본 pseudo 라벨 — 호텔 브랜드 헤더 표시 시 숨김 */
 body.theme-hotel .header::before {
-    content: 'RAMADA × ACEROGYM  |  Wellness Concierge';
+    content: '';   /* initHotelMode가 #hotelBrandHeader를 표시하면 불필요 → 빈 값으로 */
+    display: none;
+}
+
+/* ── 🏨 호텔 브랜드 로고 헤더 ────────────────────────────────────────────── */
+body.theme-hotel .hotel-brand-header {
+    display: flex !important;   /* initHotelMode()에서 style 교체 전까지는 HTML의 display:none 우선 */
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0;
+    width: 100%;
+    padding: 0;
+}
+
+/* 각 브랜드 아이템 (라마다 / 아세로짐) */
+body.theme-hotel .hotel-brand-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 0;
+}
+
+/* 엠블럼 SVG 컨테이너 */
+body.theme-hotel .hotel-brand-emblem {
+    flex-shrink: 0;
+}
+body.theme-hotel .hotel-brand-svg {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
     display: block;
-    font-family: 'Noto Serif KR', serif;
-    font-size: .65rem;
-    letter-spacing: .18em;
+    filter: drop-shadow(0 2px 6px rgba(200,168,100,.25));
+    transition: filter .2s;
+}
+body.theme-hotel .hotel-brand-item:hover .hotel-brand-svg {
+    filter: drop-shadow(0 3px 10px rgba(200,168,100,.5));
+}
+
+/* 워드마크 텍스트 영역 */
+body.theme-hotel .hotel-brand-wordmark {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+body.theme-hotel .hotel-brand-name {
+    font-family: 'Noto Serif KR', Georgia, serif;
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .14em;
+    color: #fff;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+body.theme-hotel .hotel-brand-tagline {
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: .58rem;
+    font-weight: 400;
+    letter-spacing: .1em;
     color: var(--hotel-gold);
     opacity: .85;
+    white-space: nowrap;
     text-transform: uppercase;
-    margin-bottom: 10px;
-    width: 100%;
 }
 
+/* 구분자 × */
+body.theme-hotel .hotel-brand-divider {
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    flex-shrink: 0;
+}
+body.theme-hotel .hotel-brand-cross {
+    font-size: .9rem;
+    color: var(--hotel-gold);
+    opacity: .6;
+    font-family: 'Noto Serif KR', serif;
+    line-height: 1;
+    display: block;
+}
+
+/* 호텔 모드 일반 헤더 텍스트 스타일 (기본 로고 숨긴 뒤 남는 h1 등) */
 body.theme-hotel .header h1 {
     font-family: 'Noto Serif KR', serif;
     font-weight: 700;
@@ -86,6 +158,14 @@ body.theme-hotel .header-subtitle {
 }
 body.theme-hotel .header-icon {
     color: var(--hotel-gold);
+}
+
+/* 모바일 최적화 — 좁은 화면에서 tagline 숨김 */
+@media (max-width: 360px) {
+    body.theme-hotel .hotel-brand-tagline { display: none; }
+    body.theme-hotel .hotel-brand-name    { font-size: .75rem; }
+    body.theme-hotel .hotel-brand-svg     { width: 34px; height: 34px; }
+    body.theme-hotel .hotel-brand-divider { padding: 0 7px; }
 }
 
 /* ── 카드/섹션 ── */
