@@ -404,6 +404,16 @@ const mycomplex = {
                         </span>
                     </div>
                     <div class="info-row">
+                        <label>페이지 모드</label>
+                        <span class="info-value">
+                            ${cx.venue_type === 'hotel'
+                                ? '<span style="background:#7c3aed;color:#fff;padding:2px 10px;border-radius:12px;font-size:.8rem;font-weight:600">🏨 호텔 모드 ON</span>'
+                                : '<span style="background:#e5e7eb;color:#555;padding:2px 10px;border-radius:12px;font-size:.8rem;font-weight:600">🏠 아파트 모드</span>'}
+                            &nbsp;
+                            <span style="background:#f3f4f6;color:#666;padding:2px 8px;border-radius:10px;font-size:.78rem">${escHtml(cx.theme_name || 'default')} 테마</span>
+                        </span>
+                    </div>
+                    <div class="info-row">
                         <label>입주민 QR URL</label>
                         <span class="info-value url-wrap">
                             <a href="/?complex=${cx.code}" target="_blank">
@@ -733,10 +743,26 @@ const mycomplex = {
             const chk = document.getElementById('editHotelMode');
             const trk = document.getElementById('hotelModeTrack');
             const thb = document.getElementById('hotelModeThumb');
-            if (chk) chk.checked = true;
-            if (trk) trk.style.background = '#7c3aed';
-            if (thb) thb.style.left = '23px';
+            if (chk && !chk.checked) {
+                chk.checked = true;
+                if (trk) trk.style.background = '#7c3aed';
+                if (thb) thb.style.left = '23px';
+            }
         }
+        /* 즉시 DB 저장 — theme_name + venue_type 연동 */
+        if (!Admin.complex?.id) return;
+        const hotelChk = document.getElementById('editHotelMode');
+        const isHotel  = hotelChk ? hotelChk.checked : (val === 'hotel');
+        API.complexes.patchFlags(Admin.complex.id, {
+            theme_name: val,
+            venue_type: isHotel ? 'hotel' : 'apartment'
+        }).then(res => {
+            Admin.complex = res.data;
+            sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
+            showToast(`🎨 테마 "${val}" 저장되었습니다`);
+        }).catch(err => {
+            showToast('테마 저장 실패: ' + err.message, 'error');
+        });
     },
     _onHotelModeChange(checked) {
         const trk = document.getElementById('hotelModeTrack');
@@ -751,6 +777,28 @@ const mycomplex = {
                 mycomplex._onThemeChange('hotel');
             }
         }
+        /* 즉시 DB 저장 — venue_type을 바로 반영 */
+        if (!Admin.complex?.id) return;
+        const newVenueType = checked ? 'hotel' : 'apartment';
+        const newThemeName = checked
+            ? (document.getElementById('editThemeName')?.value || 'hotel')
+            : (document.getElementById('editThemeName')?.value || 'default');
+
+        API.complexes.patchFlags(Admin.complex.id, {
+            venue_type: newVenueType,
+            theme_name: newThemeName
+        }).then(res => {
+            Admin.complex = res.data;
+            sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
+            showToast(checked ? '🏨 호텔 모드 ON — 저장되었습니다' : '🏠 호텔 모드 OFF — 저장되었습니다');
+        }).catch(err => {
+            showToast('저장 실패: ' + err.message, 'error');
+            /* 실패 시 토글 원복 */
+            const chk = document.getElementById('editHotelMode');
+            if (chk) chk.checked = !checked;
+            if (trk) trk.style.background = !checked ? '#7c3aed' : '#ccc';
+            if (thb) thb.style.left = !checked ? '23px' : '3px';
+        });
     },
 
     async _saveAdminEdit() {
