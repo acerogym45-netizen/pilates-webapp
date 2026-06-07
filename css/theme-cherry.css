@@ -71,3 +71,16 @@ body.theme-cherry fieldset.form-fieldset legend { color: var(--cherry-pink); fon
 body.theme-cherry .modal-content { border-top: 3px solid var(--cherry-pink); }
 body.theme-cherry .policy-box { border-left: 3px solid var(--cherry-pink); background: rgba(212,69,122,.03); }
 body.theme-cherry .policy-box-header i { color: var(--cherry-pink); }
+
+/* ── 내 문의 조회 버튼 가독성 보정 ── */
+body.theme-cherry .quick-btn--inquiry-main {
+    background: linear-gradient(135deg, var(--cherry-rose) 0%, #b53570 100%) !important;
+    color: #fff !important;
+    border: 1.5px solid var(--cherry-pink) !important;
+    box-shadow: 0 2px 10px rgba(212,69,122,.3) !important;
+}
+body.theme-cherry .quick-btn--inquiry-main i,
+body.theme-cherry .quick-btn--inquiry-main span { color: #fff !important; }
+body.theme-cherry .quick-btn--inquiry-main:hover {
+    background: linear-gradient(135deg, #b53570 0%, var(--cherry-pink) 100%) !important;
+}
