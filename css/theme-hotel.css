@@ -1,0 +1,372 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-hotel.css  —  호텔 컨셉 테마 오버라이드
+   스코프: body.theme-hotel 안에서만 적용
+   기존 아파트 단지(body 클래스 없음)는 1픽셀도 영향받지 않음
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Google Fonts: Noto Serif KR (제목) + Noto Sans KR (본문) ── */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Noto+Sans+KR:wght@400;500;600&display=swap');
+
+/* ── CSS 변수 오버라이드 (style.css :root 변수명 그대로 재정의) ─────────────── */
+body.theme-hotel {
+    --color-primary:   #0E1A2B;        /* 다크 네이비 */
+    --color-primary-d: #0a1320;        /* 더 깊은 네이비 */
+    --color-success:   #2d7a4f;        /* 차분한 그린 */
+    --color-warning:   #b8922a;        /* 골드 계열 경고 */
+    --color-danger:    #c0392b;
+    --color-info:      #4a6fa5;
+    --color-bg:        #F5F1E8;        /* 아이보리 배경 */
+    --color-card:      #FFFFFF;
+    --color-text:      #1a1a2e;        /* 짙은 네이비 텍스트 */
+    --color-text-muted:#7a6e5f;        /* 따뜻한 뮤트 */
+    --color-border:    #e0d8c8;        /* 옅은 골드 보더 */
+    --radius:          6px;            /* 더 절제된 라운드 */
+    --shadow:          0 2px 12px rgba(14,26,43,.10);
+    --shadow-md:       0 4px 20px rgba(14,26,43,.15);
+
+    /* 호텔 전용 추가 변수 */
+    --hotel-gold:      #C8A864;
+    --hotel-gold-d:    #a8893f;
+    --hotel-gold-light:#f0e8d0;
+    --hotel-navy:      #0E1A2B;
+    --hotel-ivory:     #F5F1E8;
+
+    font-family: 'Noto Sans KR', -apple-system, sans-serif;
+    background: var(--hotel-ivory);
+    color: var(--color-text);
+}
+
+/* ── 로딩 화면 ── */
+body.theme-hotel .loading-screen {
+    background: linear-gradient(160deg, #0E1A2B 0%, #1a2f4a 60%, #0E1A2B 100%);
+}
+body.theme-hotel .loading-logo {
+    color: var(--hotel-gold);
+}
+body.theme-hotel .loading-spinner {
+    border-color: rgba(200,168,100,.25);
+    border-top-color: var(--hotel-gold);
+}
+
+/* ── 헤더 ─────────────────────────────────────────────────────────────────── */
+body.theme-hotel .header {
+    background: linear-gradient(135deg, #0E1A2B 0%, #1c2e45 100%);
+    border-bottom: 2px solid var(--hotel-gold);
+    padding: 20px 20px 16px;
+    position: relative;
+}
+
+/* 헤더 상단: 협업 라벨 (pseudo-element) */
+body.theme-hotel .header::before {
+    content: 'RAMADA × ACEROGYM  |  Wellness Concierge';
+    display: block;
+    font-family: 'Noto Serif KR', serif;
+    font-size: .65rem;
+    letter-spacing: .18em;
+    color: var(--hotel-gold);
+    opacity: .85;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    width: 100%;
+}
+
+body.theme-hotel .header h1 {
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 700;
+    font-size: 1.25rem;
+    letter-spacing: .03em;
+    color: #fff;
+}
+body.theme-hotel .header-subtitle {
+    color: var(--hotel-gold);
+    opacity: .9;
+    font-size: .78rem;
+    letter-spacing: .04em;
+}
+body.theme-hotel .header-icon {
+    color: var(--hotel-gold);
+}
+
+/* ── 카드/섹션 ── */
+body.theme-hotel .card-section,
+body.theme-hotel .form-body,
+body.theme-hotel .contract-summary,
+body.theme-hotel .policy-box {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+body.theme-hotel .section-header h3 {
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 600;
+    color: var(--hotel-navy);
+    font-size: 1rem;
+    letter-spacing: .02em;
+}
+body.theme-hotel .section-header h3 i {
+    color: var(--hotel-gold);
+}
+
+/* ── 입력 필드 ── */
+body.theme-hotel input[type="text"],
+body.theme-hotel input[type="tel"],
+body.theme-hotel input[type="date"],
+body.theme-hotel select,
+body.theme-hotel textarea {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: #fff;
+    color: var(--color-text);
+    transition: border-color .2s, box-shadow .2s;
+}
+body.theme-hotel input[type="text"]:focus,
+body.theme-hotel input[type="tel"]:focus,
+body.theme-hotel input[type="date"]:focus,
+body.theme-hotel select:focus,
+body.theme-hotel textarea:focus {
+    border-color: var(--hotel-gold);
+    box-shadow: 0 0 0 3px rgba(200,168,100,.15);
+    outline: none;
+}
+
+/* ── label ── */
+body.theme-hotel label,
+body.theme-hotel .form-group label {
+    font-weight: 500;
+    color: var(--hotel-navy);
+    font-size: .85rem;
+    letter-spacing: .01em;
+}
+
+/* ── 기본 버튼 (btn-primary) ── */
+body.theme-hotel .btn-primary {
+    background: var(--hotel-navy);
+    border: 1.5px solid var(--hotel-gold);
+    color: var(--hotel-gold);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-weight: 600;
+    letter-spacing: .04em;
+    border-radius: var(--radius);
+    transition: background .2s, color .2s, box-shadow .2s;
+}
+body.theme-hotel .btn-primary:hover,
+body.theme-hotel .btn-primary:active {
+    background: var(--hotel-gold);
+    color: var(--hotel-navy);
+    box-shadow: 0 4px 16px rgba(200,168,100,.35);
+}
+
+/* ── 보조 버튼 (btn-secondary) ── */
+body.theme-hotel .btn-secondary {
+    background: transparent;
+    border: 1.5px solid var(--hotel-gold);
+    color: var(--hotel-gold);
+    border-radius: var(--radius);
+    transition: background .2s, color .2s;
+}
+body.theme-hotel .btn-secondary:hover,
+body.theme-hotel .btn-secondary:active {
+    background: var(--hotel-gold-light);
+    color: var(--hotel-navy);
+}
+
+/* ── 퀵 액션 버튼 ── */
+body.theme-hotel .quick-btn {
+    background: #fff;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    color: var(--hotel-navy);
+    transition: border-color .2s, box-shadow .2s, background .2s;
+    box-shadow: var(--shadow);
+}
+body.theme-hotel .quick-btn:hover,
+body.theme-hotel .quick-btn:active {
+    border-color: var(--hotel-gold);
+    background: var(--hotel-gold-light);
+    box-shadow: 0 4px 12px rgba(200,168,100,.2);
+}
+body.theme-hotel .quick-btn i {
+    color: var(--hotel-gold);
+}
+body.theme-hotel .quick-btn span {
+    color: var(--hotel-navy);
+    font-weight: 500;
+}
+
+/* accent 버튼 (내 신청 조회·취소·변경 / 해지 신청) */
+body.theme-hotel .quick-btn--accent {
+    background: var(--hotel-navy);
+    border-color: var(--hotel-gold);
+    color: var(--hotel-gold);
+}
+body.theme-hotel .quick-btn--accent:hover,
+body.theme-hotel .quick-btn--accent:active {
+    background: var(--hotel-gold);
+    color: var(--hotel-navy);
+}
+body.theme-hotel .quick-btn--accent i,
+body.theme-hotel .quick-btn--accent span {
+    color: inherit;
+}
+
+/* ── 배지 ── */
+body.theme-hotel .step-badge {
+    background: var(--hotel-gold-light);
+    color: var(--hotel-gold-d);
+    border: 1px solid var(--hotel-gold);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    border-radius: 4px;
+    padding: 2px 8px;
+}
+
+/* ── select 드롭다운 화살표 색상 ── */
+body.theme-hotel select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23C8A864' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+}
+
+/* ── 체크박스 ── */
+body.theme-hotel input[type="checkbox"] {
+    accent-color: var(--hotel-gold);
+}
+
+/* ── 공지 / 안내 박스 ── */
+body.theme-hotel .period-notice-box {
+    background: var(--hotel-ivory);
+    border: 1px solid var(--hotel-gold);
+    border-radius: var(--radius);
+}
+body.theme-hotel .period-notice-title {
+    color: var(--hotel-navy);
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 600;
+}
+
+/* ── 약관 박스 ── */
+body.theme-hotel .terms-box {
+    background: #faf8f3;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+}
+body.theme-hotel .terms-section strong {
+    color: var(--hotel-navy);
+    font-family: 'Noto Serif KR', serif;
+}
+
+/* ── policy 박스 ── */
+body.theme-hotel .policy-box {
+    background: #faf8f3;
+    border-left: 3px solid var(--hotel-gold);
+}
+body.theme-hotel .policy-box-header {
+    color: var(--hotel-navy);
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 600;
+}
+body.theme-hotel .policy-box-header i {
+    color: var(--hotel-gold);
+}
+
+/* ── contract-summary ── */
+body.theme-hotel .contract-summary .summary-row span {
+    color: var(--color-text-muted);
+    font-size: .82rem;
+}
+body.theme-hotel .contract-summary .summary-row strong {
+    color: var(--hotel-navy);
+    font-weight: 600;
+}
+
+/* ── 서명 캔버스 ── */
+body.theme-hotel .signature-canvas-wrapper {
+    border: 1.5px solid var(--hotel-gold);
+    border-radius: var(--radius);
+    background: #fff;
+}
+body.theme-hotel .btn-clear-sig {
+    color: var(--hotel-gold-d);
+    border-color: var(--color-border);
+}
+
+/* ── 에러/경고 박스 ── */
+body.theme-hotel .mismatch-msg {
+    color: #8b3a2a;
+}
+
+/* ── 모달 ── */
+body.theme-hotel .modal {
+    background: rgba(14,26,43,.55);
+}
+body.theme-hotel .modal-content {
+    border-top: 3px solid var(--hotel-gold);
+    border-radius: var(--radius) var(--radius) 0 0;
+}
+body.theme-hotel .modal-title,
+body.theme-hotel .modal-header h3 {
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 600;
+    color: var(--hotel-navy);
+}
+body.theme-hotel .modal-close {
+    color: var(--hotel-gold-d);
+}
+
+/* ── 인스트럭터 카드 ── */
+body.theme-hotel .instructor-card {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+body.theme-hotel .instructor-name {
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 600;
+    color: var(--hotel-navy);
+}
+
+/* ── 시간표 ── */
+body.theme-hotel .timetable-slot.available {
+    border-color: var(--hotel-gold);
+    background: var(--hotel-gold-light);
+    color: var(--hotel-navy);
+}
+body.theme-hotel .timetable-slot.selected {
+    background: var(--hotel-gold);
+    border-color: var(--hotel-gold-d);
+    color: var(--hotel-navy);
+    font-weight: 600;
+}
+
+/* ── fieldset legend ── */
+body.theme-hotel fieldset.form-fieldset {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+}
+body.theme-hotel fieldset.form-fieldset legend {
+    font-family: 'Noto Serif KR', serif;
+    font-weight: 600;
+    color: var(--hotel-gold);
+    font-size: .88rem;
+    letter-spacing: .04em;
+    padding: 0 8px;
+}
+body.theme-hotel fieldset.form-fieldset legend i {
+    color: var(--hotel-gold);
+    margin-right: 4px;
+}
+
+/* ── 스크롤바 (Webkit) ── */
+body.theme-hotel ::-webkit-scrollbar {
+    width: 6px;
+}
+body.theme-hotel ::-webkit-scrollbar-track {
+    background: var(--hotel-ivory);
+}
+body.theme-hotel ::-webkit-scrollbar-thumb {
+    background: var(--hotel-gold);
+    border-radius: 3px;
+}
