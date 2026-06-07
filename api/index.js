@@ -28,6 +28,15 @@ const uploadRouter       = require('../server/routes/upload');
 const renewalRouter      = require('../server/routes/renewal');
 const backupRouter       = require('../server/routes/backup');
 
+// ── HOTEL MODE (additive, feature-flagged) ───────────────────────────────────
+const flags                     = require('../server/config/feature-flags');
+const hotelAuthRoutes           = require('../server/routes/hotel/auth');
+const hotelQuickClassRoutes     = require('../server/routes/hotel/quick-class');
+const hotelRefreshPtRoutes      = require('../server/routes/hotel/refresh-pt');
+const hotelMembersRoutes        = require('../server/routes/hotel/members');
+const hotelStaffRosterRoutes    = require('../server/routes/hotel/staff-roster');
+const hotelWorkoutReportsRoutes = require('../server/routes/hotel/workout-reports');
+
 const app = express();
 
 // ── 정적파일 루트 경로 ─────────────────────────────────────────────────────────
@@ -130,6 +139,7 @@ app.get('/api/health', (req, res) => {
         version: '3.4.0',
         database: hasSupabase ? 'supabase' : 'not-configured',
         platform: 'vercel',
+        hotelMode: !!flags.hotelMode,
     });
 });
 
@@ -144,6 +154,21 @@ app.use('/api',              miscRouter);          // ← 와일드카드 마지
 // ── 연장 라우터 (GET /renew/:token + POST /api/renewal/*) ─────────────────────
 // SPA 폴백보다 앞에 위치해야 /renew/:token HTML이 정상 응답됨
 app.use('/',                 renewalRouter);
+
+// ── HOTEL ROUTES MOUNT (additive, feature-flagged, MUST be BEFORE catch-all) ─
+// master flag(ENABLE_HOTEL_MODE)가 켜진 경우에만 마운트.
+// 하위 flag는 각 라우터 내부에서 개별 체크하므로 OFF 상태에서도 안전(403 반환).
+if (flags.hotelMode) {
+    app.use('/api/hotel/auth',            hotelAuthRoutes);
+    app.use('/api/hotel/quick-class',     hotelQuickClassRoutes);
+    app.use('/api/hotel/refresh-pt',      hotelRefreshPtRoutes);
+    app.use('/api/hotel/members',         hotelMembersRoutes);
+    app.use('/api/hotel/staff-roster',    hotelStaffRosterRoutes);
+    app.use('/api/hotel/workout-reports', hotelWorkoutReportsRoutes);
+    console.log('[HOTEL] Routes mounted: hotelMode=ON');
+} else {
+    console.log('[HOTEL] Routes NOT mounted: hotelMode=OFF');
+}
 
 // ── 나머지 정적파일 (express.static) ─────────────────────────────────────────
 app.use(express.static(ROOT_DIR, { index: false, dotfiles: 'ignore' }));
