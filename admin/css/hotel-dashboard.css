@@ -1,0 +1,643 @@
+/**
+ * admin/css/hotel-dashboard.css
+ * 호텔 운영 대시보드 전용 스타일
+ *
+ * 설계 원칙:
+ *   - 기존 admin/css/admin.css 수정 금지 — 완전 독립 격리
+ *   - admin.css 의 CSS 변수(--color-primary 등) 참조하지 않음
+ *   - 클래스 네임스페이스: .hd-* (hotel dashboard)
+ *   - 혼잡도 / 실시간 인원 관련 스타일 0개
+ *   - 반응형: 768px 브레이크포인트
+ *
+ * 커버하는 클래스 목록:
+ *   .hd-loading, .hd-complex-selector, .hd-selector-label, .hd-select
+ *   .hd-complex-badge, .hd-ops-notice
+ *   .hd-kpi-grid, .hd-kpi-card, .hd-kpi-loading
+ *   .hd-kpi-blue, .hd-kpi-green, .hd-kpi-gold, .hd-kpi-orange, .hd-kpi-muted, .hd-kpi-purple
+ *   .hd-kpi-icon, .hd-kpi-body, .hd-kpi-value, .hd-kpi-value-sm, .hd-kpi-label, .hd-kpi-sub, .hd-kpi-sub-warn
+ *   .hd-panel, .hd-panel-header, .hd-panel-body, .hd-panel-btn
+ *   .hd-table, .hd-table-foot
+ *   .hd-status-badge, .hd-status-approved
+ *   .hd-empty, .hd-error, .hd-error-detail
+ *   .hd-flag-off, .hd-flag-off-icon
+ *
+ * 단계: D-1 / 작성일: 2026-06-07
+ */
+
+/* ════════════════════════════════════════════════════════════════
+   독립 CSS 변수 — admin.css 의 변수 참조 없음
+   ════════════════════════════════════════════════════════════════ */
+:root {
+    /* 호텔 대시보드 전용 팔레트 */
+    --hd-bg:             #f0f2f8;
+    --hd-card:           #ffffff;
+    --hd-radius:         10px;
+    --hd-shadow:         0 2px 8px rgba(0, 0, 0, 0.08);
+    --hd-shadow-hover:   0 4px 16px rgba(0, 0, 0, 0.13);
+    --hd-border:         #e8eaf0;
+    --hd-text-main:      #1a2744;
+    --hd-text-sub:       #6b7280;
+    --hd-text-warn:      #d97706;
+
+    /* KPI 카드 색상 — 6종 */
+    --hd-blue-bg:        #eff6ff;
+    --hd-blue-accent:    #2563eb;
+    --hd-blue-icon:      #bfdbfe;
+
+    --hd-green-bg:       #f0fdf4;
+    --hd-green-accent:   #16a34a;
+    --hd-green-icon:     #bbf7d0;
+
+    --hd-gold-bg:        #fffbeb;
+    --hd-gold-accent:    #d97706;
+    --hd-gold-icon:      #fde68a;
+
+    --hd-orange-bg:      #fff7ed;
+    --hd-orange-accent:  #ea580c;
+    --hd-orange-icon:    #fed7aa;
+
+    --hd-muted-bg:       #f9fafb;
+    --hd-muted-accent:   #9ca3af;
+    --hd-muted-icon:     #e5e7eb;
+
+    --hd-purple-bg:      #faf5ff;
+    --hd-purple-accent:  #7c3aed;
+    --hd-purple-icon:    #ddd6fe;
+
+    /* 상태 배지 */
+    --hd-badge-approved-bg:    #dcfce7;
+    --hd-badge-approved-color: #15803d;
+
+    /* 테이블 */
+    --hd-table-head-bg:  #f8fafc;
+    --hd-table-border:   #e2e8f0;
+    --hd-table-row-even: #fafbfc;
+    --hd-table-row-hover:#f0f4ff;
+
+    /* 공지 배너 */
+    --hd-notice-bg:      #f0f9ff;
+    --hd-notice-border:  #bae6fd;
+    --hd-notice-color:   #0369a1;
+
+    /* Flag OFF 안내 */
+    --hd-flagoff-bg:     #f9fafb;
+    --hd-flagoff-border: #e5e7eb;
+    --hd-flagoff-color:  #374151;
+    --hd-flagoff-icon:   #9ca3af;
+
+    /* 스켈레톤 shimmer */
+    --hd-shimmer-from:   #e8eaf0;
+    --hd-shimmer-to:     #f8f9fb;
+
+    /* 간격 */
+    --hd-gap:            16px;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   로딩 인디케이터
+   ════════════════════════════════════════════════════════════════ */
+.hd-loading {
+    display:         flex;
+    align-items:     center;
+    gap:             10px;
+    color:           var(--hd-text-sub);
+    font-size:       0.95rem;
+    padding:         28px 0;
+    justify-content: center;
+}
+
+.hd-loading i {
+    font-size: 1.2rem;
+    color:     var(--hd-blue-accent);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   단지 선택 바
+   ════════════════════════════════════════════════════════════════ */
+.hd-complex-selector {
+    display:        flex;
+    align-items:    center;
+    gap:            12px;
+    background:     var(--hd-card);
+    border:         1px solid var(--hd-border);
+    border-radius:  var(--hd-radius);
+    padding:        14px 20px;
+    margin-bottom:  var(--hd-gap);
+    box-shadow:     var(--hd-shadow);
+}
+
+.hd-selector-label {
+    font-size:   0.85rem;
+    font-weight: 600;
+    color:       var(--hd-text-sub);
+    white-space: nowrap;
+    display:     flex;
+    align-items: center;
+    gap:         6px;
+}
+
+.hd-selector-label i {
+    color: var(--hd-blue-accent);
+}
+
+.hd-select {
+    flex:             1;
+    padding:          8px 12px;
+    border:           1px solid var(--hd-border);
+    border-radius:    6px;
+    background:       var(--hd-bg);
+    color:            var(--hd-text-main);
+    font-size:        0.9rem;
+    font-weight:      500;
+    cursor:           pointer;
+    outline:          none;
+    transition:       border-color 0.2s;
+    max-width:        380px;
+}
+
+.hd-select:focus {
+    border-color: var(--hd-blue-accent);
+    box-shadow:   0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* 단지 1개일 때: 배지 표시 */
+.hd-complex-badge {
+    display:       inline-flex;
+    align-items:   center;
+    gap:           8px;
+    background:    var(--hd-blue-bg);
+    color:         var(--hd-blue-accent);
+    border:        1px solid var(--hd-blue-icon);
+    border-radius: var(--hd-radius);
+    padding:       10px 18px;
+    font-size:     0.92rem;
+    font-weight:   600;
+    margin-bottom: var(--hd-gap);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   운영 데이터 공지 배너
+   ════════════════════════════════════════════════════════════════ */
+.hd-ops-notice {
+    display:       flex;
+    align-items:   center;
+    gap:           10px;
+    background:    var(--hd-notice-bg);
+    border:        1px solid var(--hd-notice-border);
+    border-radius: var(--hd-radius);
+    padding:       10px 18px;
+    margin-bottom: var(--hd-gap);
+    font-size:     0.83rem;
+    color:         var(--hd-notice-color);
+    font-weight:   500;
+}
+
+.hd-ops-notice i {
+    flex-shrink: 0;
+    font-size:   1rem;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   KPI 카드 그리드 (W-1 ~ W-5)
+   ════════════════════════════════════════════════════════════════ */
+.hd-kpi-grid {
+    display:               grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap:                   var(--hd-gap);
+    margin-bottom:         var(--hd-gap);
+}
+
+/* ── KPI 카드 공통 ─────────────────────────────────────────────── */
+.hd-kpi-card {
+    background:    var(--hd-card);
+    border-radius: var(--hd-radius);
+    border:        1px solid var(--hd-border);
+    box-shadow:    var(--hd-shadow);
+    padding:       20px 18px;
+    display:       flex;
+    align-items:   flex-start;
+    gap:           14px;
+    transition:    box-shadow 0.2s, transform 0.15s;
+    position:      relative;
+    overflow:      hidden;
+}
+
+.hd-kpi-card::before {
+    content:        '';
+    position:       absolute;
+    top:            0;
+    left:           0;
+    width:          4px;
+    height:         100%;
+    border-radius:  var(--hd-radius) 0 0 var(--hd-radius);
+}
+
+.hd-kpi-card:hover {
+    box-shadow: var(--hd-shadow-hover);
+    transform:  translateY(-2px);
+}
+
+/* ── 스켈레톤 shimmer ────────────────────────────────────────────── */
+.hd-kpi-loading {
+    background:  linear-gradient(90deg, var(--hd-shimmer-from) 25%, var(--hd-shimmer-to) 50%, var(--hd-shimmer-from) 75%);
+    background-size: 200% 100%;
+    animation:   hd-shimmer 1.4s infinite linear;
+    pointer-events: none;
+}
+
+@keyframes hd-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.hd-kpi-loading .hd-kpi-value,
+.hd-kpi-loading .hd-kpi-label,
+.hd-kpi-loading .hd-kpi-sub {
+    color: transparent;
+    background: var(--hd-shimmer-from);
+    border-radius: 4px;
+    user-select: none;
+}
+
+/* ── 색상 변형 6종 ─────────────────────────────────────────────── */
+.hd-kpi-blue {
+    background: var(--hd-blue-bg);
+    border-color: var(--hd-blue-icon);
+}
+.hd-kpi-blue::before   { background: var(--hd-blue-accent); }
+
+.hd-kpi-green {
+    background: var(--hd-green-bg);
+    border-color: var(--hd-green-icon);
+}
+.hd-kpi-green::before  { background: var(--hd-green-accent); }
+
+.hd-kpi-gold {
+    background: var(--hd-gold-bg);
+    border-color: var(--hd-gold-icon);
+}
+.hd-kpi-gold::before   { background: var(--hd-gold-accent); }
+
+.hd-kpi-orange {
+    background: var(--hd-orange-bg);
+    border-color: var(--hd-orange-icon);
+}
+.hd-kpi-orange::before { background: var(--hd-orange-accent); }
+
+.hd-kpi-muted {
+    background: var(--hd-muted-bg);
+    border-color: var(--hd-muted-icon);
+}
+.hd-kpi-muted::before  { background: var(--hd-muted-accent); }
+
+.hd-kpi-purple {
+    background: var(--hd-purple-bg);
+    border-color: var(--hd-purple-icon);
+}
+.hd-kpi-purple::before { background: var(--hd-purple-accent); }
+
+/* ── 아이콘 컨테이너 ─────────────────────────────────────────────── */
+.hd-kpi-icon {
+    flex-shrink:   0;
+    width:         44px;
+    height:        44px;
+    border-radius: 10px;
+    display:       flex;
+    align-items:   center;
+    justify-content: center;
+    font-size:     1.3rem;
+}
+
+.hd-kpi-blue   .hd-kpi-icon { background: var(--hd-blue-icon);   color: var(--hd-blue-accent);   }
+.hd-kpi-green  .hd-kpi-icon { background: var(--hd-green-icon);  color: var(--hd-green-accent);  }
+.hd-kpi-gold   .hd-kpi-icon { background: var(--hd-gold-icon);   color: var(--hd-gold-accent);   }
+.hd-kpi-orange .hd-kpi-icon { background: var(--hd-orange-icon); color: var(--hd-orange-accent); }
+.hd-kpi-muted  .hd-kpi-icon { background: var(--hd-muted-icon);  color: var(--hd-muted-accent);  }
+.hd-kpi-purple .hd-kpi-icon { background: var(--hd-purple-icon); color: var(--hd-purple-accent); }
+.hd-kpi-loading .hd-kpi-icon { background: var(--hd-shimmer-from); color: transparent; }
+
+/* ── 수치·레이블 ─────────────────────────────────────────────────── */
+.hd-kpi-body {
+    display:        flex;
+    flex-direction: column;
+    gap:            2px;
+    min-width:      0;
+}
+
+.hd-kpi-value {
+    font-size:   1.9rem;
+    font-weight: 700;
+    color:       var(--hd-text-main);
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+}
+
+/* 긴 금액 표시용 — 폰트 축소 */
+.hd-kpi-value-sm {
+    font-size: 1.35rem;
+    word-break: break-all;
+}
+
+.hd-kpi-label {
+    font-size:   0.8rem;
+    font-weight: 600;
+    color:       var(--hd-text-sub);
+    text-transform: none;
+    margin-top:  2px;
+}
+
+.hd-kpi-sub {
+    font-size: 0.73rem;
+    color:     var(--hd-text-sub);
+    margin-top: 3px;
+}
+
+.hd-kpi-sub-warn {
+    color:       var(--hd-text-warn);
+    font-weight: 600;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   W-6 패널 (다가오는 PT 예약 목록)
+   ════════════════════════════════════════════════════════════════ */
+.hd-panel {
+    background:    var(--hd-card);
+    border:        1px solid var(--hd-border);
+    border-radius: var(--hd-radius);
+    box-shadow:    var(--hd-shadow);
+    overflow:      hidden;
+    margin-bottom: var(--hd-gap);
+}
+
+.hd-panel-header {
+    display:         flex;
+    align-items:     center;
+    justify-content: space-between;
+    padding:         16px 20px;
+    border-bottom:   1px solid var(--hd-border);
+    background:      var(--hd-table-head-bg);
+    gap:             12px;
+    flex-wrap:       wrap;
+}
+
+.hd-panel-header h4 {
+    margin:      0;
+    font-size:   0.98rem;
+    font-weight: 700;
+    color:       var(--hd-text-main);
+    display:     flex;
+    align-items: center;
+    gap:         8px;
+}
+
+.hd-panel-header h4 i {
+    color: var(--hd-blue-accent);
+}
+
+.hd-panel-btn {
+    background:    transparent;
+    border:        1px solid var(--hd-blue-accent);
+    border-radius: 6px;
+    color:         var(--hd-blue-accent);
+    font-size:     0.78rem;
+    font-weight:   600;
+    padding:       5px 12px;
+    cursor:        pointer;
+    white-space:   nowrap;
+    transition:    background 0.15s, color 0.15s;
+}
+
+.hd-panel-btn:hover {
+    background: var(--hd-blue-accent);
+    color:      #fff;
+}
+
+.hd-panel-body {
+    padding: 0;
+    overflow-x: auto;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   예약 목록 테이블
+   ════════════════════════════════════════════════════════════════ */
+.hd-table {
+    width:           100%;
+    border-collapse: collapse;
+    font-size:       0.875rem;
+}
+
+.hd-table thead tr {
+    background: var(--hd-table-head-bg);
+}
+
+.hd-table th {
+    padding:     10px 16px;
+    text-align:  left;
+    font-size:   0.78rem;
+    font-weight: 700;
+    color:       var(--hd-text-sub);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--hd-table-border);
+    white-space:   nowrap;
+}
+
+.hd-table td {
+    padding:     10px 16px;
+    color:       var(--hd-text-main);
+    border-bottom: 1px solid var(--hd-table-border);
+    white-space:  nowrap;
+}
+
+.hd-table tbody tr:nth-child(even) {
+    background: var(--hd-table-row-even);
+}
+
+.hd-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.hd-table tbody tr:hover {
+    background: var(--hd-table-row-hover);
+}
+
+.hd-table-foot {
+    padding:   10px 16px;
+    font-size: 0.78rem;
+    color:     var(--hd-text-sub);
+    border-top: 1px solid var(--hd-table-border);
+    margin:    0;
+    text-align: right;
+    background: var(--hd-table-head-bg);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   상태 배지 (예약 상태)
+   ════════════════════════════════════════════════════════════════ */
+.hd-status-badge {
+    display:       inline-block;
+    padding:       3px 9px;
+    border-radius: 99px;
+    font-size:     0.72rem;
+    font-weight:   700;
+    line-height:   1.4;
+    white-space:   nowrap;
+    background:    var(--hd-muted-icon);
+    color:         var(--hd-muted-accent);
+}
+
+.hd-status-approved {
+    background: var(--hd-badge-approved-bg);
+    color:      var(--hd-badge-approved-color);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   빈 목록 / 오류 메시지
+   ════════════════════════════════════════════════════════════════ */
+.hd-empty {
+    display:         flex;
+    align-items:     center;
+    justify-content: center;
+    gap:             10px;
+    padding:         36px 20px;
+    color:           var(--hd-text-sub);
+    font-size:       0.9rem;
+    margin:          0;
+}
+
+.hd-empty i {
+    font-size: 1.2rem;
+}
+
+.hd-error {
+    display:     flex;
+    align-items: center;
+    gap:         8px;
+    padding:     16px 20px;
+    color:       #dc2626;
+    font-size:   0.875rem;
+    margin:      0;
+}
+
+.hd-error i {
+    flex-shrink: 0;
+    font-size:   1rem;
+}
+
+.hd-error-detail {
+    font-size:    0.78rem;
+    color:        #9b1c1c;
+    background:   #fef2f2;
+    border:       1px solid #fecaca;
+    border-radius: 6px;
+    padding:      8px 12px;
+    margin-top:   6px;
+    font-family:  monospace;
+    word-break:   break-all;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Feature Flag OFF / 호텔 단지 없음 안내
+   ════════════════════════════════════════════════════════════════ */
+.hd-flag-off {
+    text-align:    center;
+    background:    var(--hd-flagoff-bg);
+    border:        1px dashed var(--hd-flagoff-border);
+    border-radius: var(--hd-radius);
+    padding:       56px 32px;
+    max-width:     480px;
+    margin:        40px auto;
+}
+
+.hd-flag-off-icon {
+    font-size:     3rem;
+    color:         var(--hd-flagoff-icon);
+    margin-bottom: 16px;
+}
+
+.hd-flag-off h3 {
+    font-size:    1.1rem;
+    font-weight:  700;
+    color:        var(--hd-text-main);
+    margin:       0 0 12px;
+}
+
+.hd-flag-off p {
+    font-size:    0.88rem;
+    color:        var(--hd-flagoff-color);
+    line-height:  1.6;
+    margin:       0 0 10px;
+}
+
+.hd-flag-off code {
+    background:    #e8eaf0;
+    border-radius: 4px;
+    padding:       1px 6px;
+    font-family:   monospace;
+    font-size:     0.85em;
+    color:         var(--hd-blue-accent);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   반응형 — 768px 이하
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    .hd-kpi-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+    }
+
+    .hd-kpi-card {
+        padding: 14px 12px;
+        gap:     10px;
+    }
+
+    .hd-kpi-icon {
+        width:  36px;
+        height: 36px;
+        font-size: 1.05rem;
+    }
+
+    .hd-kpi-value {
+        font-size: 1.5rem;
+    }
+
+    .hd-kpi-value-sm {
+        font-size: 1.1rem;
+    }
+
+    .hd-complex-selector {
+        flex-wrap: wrap;
+    }
+
+    .hd-select {
+        max-width: 100%;
+    }
+
+    .hd-panel-header {
+        padding: 12px 14px;
+    }
+
+    .hd-table th,
+    .hd-table td {
+        padding: 8px 10px;
+    }
+
+    .hd-flag-off {
+        padding: 36px 20px;
+        margin:  24px auto;
+    }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   480px 이하 — 카드 2열 고정
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+    .hd-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .hd-kpi-value {
+        font-size: 1.3rem;
+    }
+}
