@@ -479,7 +479,7 @@ router.patch('/:id/flags', async (req, res) => {
 // ── 내 단지 설정 수정 (일반 관리자) ──────────────────────────
 router.put('/:id/self', async (req, res) => {
     try {
-        const { currentPassword, name, address, primary_color, new_password, show_inquiry } = req.body;
+        const { currentPassword, name, address, primary_color, new_password, show_inquiry, theme_name, venue_type } = req.body;
         const sb = getSupabase();
 
         const { data: existing, error: fetchErr } = await sb
@@ -504,6 +504,11 @@ router.put('/:id/self', async (req, res) => {
         if (show_inquiry !== undefined) {
             updatePayload.show_inquiry = Boolean(show_inquiry);
         }
+        // theme_name / venue_type
+        const VALID_THEMES_SELF = ['default','hotel','modern','nature','minimal','ocean','sunset','cherry','dark','royal','zen'];
+        const VALID_VENUE_SELF  = ['apartment','hotel'];
+        if (theme_name && VALID_THEMES_SELF.includes(theme_name)) updatePayload.theme_name = theme_name;
+        if (venue_type && VALID_VENUE_SELF.includes(venue_type))  updatePayload.venue_type = venue_type;
 
         const { data, error } = await sb
             .from('complexes')

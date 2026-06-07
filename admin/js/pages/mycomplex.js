@@ -203,7 +203,49 @@ const mycomplex = {
     showEditForm(id) {
         const cx = mycomplex.complexData.find(x => x.id === id);
         if (!cx) return;
+        const isHotel   = cx.venue_type === 'hotel';
+        const themeName = cx.theme_name || 'default';
         const body = `
+            <!-- 🏨 페이지 디자인 설정 -->
+            <div style="background:linear-gradient(135deg,#f0f4ff,#faf5ff);border:1.5px solid #c4b5fd;border-radius:12px;padding:16px 18px;margin-bottom:18px">
+                <div style="font-weight:700;font-size:.95rem;color:#5b21b6;margin-bottom:14px">
+                    <i class="fas fa-palette"></i> 페이지 디자인 설정
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#fff;border-radius:10px;border:1px solid #e9d5ff;margin-bottom:12px">
+                    <div>
+                        <div style="font-weight:600;font-size:.9rem;color:#1e1e2e">🏨 호텔 모드</div>
+                        <div style="font-size:.78rem;color:#888;margin-top:2px">켜면 입주민 페이지가 호텔 전용 UI로 전환됩니다</div>
+                    </div>
+                    <label style="position:relative;display:inline-block;width:46px;height:26px;cursor:pointer;flex-shrink:0">
+                        <input type="checkbox" id="editHotelMode" ${isHotel ? 'checked' : ''}
+                               style="opacity:0;width:0;height:0"
+                               onchange="mycomplex._onHotelModeChange(this.checked)">
+                        <span id="hotelModeTrack" style="position:absolute;inset:0;background:${isHotel ? '#7c3aed' : '#ccc'};border-radius:26px;transition:.3s">
+                            <span id="hotelModeThumb" style="position:absolute;top:3px;left:${isHotel ? '23px' : '3px'};width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+                        </span>
+                    </label>
+                </div>
+                <div class="form-group" style="margin-bottom:10px">
+                    <label style="font-size:.85rem;font-weight:600;color:#374151;margin-bottom:6px;display:block">테마 선택</label>
+                    <select id="editThemeName"
+                            style="width:100%;padding:9px 12px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:.88rem;background:#fff"
+                            onchange="mycomplex._onThemeChange(this.value)">
+                        <option value="default"  ${themeName==='default' ?'selected':''}>🏠 Default (기존 아파트 보라)</option>
+                        <option value="hotel"    ${themeName==='hotel'   ?'selected':''}>🏨 Hotel (네이비+골드)</option>
+                        <option value="modern"   ${themeName==='modern'  ?'selected':''}>🏙️ Modern (차콜+시안)</option>
+                        <option value="nature"   ${themeName==='nature'  ?'selected':''}>🌿 Nature (딥그린+베이지)</option>
+                        <option value="minimal"  ${themeName==='minimal' ?'selected':''}>⬜ Minimal (화이트+블랙)</option>
+                        <option value="ocean"    ${themeName==='ocean'   ?'selected':''}>🌊 Ocean (딥블루+아쿠아)</option>
+                        <option value="sunset"   ${themeName==='sunset'  ?'selected':''}>🌅 Sunset (브라운+오렌지)</option>
+                        <option value="cherry"   ${themeName==='cherry'  ?'selected':''}>🌸 Cherry (로즈+크림)</option>
+                        <option value="dark"     ${themeName==='dark'    ?'selected':''}>🌑 Dark (블랙+민트)</option>
+                        <option value="royal"    ${themeName==='royal'   ?'selected':''}>👑 Royal (버건디+골드)</option>
+                        <option value="zen"      ${themeName==='zen'     ?'selected':''}>🧘 Zen (오프화이트+인디고)</option>
+                    </select>
+                    <div id="themePreviewBar" style="margin-top:8px;height:8px;border-radius:4px;transition:background .3s;background:${mycomplex._themeColor(themeName)}"></div>
+                </div>
+            </div>
+            <!-- 기본 정보 -->
             <div class="form-group">
                 <label>단지 코드</label>
                 <input type="text" value="${escHtml(cx.code)}" readonly style="background:#f5f5f5;color:#999">
@@ -244,16 +286,22 @@ const mycomplex = {
     async saveEditComplex(id) {
         const cx = mycomplex.complexData.find(x => x.id === id);
         if (!cx) return;
-        const name  = document.getElementById('editCxName').value.trim();
+        const name = document.getElementById('editCxName').value.trim();
         if (!name) { showToast('단지명을 입력하세요', 'error'); return; }
+
+        const hotelMode = document.getElementById('editHotelMode')?.checked;
+        const themeName = document.getElementById('editThemeName')?.value || 'default';
+        const venueType = hotelMode ? 'hotel' : 'apartment';
 
         try {
             await API.complexes.update(id, {
                 name,
-                address:       document.getElementById('editCxAddr').value.trim(),
-                primary_color: document.getElementById('editCxColor').value,
+                address:        document.getElementById('editCxAddr').value.trim(),
+                primary_color:  document.getElementById('editCxColor').value,
                 admin_password: document.getElementById('editCxPw').value.trim(),
-                is_active:     document.getElementById('editCxActive').checked,
+                is_active:      document.getElementById('editCxActive').checked,
+                theme_name:     themeName,
+                venue_type:     venueType,
                 masterPassword: mycomplex._masterPw
             });
             closeGlobalModal();
@@ -595,7 +643,51 @@ const mycomplex = {
 
     _showAdminEditForm() {
         const cx = Admin.complex;
+        const isHotel   = cx.venue_type === 'hotel';
+        const themeName = cx.theme_name || 'default';
         const body = `
+            <!-- 🏨 페이지 디자인 설정 -->
+            <div style="background:linear-gradient(135deg,#f0f4ff,#faf5ff);border:1.5px solid #c4b5fd;border-radius:12px;padding:16px 18px;margin-bottom:18px">
+                <div style="font-weight:700;font-size:.95rem;color:#5b21b6;margin-bottom:14px">
+                    <i class="fas fa-palette"></i> 페이지 디자인 설정
+                </div>
+                <!-- 호텔 모드 토글 -->
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#fff;border-radius:10px;border:1px solid #e9d5ff;margin-bottom:12px">
+                    <div>
+                        <div style="font-weight:600;font-size:.9rem;color:#1e1e2e">🏨 호텔 모드</div>
+                        <div style="font-size:.78rem;color:#888;margin-top:2px">켜면 입주민 페이지가 호텔 전용 UI로 전환됩니다</div>
+                    </div>
+                    <label style="position:relative;display:inline-block;width:46px;height:26px;cursor:pointer;flex-shrink:0">
+                        <input type="checkbox" id="editHotelMode" ${isHotel ? 'checked' : ''}
+                               style="opacity:0;width:0;height:0"
+                               onchange="mycomplex._onHotelModeChange(this.checked)">
+                        <span id="hotelModeTrack" style="position:absolute;inset:0;background:${isHotel ? '#7c3aed' : '#ccc'};border-radius:26px;transition:.3s">
+                            <span id="hotelModeThumb" style="position:absolute;top:3px;left:${isHotel ? '23px' : '3px'};width:20px;height:20px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>
+                        </span>
+                    </label>
+                </div>
+                <!-- 테마 선택 -->
+                <div class="form-group" style="margin-bottom:10px">
+                    <label style="font-size:.85rem;font-weight:600;color:#374151;margin-bottom:6px;display:block">테마 선택</label>
+                    <select id="editThemeName"
+                            style="width:100%;padding:9px 12px;border:1.5px solid #c4b5fd;border-radius:8px;font-size:.88rem;background:#fff"
+                            onchange="mycomplex._onThemeChange(this.value)">
+                        <option value="default"  ${themeName==='default' ?'selected':''}>🏠 Default (기존 아파트 보라)</option>
+                        <option value="hotel"    ${themeName==='hotel'   ?'selected':''}>🏨 Hotel (네이비+골드)</option>
+                        <option value="modern"   ${themeName==='modern'  ?'selected':''}>🏙️ Modern (차콜+시안)</option>
+                        <option value="nature"   ${themeName==='nature'  ?'selected':''}>🌿 Nature (딥그린+베이지)</option>
+                        <option value="minimal"  ${themeName==='minimal' ?'selected':''}>⬜ Minimal (화이트+블랙)</option>
+                        <option value="ocean"    ${themeName==='ocean'   ?'selected':''}>🌊 Ocean (딥블루+아쿠아)</option>
+                        <option value="sunset"   ${themeName==='sunset'  ?'selected':''}>🌅 Sunset (브라운+오렌지)</option>
+                        <option value="cherry"   ${themeName==='cherry'  ?'selected':''}>🌸 Cherry (로즈+크림)</option>
+                        <option value="dark"     ${themeName==='dark'    ?'selected':''}>🌑 Dark (블랙+민트)</option>
+                        <option value="royal"    ${themeName==='royal'   ?'selected':''}>👑 Royal (버건디+골드)</option>
+                        <option value="zen"      ${themeName==='zen'     ?'selected':''}>🧘 Zen (오프화이트+인디고)</option>
+                    </select>
+                    <div id="themePreviewBar" style="margin-top:8px;height:8px;border-radius:4px;transition:background .3s;background:${mycomplex._themeColor(themeName)}"></div>
+                </div>
+            </div>
+            <!-- 기본 정보 -->
             <div class="form-group">
                 <label>단지명 *</label>
                 <input type="text" id="editCxName" value="${escHtml(cx.name || '')}">
@@ -623,11 +715,52 @@ const mycomplex = {
         openGlobalModal('<i class="fas fa-edit"></i> 단지 정보 수정', body, footer);
     },
 
+    /* 테마 색상 맵 */
+    _THEME_COLORS: {
+        default:'#667eea', hotel:'#C8A864', modern:'#00CEC9',
+        nature:'#3A7D1E', minimal:'#111111', ocean:'#00B4D8',
+        sunset:'#E8650A', cherry:'#D4457A', dark:'#0AFFD9',
+        royal:'#BF9B30', zen:'#3D3580'
+    },
+    _themeColor(name) {
+        return mycomplex._THEME_COLORS[name] || mycomplex._THEME_COLORS.default;
+    },
+    _onThemeChange(val) {
+        const bar = document.getElementById('themePreviewBar');
+        if (bar) bar.style.background = mycomplex._themeColor(val);
+        /* 호텔 테마 선택 시 호텔 모드 자동 ON */
+        if (val === 'hotel') {
+            const chk = document.getElementById('editHotelMode');
+            const trk = document.getElementById('hotelModeTrack');
+            const thb = document.getElementById('hotelModeThumb');
+            if (chk) chk.checked = true;
+            if (trk) trk.style.background = '#7c3aed';
+            if (thb) thb.style.left = '23px';
+        }
+    },
+    _onHotelModeChange(checked) {
+        const trk = document.getElementById('hotelModeTrack');
+        const thb = document.getElementById('hotelModeThumb');
+        if (trk) trk.style.background = checked ? '#7c3aed' : '#ccc';
+        if (thb) thb.style.left = checked ? '23px' : '3px';
+        /* 호텔 모드 ON 시 테마를 hotel로 자동 세팅 */
+        if (checked) {
+            const sel = document.getElementById('editThemeName');
+            if (sel && sel.value === 'default') {
+                sel.value = 'hotel';
+                mycomplex._onThemeChange('hotel');
+            }
+        }
+    },
+
     async _saveAdminEdit() {
-        const name      = document.getElementById('editCxName').value.trim();
-        const address   = document.getElementById('editCxAddr').value.trim();
-        const color     = document.getElementById('editCxColor').value;
-        const currentPw = document.getElementById('editCxCurrentPw').value;
+        const name       = document.getElementById('editCxName').value.trim();
+        const address    = document.getElementById('editCxAddr').value.trim();
+        const color      = document.getElementById('editCxColor').value;
+        const currentPw  = document.getElementById('editCxCurrentPw').value;
+        const hotelMode  = document.getElementById('editHotelMode')?.checked;
+        const themeName  = document.getElementById('editThemeName')?.value || 'default';
+        const venueType  = hotelMode ? 'hotel' : 'apartment';
 
         if (!name)      { showToast('단지명을 입력하세요', 'error'); return; }
         if (!currentPw) { showToast('현재 비밀번호를 입력하세요', 'error'); return; }
@@ -636,7 +769,9 @@ const mycomplex = {
             const res = await API.complexes.selfUpdate(Admin.complex.id, {
                 currentPassword: currentPw,
                 name, address,
-                primary_color: color
+                primary_color: color,
+                theme_name: themeName,
+                venue_type: venueType
             });
             Admin.complex = res.data;
             sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
