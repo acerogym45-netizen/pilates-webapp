@@ -1,0 +1,93 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-dark.css  —  다크 모드
+   컨셉: 거의 블랙 + 네온 민트. 밤에 운동하는 사람들을 위한 야간 모드.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+body.theme-dark {
+    --color-primary:    #0AFFD9;
+    --color-primary-d:  #00d4b0;
+    --color-success:    #00ff9d;
+    --color-warning:    #ffbe00;
+    --color-danger:     #ff4d4d;
+    --color-bg:         #0D0D0D;
+    --color-card:       #1A1A1A;
+    --color-text:       #E8E8E8;
+    --color-text-muted: #777777;
+    --color-border:     #2A2A2A;
+    --radius:           8px;
+    --shadow:           0 2px 16px rgba(0,0,0,.5);
+    --shadow-md:        0 6px 28px rgba(0,0,0,.6);
+
+    --dark-mint:        #0AFFD9;
+    --dark-mint-d:      #00d4b0;
+    --dark-bg:          #0D0D0D;
+    --dark-card:        #1A1A1A;
+    --dark-surface:     #222222;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--dark-bg);
+    color: var(--color-text);
+}
+
+body.theme-dark .loading-screen { background: #0D0D0D; }
+body.theme-dark .loading-logo { color: var(--dark-mint); }
+body.theme-dark .loading-spinner { border-color: rgba(10,255,217,.15); border-top-color: var(--dark-mint); }
+
+body.theme-dark .header {
+    background: #111111;
+    border-bottom: 2px solid var(--dark-mint);
+}
+body.theme-dark .header::before {
+    content: '⚡ NIGHT FITNESS';
+    display: block;
+    font-size: .63rem;
+    letter-spacing: .2em;
+    color: var(--dark-mint);
+    margin-bottom: 8px;
+}
+body.theme-dark .header h1 { font-weight: 700; color: #fff; }
+body.theme-dark .header-icon,
+body.theme-dark .header-subtitle { color: var(--dark-mint); }
+
+body.theme-dark .btn-primary {
+    background: var(--dark-mint);
+    border: none; color: #0D0D0D; font-weight: 700; border-radius: var(--radius);
+    transition: background .2s, box-shadow .2s;
+}
+body.theme-dark .btn-primary:hover { background: var(--dark-mint-d); box-shadow: 0 4px 20px rgba(10,255,217,.4); }
+body.theme-dark .btn-secondary { background: transparent; border: 1.5px solid var(--dark-mint); color: var(--dark-mint); border-radius: var(--radius); }
+body.theme-dark .btn-secondary:hover { background: rgba(10,255,217,.1); }
+
+body.theme-dark .card-section, body.theme-dark .form-body { background: var(--dark-card); border-color: var(--color-border); }
+body.theme-dark input, body.theme-dark select, body.theme-dark textarea {
+    background: var(--dark-surface); color: var(--color-text); border-color: var(--color-border);
+}
+body.theme-dark input:focus, body.theme-dark select:focus, body.theme-dark textarea:focus {
+    border-color: var(--dark-mint); box-shadow: 0 0 0 3px rgba(10,255,217,.2); outline: none;
+}
+body.theme-dark label, body.theme-dark .form-group label { color: #ccc; }
+body.theme-dark input[type="checkbox"] { accent-color: var(--dark-mint); }
+
+body.theme-dark .quick-btn { border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--dark-card); color: #ccc; }
+body.theme-dark .quick-btn:hover { border-color: var(--dark-mint); background: rgba(10,255,217,.07); }
+body.theme-dark .quick-btn i { color: var(--dark-mint); }
+body.theme-dark .quick-btn span { color: #ddd; }
+body.theme-dark .quick-btn--accent { background: rgba(10,255,217,.12); color: var(--dark-mint); border-color: var(--dark-mint); }
+body.theme-dark .quick-btn--accent:hover { background: var(--dark-mint); color: #0D0D0D; }
+body.theme-dark .quick-btn--accent i, body.theme-dark .quick-btn--accent span { color: inherit; }
+
+body.theme-dark .step-badge { background: rgba(10,255,217,.12); color: var(--dark-mint); border: 1px solid var(--dark-mint); font-size:.72rem; border-radius:4px; padding:2px 8px; }
+body.theme-dark .section-header h3 { color: #e8e8e8; }
+body.theme-dark .section-header h3 i { color: var(--dark-mint); }
+body.theme-dark fieldset.form-fieldset { border-color: var(--color-border); background: var(--dark-card); }
+body.theme-dark fieldset.form-fieldset legend { color: var(--dark-mint); font-weight: 700; }
+body.theme-dark .terms-box { background: var(--dark-surface); border-color: var(--color-border); color: #ccc; }
+body.theme-dark .policy-box { background: var(--dark-surface); border-left: 3px solid var(--dark-mint); }
+body.theme-dark .policy-box-header { color: #e8e8e8; }
+body.theme-dark .policy-box-header i { color: var(--dark-mint); }
+body.theme-dark .modal { background: rgba(0,0,0,.8); }
+body.theme-dark .modal-content { background: var(--dark-card); border-top: 2px solid var(--dark-mint); color: var(--color-text); }
+body.theme-dark .modal-title, body.theme-dark .modal-header h3 { color: #e8e8e8; }
+body.theme-dark .contract-summary { background: var(--dark-surface); border-color: var(--color-border); }
+body.theme-dark .contract-summary .summary-row strong { color: #e8e8e8; }

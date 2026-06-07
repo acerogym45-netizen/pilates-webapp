@@ -1,0 +1,92 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-royal.css  —  로열 클래식
+   컨셉: 버건디 + 골드. 품격 있는 럭셔리 헬스클럽 느낌.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Noto+Sans+KR:wght@400;500&display=swap');
+
+body.theme-royal {
+    --color-primary:    #5C0A24;
+    --color-primary-d:  #400618;
+    --color-success:    #27ae60;
+    --color-warning:    #c8960a;
+    --color-danger:     #c0392b;
+    --color-bg:         #F8F3EC;
+    --color-card:       #FFFFFF;
+    --color-text:       #2a0f1a;
+    --color-text-muted: #7a5060;
+    --color-border:     #e8d8c0;
+    --radius:           6px;
+    --shadow:           0 2px 12px rgba(92,10,36,.09);
+    --shadow-md:        0 6px 24px rgba(92,10,36,.15);
+
+    --royal-gold:       #BF9B30;
+    --royal-gold-d:     #9a7d20;
+    --royal-gold-light: #f5e8c0;
+    --royal-burgundy:   #5C0A24;
+    --royal-ivory:      #F8F3EC;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--royal-ivory);
+}
+
+body.theme-royal .loading-screen {
+    background: linear-gradient(160deg, #5C0A24 0%, #8b1a38 100%);
+}
+body.theme-royal .loading-logo { color: var(--royal-gold); }
+body.theme-royal .loading-spinner { border-color: rgba(191,155,48,.2); border-top-color: var(--royal-gold); }
+
+body.theme-royal .header {
+    background: linear-gradient(135deg, #5C0A24 0%, #8b1a38 100%);
+    border-bottom: 2px solid var(--royal-gold);
+    position: relative;
+}
+body.theme-royal .header::before {
+    content: 'ROYAL FITNESS CLUB';
+    display: block;
+    font-family: 'Noto Serif KR', serif;
+    font-size: .65rem;
+    letter-spacing: .2em;
+    color: var(--royal-gold);
+    margin-bottom: 10px;
+    opacity: .85;
+    text-transform: uppercase;
+}
+body.theme-royal .header h1 { font-family: 'Noto Serif KR', serif; font-weight: 700; letter-spacing: .03em; }
+body.theme-royal .header-icon,
+body.theme-royal .header-subtitle { color: var(--royal-gold); }
+
+body.theme-royal .btn-primary {
+    background: var(--royal-burgundy);
+    border: 1.5px solid var(--royal-gold);
+    color: var(--royal-gold);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-weight: 600;
+    letter-spacing: .04em;
+    border-radius: var(--radius);
+    transition: background .2s, color .2s, box-shadow .2s;
+}
+body.theme-royal .btn-primary:hover { background: var(--royal-gold); color: var(--royal-burgundy); box-shadow: 0 4px 16px rgba(191,155,48,.4); }
+body.theme-royal .btn-secondary { background: transparent; border: 1.5px solid var(--royal-gold); color: var(--royal-gold); border-radius: var(--radius); }
+body.theme-royal .btn-secondary:hover { background: var(--royal-gold-light); color: var(--royal-burgundy); }
+
+body.theme-royal .quick-btn { border: 1px solid var(--color-border); border-radius: var(--radius); background: #fff; }
+body.theme-royal .quick-btn:hover { border-color: var(--royal-gold); background: var(--royal-gold-light); }
+body.theme-royal .quick-btn i { color: var(--royal-gold); }
+body.theme-royal .quick-btn--accent { background: var(--royal-burgundy); color: var(--royal-gold); border-color: var(--royal-gold); }
+body.theme-royal .quick-btn--accent:hover { background: var(--royal-gold); color: var(--royal-burgundy); }
+body.theme-royal .quick-btn--accent i, body.theme-royal .quick-btn--accent span { color: inherit; }
+
+body.theme-royal input:focus, body.theme-royal select:focus, body.theme-royal textarea:focus {
+    border-color: var(--royal-gold); box-shadow: 0 0 0 3px rgba(191,155,48,.15); outline: none;
+}
+body.theme-royal input[type="checkbox"] { accent-color: var(--royal-gold); }
+body.theme-royal .step-badge { background: var(--royal-gold-light); color: var(--royal-gold-d); border: 1px solid var(--royal-gold); font-size:.72rem; border-radius:4px; padding:2px 8px; }
+body.theme-royal .section-header h3 { font-family: 'Noto Serif KR', serif; color: var(--royal-burgundy); }
+body.theme-royal .section-header h3 i { color: var(--royal-gold); }
+body.theme-royal fieldset.form-fieldset legend { color: var(--royal-gold); font-family: 'Noto Serif KR', serif; font-weight: 600; }
+body.theme-royal .modal-content { border-top: 3px solid var(--royal-gold); }
+body.theme-royal .policy-box { border-left: 3px solid var(--royal-gold); background: rgba(191,155,48,.04); }
+body.theme-royal .policy-box-header { font-family: 'Noto Serif KR', serif; color: var(--royal-burgundy); }
+body.theme-royal .policy-box-header i { color: var(--royal-gold); }
+body.theme-royal .terms-box { background: #fdf8f0; }
+body.theme-royal .signature-canvas-wrapper { border: 1.5px solid var(--royal-gold); }

@@ -1,0 +1,83 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-zen.css  —  젠 인디고
+   컨셉: 오프화이트 + 인디고. 명상·요가·마음 챙김 스튜디오 느낌.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Noto+Sans+KR:wght@300;400;500&display=swap');
+
+body.theme-zen {
+    --color-primary:    #3D3580;
+    --color-primary-d:  #2c2660;
+    --color-success:    #4caf7d;
+    --color-warning:    #d4870a;
+    --color-danger:     #c0392b;
+    --color-bg:         #F7F5F0;
+    --color-card:       #FFFFFF;
+    --color-text:       #2a2560;
+    --color-text-muted: #7b7898;
+    --color-border:     #dddaf0;
+    --radius:           8px;
+    --shadow:           0 2px 12px rgba(61,53,128,.07);
+    --shadow-md:        0 6px 24px rgba(61,53,128,.12);
+
+    --zen-indigo:       #3D3580;
+    --zen-indigo-d:     #2c2660;
+    --zen-lavender:     #e8e6f8;
+    --zen-offwhite:     #F7F5F0;
+    --zen-sage:         #8B9E7A;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    font-weight: 400;
+    background: var(--zen-offwhite);
+}
+
+body.theme-zen .loading-screen {
+    background: linear-gradient(160deg, #3D3580 0%, #5e56b0 100%);
+}
+body.theme-zen .loading-logo { color: #c8c4f0; }
+body.theme-zen .loading-spinner { border-color: rgba(200,196,240,.2); border-top-color: #c8c4f0; }
+
+body.theme-zen .header {
+    background: linear-gradient(135deg, #3D3580 0%, #5e56b0 100%);
+    border-bottom: 1px solid rgba(255,255,255,.2);
+}
+body.theme-zen .header::before {
+    content: '🧘 ZEN PILATES & YOGA';
+    display: block;
+    font-size: .63rem;
+    letter-spacing: .18em;
+    color: #c8c4f0;
+    margin-bottom: 8px;
+    opacity: .85;
+}
+body.theme-zen .header h1 { font-family: 'Noto Serif KR', serif; font-weight: 600; }
+body.theme-zen .header-icon,
+body.theme-zen .header-subtitle { color: #c8c4f0; }
+
+body.theme-zen .btn-primary {
+    background: var(--zen-indigo);
+    border: none; color: #fff; font-weight: 500; border-radius: var(--radius);
+    transition: background .2s, box-shadow .2s;
+}
+body.theme-zen .btn-primary:hover { background: var(--zen-indigo-d); box-shadow: 0 4px 16px rgba(61,53,128,.35); }
+body.theme-zen .btn-secondary { background: transparent; border: 1.5px solid var(--zen-indigo); color: var(--zen-indigo); border-radius: var(--radius); }
+body.theme-zen .btn-secondary:hover { background: var(--zen-lavender); }
+
+body.theme-zen .quick-btn { border: 1px solid var(--color-border); border-radius: var(--radius); background: #fff; }
+body.theme-zen .quick-btn:hover { border-color: var(--zen-indigo); background: var(--zen-lavender); }
+body.theme-zen .quick-btn i { color: var(--zen-indigo); }
+body.theme-zen .quick-btn--accent { background: var(--zen-indigo); color: #c8c4f0; border-color: var(--zen-indigo-d); }
+body.theme-zen .quick-btn--accent:hover { background: var(--zen-indigo-d); color: #fff; }
+body.theme-zen .quick-btn--accent i, body.theme-zen .quick-btn--accent span { color: inherit; }
+
+body.theme-zen input:focus, body.theme-zen select:focus, body.theme-zen textarea:focus {
+    border-color: var(--zen-indigo); box-shadow: 0 0 0 3px rgba(61,53,128,.12); outline: none;
+}
+body.theme-zen input[type="checkbox"] { accent-color: var(--zen-indigo); }
+body.theme-zen .step-badge { background: var(--zen-lavender); color: var(--zen-indigo-d); border: 1px solid var(--zen-indigo); font-size:.72rem; border-radius:4px; padding:2px 8px; }
+body.theme-zen .section-header h3 { font-family: 'Noto Serif KR', serif; color: var(--zen-indigo); }
+body.theme-zen .section-header h3 i { color: var(--zen-indigo); }
+body.theme-zen fieldset.form-fieldset legend { color: var(--zen-indigo); font-family: 'Noto Serif KR', serif; }
+body.theme-zen .modal-content { border-top: 3px solid var(--zen-indigo); }
+body.theme-zen .policy-box { border-left: 3px solid var(--zen-indigo); background: var(--zen-lavender); }
+body.theme-zen .policy-box-header i { color: var(--zen-indigo); }
+body.theme-zen .terms-box { background: rgba(247,245,240,.8); }

@@ -293,45 +293,52 @@ app.get('*', async (req, res) => {
         ? pathMatch[1]
         : req.query.complex;
 
-    // venue_type: 호텔 테마 분기에 사용 ('hotel' | 기타)
-    let venueType = null;
+    // theme_name: 단지별 페이지 테마. DB 컬럼 없으면 venue_type으로 fallback.
+    let themeName = null;
 
     if (complexCode) {
         try {
             const sb = getSupabase();
             const { data } = await sb
                 .from('complexes')
-                .select('name, venue_type')
+                .select('name, venue_type, theme_name')
                 .eq('code', complexCode)
                 .single();
             if (data?.name) {
                 complexName = data.name;
                 pageTitle   = `레슨 신청 - ${data.name}`;
                 pageDesc    = `${data.name} 수업 신청, 취소, 변경을 간편하게 처리하세요.`;
-                venueType   = data.venue_type ?? null;
+                // theme_name 컬럼 우선, 없으면 venue_type='hotel' → 'hotel' fallback
+                if (data.theme_name && data.theme_name !== 'default') {
+                    themeName = data.theme_name;
+                } else if (data.venue_type === 'hotel') {
+                    themeName = 'hotel';
+                }
             }
         } catch (_) {
             // DB 오류 시 기본값 유지
         }
     }
 
-    // ── 호텔 테마 주입 ──────────────────────────────────────────────────────────
-    // venue_type === 'hotel' 인 경우 <body> 태그에 theme-hotel 클래스 추가.
-    // 기존 body 클래스가 있으면 보존하고 추가. 아파트 단지는 건드리지 않음.
-    if (venueType === 'hotel') {
-        // <body> 또는 <body class="기존클래스"> 모두 처리
+    // ── 테마 클래스 주입 ────────────────────────────────────────────────────────
+    // theme_name 이 있으면 <body> 태그에 theme-{name} 클래스 추가.
+    // 기존 body 클래스가 있으면 보존하고 추가. 'default' 또는 null 은 클래스 추가 안 함.
+    const VALID_THEMES = new Set([
+        'hotel', 'modern', 'nature', 'minimal',
+        'ocean', 'sunset', 'cherry', 'dark', 'royal', 'zen'
+    ]);
+    if (themeName && VALID_THEMES.has(themeName)) {
+        const themeClass = `theme-${themeName}`;
         html = html.replace(
             /<body([^>]*)>/,
             (match, attrs) => {
                 const classMatch = attrs.match(/class="([^"]*)"/);
                 if (classMatch) {
-                    // 이미 class 속성이 있으면 theme-hotel 추가
                     const existing = classMatch[1].trim();
-                    const newClass = existing ? `${existing} theme-hotel` : 'theme-hotel';
+                    const newClass = existing ? `${existing} ${themeClass}` : themeClass;
                     return `<body${attrs.replace(/class="[^"]*"/, `class="${newClass}"`)} >`;
                 } else {
-                    // class 속성 없으면 새로 추가
-                    return `<body class="theme-hotel"${attrs}>`;
+                    return `<body class="${themeClass}"${attrs}>`;
                 }
             }
         );

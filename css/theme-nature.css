@@ -1,0 +1,93 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-nature.css  —  자연 친화 웰니스
+   컨셉: 딥그린 + 따뜻한 베이지. 숲속 요가·필라테스 스튜디오 느낌.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Noto+Sans+KR:wght@400;500&display=swap');
+
+body.theme-nature {
+    --color-primary:    #2D5016;
+    --color-primary-d:  #1f3a0f;
+    --color-success:    #27ae60;
+    --color-warning:    #d4870a;
+    --color-danger:     #c0392b;
+    --color-bg:         #F4EFE6;
+    --color-card:       #FDFAF5;
+    --color-text:       #2c2c1e;
+    --color-text-muted: #7a7060;
+    --color-border:     #ddd5c0;
+    --radius:           10px;
+    --shadow:           0 2px 12px rgba(45,80,22,.08);
+    --shadow-md:        0 6px 24px rgba(45,80,22,.14);
+
+    --nature-green:     #3A7D1E;
+    --nature-green-d:   #2D5016;
+    --nature-beige:     #F4EFE6;
+    --nature-moss:      #6B8C3E;
+    --nature-earth:     #8B6F47;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--nature-beige);
+}
+
+body.theme-nature .loading-screen {
+    background: linear-gradient(160deg, #2D5016 0%, #4a7a2a 100%);
+}
+body.theme-nature .loading-logo { color: #c8e89a; }
+body.theme-nature .loading-spinner { border-color: rgba(200,232,154,.2); border-top-color: #c8e89a; }
+
+body.theme-nature .header {
+    background: linear-gradient(135deg, #2D5016 0%, #3A7D1E 100%);
+    border-bottom: 2px solid #c8e89a;
+}
+body.theme-nature .header::before {
+    content: '🌿 WELLNESS & PILATES';
+    display: block;
+    font-size: .65rem;
+    letter-spacing: .15em;
+    color: #c8e89a;
+    margin-bottom: 8px;
+    opacity: .9;
+}
+body.theme-nature .header h1 { font-family: 'Noto Serif KR', serif; font-weight: 600; }
+body.theme-nature .header-icon,
+body.theme-nature .header-subtitle { color: #c8e89a; }
+
+body.theme-nature .btn-primary {
+    background: var(--nature-green);
+    border: none; color: #fff;
+    font-weight: 600;
+    border-radius: var(--radius);
+    transition: background .2s, box-shadow .2s;
+}
+body.theme-nature .btn-primary:hover { background: var(--nature-green-d); box-shadow: 0 4px 16px rgba(58,125,30,.35); }
+
+body.theme-nature .btn-secondary {
+    background: transparent;
+    border: 1.5px solid var(--nature-green);
+    color: var(--nature-green);
+    border-radius: var(--radius);
+}
+body.theme-nature .btn-secondary:hover { background: rgba(58,125,30,.08); }
+
+body.theme-nature .quick-btn { border: 1px solid var(--color-border); border-radius: var(--radius); background: var(--color-card); }
+body.theme-nature .quick-btn:hover { border-color: var(--nature-green); background: rgba(58,125,30,.06); }
+body.theme-nature .quick-btn i { color: var(--nature-green); }
+body.theme-nature .quick-btn--accent { background: var(--nature-green); color: #fff; border-color: var(--nature-green-d); }
+body.theme-nature .quick-btn--accent:hover { background: var(--nature-green-d); }
+body.theme-nature .quick-btn--accent i,
+body.theme-nature .quick-btn--accent span { color: inherit; }
+
+body.theme-nature input:focus, body.theme-nature select:focus, body.theme-nature textarea:focus {
+    border-color: var(--nature-green);
+    box-shadow: 0 0 0 3px rgba(58,125,30,.15);
+    outline: none;
+}
+body.theme-nature input[type="checkbox"] { accent-color: var(--nature-green); }
+body.theme-nature .step-badge { background: rgba(58,125,30,.1); color: var(--nature-green-d); border: 1px solid var(--nature-moss); font-size:.72rem; border-radius:4px; padding:2px 8px; }
+body.theme-nature .section-header h3 { font-family: 'Noto Serif KR', serif; }
+body.theme-nature .section-header h3 i { color: var(--nature-green); }
+body.theme-nature fieldset.form-fieldset legend { color: var(--nature-green); }
+body.theme-nature .modal-content { border-top: 3px solid var(--nature-green); }
+body.theme-nature .policy-box { border-left: 3px solid var(--nature-green); background: rgba(58,125,30,.04); }
+body.theme-nature .policy-box-header i { color: var(--nature-green); }
+body.theme-nature .terms-box { background: rgba(244,239,230,.6); border: 1px solid var(--color-border); }

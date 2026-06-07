@@ -1,12 +1,37 @@
 // Configuration
 const TABLES_ENDPOINT = 'tables';
 
+// ── 테마 미리보기 색상 맵 ──────────────────────────────────────────────────────
+const THEME_COLORS = {
+    default: '#667eea',
+    hotel:   '#C8A864',
+    modern:  '#00CEC9',
+    nature:  '#3A7D1E',
+    minimal: '#111111',
+    ocean:   '#00B4D8',
+    sunset:  '#E8650A',
+    cherry:  '#D4457A',
+    dark:    '#0AFFD9',
+    royal:   '#BF9B30',
+    zen:     '#3D3580'
+};
+
+function updateThemePreview(themeName) {
+    const bar = document.getElementById('themePreviewBar');
+    if (bar) bar.style.background = THEME_COLORS[themeName] || THEME_COLORS.default;
+}
+
 // State Management
 let allComplexes = [];
 
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
     loadComplexes();
+    // 테마 select change → 미리보기 바 갱신
+    const themeSelectEl = document.getElementById('editThemeName');
+    if (themeSelectEl) {
+        themeSelectEl.addEventListener('change', e => updateThemePreview(e.target.value));
+    }
 });
 
 // Load all complexes
@@ -203,6 +228,13 @@ function openEditModal(complexId) {
     document.getElementById('editDisplayOrder').value = complex.display_order || 1;
     document.getElementById('editAdminPassword').value = complex.admin_password || '';
     document.getElementById('editIsActive').value = complex.is_active ? 'true' : 'false';
+
+    // 테마 선택 세팅
+    const themeSelect = document.getElementById('editThemeName');
+    if (themeSelect) {
+        themeSelect.value = complex.theme_name || 'default';
+        updateThemePreview(themeSelect.value);
+    }
     
     const lessonTypes = Array.isArray(complex.lesson_types) 
         ? complex.lesson_types.join(', ') 
@@ -245,7 +277,8 @@ async function saveComplex() {
         display_order: parseInt(document.getElementById('editDisplayOrder').value) || 1,
         admin_password: document.getElementById('editAdminPassword').value.trim() || 'admin1234',
         is_active: document.getElementById('editIsActive').value === 'true',
-        lesson_types: lessonTypes
+        lesson_types: lessonTypes,
+        theme_name: document.getElementById('editThemeName')?.value || 'default'
     };
     
     try {

@@ -1,0 +1,88 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-minimal.css  —  미니멀 화이트
+   컨셉: 거의 흰색. 포인트 컬러만 블랙+레드. 군더더기 없는 클린.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
+
+body.theme-minimal {
+    --color-primary:    #111111;
+    --color-primary-d:  #000000;
+    --color-success:    #2ecc71;
+    --color-warning:    #f39c12;
+    --color-danger:     #e74c3c;
+    --color-bg:         #FAFAFA;
+    --color-card:       #FFFFFF;
+    --color-text:       #111111;
+    --color-text-muted: #888888;
+    --color-border:     #E8E8E8;
+    --radius:           4px;
+    --shadow:           0 1px 8px rgba(0,0,0,.06);
+    --shadow-md:        0 4px 20px rgba(0,0,0,.10);
+
+    --minimal-red:      #E74C3C;
+    --minimal-black:    #111111;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    font-weight: 400;
+    background: #FAFAFA;
+}
+
+body.theme-minimal .loading-screen { background: #111111; }
+body.theme-minimal .loading-logo { color: var(--minimal-red); }
+body.theme-minimal .loading-spinner { border-color: rgba(231,76,60,.2); border-top-color: var(--minimal-red); }
+
+body.theme-minimal .header {
+    background: #111111;
+    border-bottom: 2px solid var(--minimal-red);
+}
+body.theme-minimal .header::before {
+    content: 'FITNESS & PILATES';
+    display: block;
+    font-size: .6rem;
+    letter-spacing: .25em;
+    color: var(--minimal-red);
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+body.theme-minimal .header h1 { font-weight: 700; letter-spacing: -.01em; }
+body.theme-minimal .header-icon,
+body.theme-minimal .header-subtitle { color: #aaa; }
+
+body.theme-minimal .btn-primary {
+    background: #111;
+    border: 1.5px solid #111;
+    color: #fff;
+    border-radius: var(--radius);
+    font-weight: 700;
+    letter-spacing: .05em;
+    transition: background .15s;
+}
+body.theme-minimal .btn-primary:hover { background: var(--minimal-red); border-color: var(--minimal-red); }
+
+body.theme-minimal .btn-secondary {
+    background: transparent;
+    border: 1.5px solid #111;
+    color: #111;
+    border-radius: var(--radius);
+}
+body.theme-minimal .btn-secondary:hover { background: #111; color: #fff; }
+
+body.theme-minimal .quick-btn { border: 1px solid var(--color-border); border-radius: var(--radius); background: #fff; }
+body.theme-minimal .quick-btn:hover { border-color: #111; }
+body.theme-minimal .quick-btn i { color: var(--minimal-red); }
+body.theme-minimal .quick-btn--accent { background: #111; color: #fff; border-color: #111; }
+body.theme-minimal .quick-btn--accent:hover { background: var(--minimal-red); border-color: var(--minimal-red); }
+body.theme-minimal .quick-btn--accent i,
+body.theme-minimal .quick-btn--accent span { color: inherit; }
+
+body.theme-minimal input:focus, body.theme-minimal select:focus, body.theme-minimal textarea:focus {
+    border-color: #111; box-shadow: 0 0 0 2px rgba(0,0,0,.12); outline: none;
+}
+body.theme-minimal input[type="checkbox"] { accent-color: var(--minimal-red); }
+body.theme-minimal .step-badge { background: #111; color: #fff; font-size:.72rem; border-radius:2px; padding:2px 8px; }
+body.theme-minimal .section-header h3 i { color: var(--minimal-red); }
+body.theme-minimal fieldset.form-fieldset { border-color: #e8e8e8; }
+body.theme-minimal fieldset.form-fieldset legend { color: #111; font-weight: 700; }
+body.theme-minimal .modal-content { border-top: 2px solid #111; }
+body.theme-minimal .policy-box { border-left: 3px solid var(--minimal-red); }
+body.theme-minimal .policy-box-header i { color: var(--minimal-red); }

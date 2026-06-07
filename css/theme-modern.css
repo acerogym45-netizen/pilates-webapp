@@ -1,0 +1,94 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-modern.css  —  도시형 모던 피트니스
+   컨셉: 차콜 + 일렉트릭 시안. 세련된 도심 스튜디오 느낌.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+body.theme-modern {
+    --color-primary:    #1E2A38;
+    --color-primary-d:  #161f2b;
+    --color-success:    #00b894;
+    --color-warning:    #e17055;
+    --color-danger:     #d63031;
+    --color-bg:         #F0F2F5;
+    --color-card:       #FFFFFF;
+    --color-text:       #1E2A38;
+    --color-text-muted: #636e72;
+    --color-border:     #dfe6e9;
+    --radius:           8px;
+    --shadow:           0 2px 12px rgba(0,0,0,.08);
+    --shadow-md:        0 6px 24px rgba(0,0,0,.13);
+
+    --modern-cyan:      #00CEC9;
+    --modern-cyan-d:    #00a8a4;
+    --modern-charcoal:  #1E2A38;
+    --modern-light:     #F0F2F5;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--modern-light);
+}
+
+body.theme-modern .loading-screen {
+    background: linear-gradient(160deg, #1E2A38 0%, #2d3e52 100%);
+}
+body.theme-modern .loading-logo { color: var(--modern-cyan); }
+body.theme-modern .loading-spinner {
+    border-color: rgba(0,206,201,.2);
+    border-top-color: var(--modern-cyan);
+}
+
+body.theme-modern .header {
+    background: linear-gradient(135deg, #1E2A38 0%, #2d3e52 100%);
+    border-bottom: 3px solid var(--modern-cyan);
+}
+body.theme-modern .header::before {
+    content: 'MODERN FITNESS STUDIO';
+    display: block;
+    font-size: .62rem;
+    letter-spacing: .2em;
+    color: var(--modern-cyan);
+    margin-bottom: 8px;
+    opacity: .9;
+}
+body.theme-modern .header h1 { font-weight: 700; font-size: 1.25rem; }
+body.theme-modern .header-icon,
+body.theme-modern .header-subtitle { color: var(--modern-cyan); }
+
+body.theme-modern .btn-primary {
+    background: var(--modern-cyan);
+    border: none;
+    color: #fff;
+    font-weight: 700;
+    border-radius: var(--radius);
+    transition: background .2s, box-shadow .2s;
+}
+body.theme-modern .btn-primary:hover { background: var(--modern-cyan-d); box-shadow: 0 4px 16px rgba(0,206,201,.4); }
+
+body.theme-modern .btn-secondary {
+    background: transparent;
+    border: 1.5px solid var(--modern-cyan);
+    color: var(--modern-cyan);
+    border-radius: var(--radius);
+}
+body.theme-modern .btn-secondary:hover { background: rgba(0,206,201,.1); }
+
+body.theme-modern .quick-btn { border-radius: var(--radius); border: 1px solid var(--color-border); box-shadow: var(--shadow); }
+body.theme-modern .quick-btn:hover { border-color: var(--modern-cyan); background: rgba(0,206,201,.07); }
+body.theme-modern .quick-btn i { color: var(--modern-cyan); }
+body.theme-modern .quick-btn--accent { background: var(--modern-charcoal); border-color: var(--modern-cyan); color: var(--modern-cyan); }
+body.theme-modern .quick-btn--accent:hover { background: var(--modern-cyan); color: #fff; }
+body.theme-modern .quick-btn--accent i,
+body.theme-modern .quick-btn--accent span { color: inherit; }
+
+body.theme-modern input:focus, body.theme-modern select:focus, body.theme-modern textarea:focus {
+    border-color: var(--modern-cyan);
+    box-shadow: 0 0 0 3px rgba(0,206,201,.15);
+    outline: none;
+}
+body.theme-modern input[type="checkbox"] { accent-color: var(--modern-cyan); }
+body.theme-modern .step-badge { background: rgba(0,206,201,.1); color: var(--modern-cyan-d); border: 1px solid var(--modern-cyan); font-size:.72rem; border-radius:4px; padding:2px 8px; }
+body.theme-modern .section-header h3 i { color: var(--modern-cyan); }
+body.theme-modern fieldset.form-fieldset legend { color: var(--modern-cyan); font-weight: 700; }
+body.theme-modern .modal-content { border-top: 3px solid var(--modern-cyan); }
+body.theme-modern .policy-box { border-left: 3px solid var(--modern-cyan); }
+body.theme-modern .policy-box-header i { color: var(--modern-cyan); }

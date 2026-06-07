@@ -1,0 +1,9 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-default.css  —  기본 아파트 테마 (변경 없음 명시)
+   실제 스타일 없음. body.theme-default 는 style.css 그대로 사용.
+   이 파일은 "테마 목록에 default 항목이 존재함"을 명시하는 용도.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* body.theme-default 는 style.css :root 값을 그대로 사용하므로
+   별도 오버라이드 없음. 아파트 기본 보라 테마 유지. */
+body.theme-default { /* intentionally empty — inherits style.css */ }

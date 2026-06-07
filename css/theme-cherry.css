@@ -1,0 +1,81 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-cherry.css  —  체리블라섬
+   컨셉: 로즈핑크 + 크림. 여성 전용 또는 감성 스튜디오 느낌.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600&family=Noto+Sans+KR:wght@400;500&display=swap');
+
+body.theme-cherry {
+    --color-primary:    #8B2252;
+    --color-primary-d:  #6e1a40;
+    --color-success:    #2ecc71;
+    --color-warning:    #e67e22;
+    --color-danger:     #e74c3c;
+    --color-bg:         #FEF6F8;
+    --color-card:       #FFFFFF;
+    --color-text:       #3d1a28;
+    --color-text-muted: #9e6b7e;
+    --color-border:     #f5c6d8;
+    --radius:           12px;
+    --shadow:           0 2px 12px rgba(139,34,82,.08);
+    --shadow-md:        0 6px 24px rgba(139,34,82,.14);
+
+    --cherry-pink:      #D4457A;
+    --cherry-pink-d:    #b03364;
+    --cherry-rose:      #8B2252;
+    --cherry-cream:     #FEF6F8;
+    --cherry-light:     #fde8f0;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--cherry-cream);
+}
+
+body.theme-cherry .loading-screen {
+    background: linear-gradient(160deg, #8B2252 0%, #c44080 100%);
+}
+body.theme-cherry .loading-logo { color: #ffc8dc; }
+body.theme-cherry .loading-spinner { border-color: rgba(255,200,220,.2); border-top-color: #ffc8dc; }
+
+body.theme-cherry .header {
+    background: linear-gradient(135deg, #8B2252 0%, #c44080 100%);
+    border-bottom: 2px solid #ffc8dc;
+}
+body.theme-cherry .header::before {
+    content: '🌸 PILATES & WELLNESS';
+    display: block;
+    font-size: .63rem;
+    letter-spacing: .16em;
+    color: #ffc8dc;
+    margin-bottom: 8px;
+    opacity: .9;
+}
+body.theme-cherry .header h1 { font-family: 'Noto Serif KR', serif; font-weight: 600; }
+body.theme-cherry .header-icon,
+body.theme-cherry .header-subtitle { color: #ffc8dc; }
+
+body.theme-cherry .btn-primary {
+    background: var(--cherry-pink);
+    border: none; color: #fff; font-weight: 600; border-radius: var(--radius);
+    transition: background .2s, box-shadow .2s;
+}
+body.theme-cherry .btn-primary:hover { background: var(--cherry-pink-d); box-shadow: 0 4px 16px rgba(212,69,122,.4); }
+body.theme-cherry .btn-secondary { background: transparent; border: 1.5px solid var(--cherry-pink); color: var(--cherry-pink); border-radius: var(--radius); }
+body.theme-cherry .btn-secondary:hover { background: var(--cherry-light); }
+
+body.theme-cherry .quick-btn { border: 1px solid var(--color-border); border-radius: var(--radius); background: #fff; }
+body.theme-cherry .quick-btn:hover { border-color: var(--cherry-pink); background: var(--cherry-light); }
+body.theme-cherry .quick-btn i { color: var(--cherry-pink); }
+body.theme-cherry .quick-btn--accent { background: var(--cherry-rose); color: #ffc8dc; border-color: var(--cherry-pink); }
+body.theme-cherry .quick-btn--accent:hover { background: var(--cherry-pink); color: #fff; }
+body.theme-cherry .quick-btn--accent i, body.theme-cherry .quick-btn--accent span { color: inherit; }
+
+body.theme-cherry input:focus, body.theme-cherry select:focus, body.theme-cherry textarea:focus {
+    border-color: var(--cherry-pink); box-shadow: 0 0 0 3px rgba(212,69,122,.15); outline: none;
+}
+body.theme-cherry input[type="checkbox"] { accent-color: var(--cherry-pink); }
+body.theme-cherry .step-badge { background: var(--cherry-light); color: var(--cherry-pink-d); border: 1px solid var(--cherry-pink); font-size:.72rem; border-radius:6px; padding:2px 8px; }
+body.theme-cherry .section-header h3 { font-family: 'Noto Serif KR', serif; }
+body.theme-cherry .section-header h3 i { color: var(--cherry-pink); }
+body.theme-cherry fieldset.form-fieldset legend { color: var(--cherry-pink); font-family: 'Noto Serif KR', serif; }
+body.theme-cherry .modal-content { border-top: 3px solid var(--cherry-pink); }
+body.theme-cherry .policy-box { border-left: 3px solid var(--cherry-pink); background: rgba(212,69,122,.03); }
+body.theme-cherry .policy-box-header i { color: var(--cherry-pink); }

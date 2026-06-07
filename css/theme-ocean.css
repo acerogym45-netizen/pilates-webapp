@@ -1,0 +1,80 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-ocean.css  —  오션 블루
+   컨셉: 딥블루 + 밝은 아쿠아. 수영장·아쿠아 피트니스 느낌.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+body.theme-ocean {
+    --color-primary:    #0A2540;
+    --color-primary-d:  #061829;
+    --color-success:    #00b09b;
+    --color-warning:    #e8a020;
+    --color-danger:     #e05c5c;
+    --color-bg:         #EEF4FC;
+    --color-card:       #FFFFFF;
+    --color-text:       #0A2540;
+    --color-text-muted: #607d8b;
+    --color-border:     #cce0f5;
+    --radius:           10px;
+    --shadow:           0 2px 14px rgba(10,37,64,.08);
+    --shadow-md:        0 6px 24px rgba(10,37,64,.14);
+
+    --ocean-aqua:       #00B4D8;
+    --ocean-aqua-d:     #0096b7;
+    --ocean-navy:       #0A2540;
+    --ocean-light:      #E0F4FF;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--color-bg);
+}
+
+body.theme-ocean .loading-screen {
+    background: linear-gradient(160deg, #0A2540 0%, #0d3a6e 60%, #0A2540 100%);
+}
+body.theme-ocean .loading-logo { color: var(--ocean-aqua); }
+body.theme-ocean .loading-spinner { border-color: rgba(0,180,216,.2); border-top-color: var(--ocean-aqua); }
+
+body.theme-ocean .header {
+    background: linear-gradient(135deg, #0A2540 0%, #1565c0 100%);
+    border-bottom: 3px solid var(--ocean-aqua);
+}
+body.theme-ocean .header::before {
+    content: '🌊 AQUA FITNESS';
+    display: block;
+    font-size: .63rem;
+    letter-spacing: .18em;
+    color: var(--ocean-aqua);
+    margin-bottom: 8px;
+    opacity: .9;
+}
+body.theme-ocean .header h1 { font-weight: 700; }
+body.theme-ocean .header-icon,
+body.theme-ocean .header-subtitle { color: var(--ocean-aqua); }
+
+body.theme-ocean .btn-primary {
+    background: var(--ocean-aqua);
+    border: none; color: #fff;
+    font-weight: 700; border-radius: var(--radius);
+    transition: background .2s, box-shadow .2s;
+}
+body.theme-ocean .btn-primary:hover { background: var(--ocean-aqua-d); box-shadow: 0 4px 16px rgba(0,180,216,.4); }
+body.theme-ocean .btn-secondary { background: transparent; border: 1.5px solid var(--ocean-aqua); color: var(--ocean-aqua); border-radius: var(--radius); }
+body.theme-ocean .btn-secondary:hover { background: var(--ocean-light); }
+
+body.theme-ocean .quick-btn { border: 1px solid var(--color-border); border-radius: var(--radius); background: #fff; }
+body.theme-ocean .quick-btn:hover { border-color: var(--ocean-aqua); background: var(--ocean-light); }
+body.theme-ocean .quick-btn i { color: var(--ocean-aqua); }
+body.theme-ocean .quick-btn--accent { background: var(--ocean-navy); color: var(--ocean-aqua); border-color: var(--ocean-aqua); }
+body.theme-ocean .quick-btn--accent:hover { background: var(--ocean-aqua); color: #fff; }
+body.theme-ocean .quick-btn--accent i, body.theme-ocean .quick-btn--accent span { color: inherit; }
+
+body.theme-ocean input:focus, body.theme-ocean select:focus, body.theme-ocean textarea:focus {
+    border-color: var(--ocean-aqua); box-shadow: 0 0 0 3px rgba(0,180,216,.15); outline: none;
+}
+body.theme-ocean input[type="checkbox"] { accent-color: var(--ocean-aqua); }
+body.theme-ocean .step-badge { background: var(--ocean-light); color: var(--ocean-aqua-d); border: 1px solid var(--ocean-aqua); font-size:.72rem; border-radius:4px; padding:2px 8px; }
+body.theme-ocean .section-header h3 i { color: var(--ocean-aqua); }
+body.theme-ocean fieldset.form-fieldset legend { color: var(--ocean-aqua); font-weight: 700; }
+body.theme-ocean .modal-content { border-top: 3px solid var(--ocean-aqua); }
+body.theme-ocean .policy-box { border-left: 3px solid var(--ocean-aqua); }
+body.theme-ocean .policy-box-header i { color: var(--ocean-aqua); }

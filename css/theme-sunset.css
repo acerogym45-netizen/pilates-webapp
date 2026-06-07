@@ -1,0 +1,80 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   theme-sunset.css  —  선셋 웜톤
+   컨셉: 다크 브라운 + 번트 오렌지. 저녁 노을 같은 따뜻한 에너지.
+   ═══════════════════════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+body.theme-sunset {
+    --color-primary:    #2C1810;
+    --color-primary-d:  #1a0e08;
+    --color-success:    #27ae60;
+    --color-warning:    #e67e22;
+    --color-danger:     #c0392b;
+    --color-bg:         #FDF1E7;
+    --color-card:       #FFFFFF;
+    --color-text:       #2C1810;
+    --color-text-muted: #8b6355;
+    --color-border:     #f0d5c0;
+    --radius:           8px;
+    --shadow:           0 2px 12px rgba(44,24,16,.08);
+    --shadow-md:        0 6px 24px rgba(44,24,16,.13);
+
+    --sunset-orange:    #E8650A;
+    --sunset-orange-d:  #c45508;
+    --sunset-amber:     #F4A340;
+    --sunset-brown:     #2C1810;
+    --sunset-cream:     #FDF1E7;
+
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--sunset-cream);
+}
+
+body.theme-sunset .loading-screen {
+    background: linear-gradient(160deg, #2C1810 0%, #7a3520 60%, #2C1810 100%);
+}
+body.theme-sunset .loading-logo { color: var(--sunset-amber); }
+body.theme-sunset .loading-spinner { border-color: rgba(244,163,64,.2); border-top-color: var(--sunset-amber); }
+
+body.theme-sunset .header {
+    background: linear-gradient(135deg, #2C1810 0%, #6b2d0f 100%);
+    border-bottom: 3px solid var(--sunset-orange);
+}
+body.theme-sunset .header::before {
+    content: '🌅 ENERGY FITNESS';
+    display: block;
+    font-size: .63rem;
+    letter-spacing: .16em;
+    color: var(--sunset-amber);
+    margin-bottom: 8px;
+    opacity: .9;
+}
+body.theme-sunset .header h1 { font-weight: 700; }
+body.theme-sunset .header-icon,
+body.theme-sunset .header-subtitle { color: var(--sunset-amber); }
+
+body.theme-sunset .btn-primary {
+    background: var(--sunset-orange);
+    border: none; color: #fff; font-weight: 700; border-radius: var(--radius);
+    transition: background .2s, box-shadow .2s;
+}
+body.theme-sunset .btn-primary:hover { background: var(--sunset-orange-d); box-shadow: 0 4px 16px rgba(232,101,10,.4); }
+body.theme-sunset .btn-secondary { background: transparent; border: 1.5px solid var(--sunset-orange); color: var(--sunset-orange); border-radius: var(--radius); }
+body.theme-sunset .btn-secondary:hover { background: rgba(232,101,10,.08); }
+
+body.theme-sunset .quick-btn { border: 1px solid var(--color-border); border-radius: var(--radius); background: #fff; }
+body.theme-sunset .quick-btn:hover { border-color: var(--sunset-orange); background: rgba(232,101,10,.05); }
+body.theme-sunset .quick-btn i { color: var(--sunset-orange); }
+body.theme-sunset .quick-btn--accent { background: var(--sunset-brown); color: var(--sunset-amber); border-color: var(--sunset-orange); }
+body.theme-sunset .quick-btn--accent:hover { background: var(--sunset-orange); color: #fff; }
+body.theme-sunset .quick-btn--accent i, body.theme-sunset .quick-btn--accent span { color: inherit; }
+
+body.theme-sunset input:focus, body.theme-sunset select:focus, body.theme-sunset textarea:focus {
+    border-color: var(--sunset-orange); box-shadow: 0 0 0 3px rgba(232,101,10,.15); outline: none;
+}
+body.theme-sunset input[type="checkbox"] { accent-color: var(--sunset-orange); }
+body.theme-sunset .step-badge { background: rgba(244,163,64,.15); color: var(--sunset-orange-d); border: 1px solid var(--sunset-amber); font-size:.72rem; border-radius:4px; padding:2px 8px; }
+body.theme-sunset .section-header h3 i { color: var(--sunset-orange); }
+body.theme-sunset fieldset.form-fieldset legend { color: var(--sunset-orange); font-weight: 700; }
+body.theme-sunset .modal-content { border-top: 3px solid var(--sunset-orange); }
+body.theme-sunset .policy-box { border-left: 3px solid var(--sunset-orange); }
+body.theme-sunset .policy-box-header i { color: var(--sunset-orange); }
