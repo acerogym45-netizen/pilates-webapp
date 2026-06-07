@@ -132,11 +132,11 @@ class ComplexContext {
         return this.currentComplex ? (this.currentComplex.theme_name || 'default') : 'default';
     }
 
-    // 호텔 모드 여부: theme_name='hotel' 또는 venue_type='hotel' 이면 true
+    // 호텔 모드 여부: venue_type='hotel' 이면 true (테마와 독립)
+    // 퀵액션 UI 전환, 폼 문구 커스터마이징 등 비즈니스 로직 전반에 사용
     isHotel() {
         if (!this.currentComplex) return false;
-        return this.currentComplex.theme_name === 'hotel' ||
-               this.currentComplex.venue_type  === 'hotel';
+        return this.currentComplex.venue_type === 'hotel';
     }
 }
 

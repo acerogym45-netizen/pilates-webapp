@@ -76,56 +76,54 @@
 
         <!-- ═══════════════════════════════════════════════════════════════
              🏨 호텔 모드 CTA 랜딩 오버레이
-             venue_type='hotel' 또는 theme_name='hotel' 단지 전용
-             JS(initHotelMode)가 .show 클래스를 추가해 노출,
-             CSS(body.theme-hotel .hotel-cta-overlay)로 display:block 제어
-             기존 퀵액션(.quick-actions-wrap)은 hotel 테마 CSS에서 숨김
+             venue_type='hotel' 단지 전용 — initHotelMode()에서 display:block
+             기존 퀵액션(.quick-actions-wrap)은 initHotelMode()에서 display:none
         ════════════════════════════════════════════════════════════════ -->
-        <div class="hotel-cta-overlay" id="hotelCtaOverlay" aria-hidden="true">
+        <div class="hotel-cta-overlay" id="hotelCtaOverlay" aria-hidden="true" style="display:none">
             <p class="hotel-cta-intro" id="hotelCtaIntro">
                 투숙 중 이용 가능한 피트니스 서비스를<br>아래에서 바로 신청하세요.
             </p>
             <ul class="hotel-cta-list" role="list">
 
-                <!-- CTA 1: 무료 클래스 신청 → 신청 폼 스크롤 -->
+                <!-- CTA 1: 클래스 신청 → 신청 폼 스크롤 -->
                 <li>
                     <button class="hotel-cta-card hotel-cta-card--primary"
                             id="hotelCtaLesson"
                             onclick="document.getElementById('page1').scrollIntoView({behavior:'smooth'})"
-                            aria-label="무료 클래스 신청하기">
+                            aria-label="클래스 신청하기">
                         <span class="hotel-cta-icon" aria-hidden="true">💎</span>
                         <span class="hotel-cta-body">
-                            <span class="hotel-cta-title">무료 클래스 신청하기</span>
-                            <span class="hotel-cta-desc" id="hotelCtaLessonDesc">매주 월·수 오전 10시</span>
+                            <span class="hotel-cta-title">클래스 신청하기</span>
+                            <span class="hotel-cta-desc" id="hotelCtaLessonDesc">그룹 필라테스 · 요가 · 스트레칭</span>
                         </span>
                         <span class="hotel-cta-arrow" aria-hidden="true">›</span>
                     </button>
                 </li>
 
-                <!-- CTA 2: 리프레시 PT 예약 → 신청 폼 스크롤 (PT 타입 자동선택) -->
+                <!-- CTA 2: PT 예약 → 신청 폼 스크롤 (PT 타입 자동선택) -->
                 <li>
                     <button class="hotel-cta-card hotel-cta-card--secondary"
                             id="hotelCtaPT"
                             onclick="hotelSelectPT()"
-                            aria-label="리프레시 PT 예약하기">
+                            aria-label="PT 예약하기">
                         <span class="hotel-cta-icon" aria-hidden="true">💪</span>
                         <span class="hotel-cta-body">
-                            <span class="hotel-cta-title">리프레시 PT 예약하기</span>
-                            <span class="hotel-cta-desc">₩40,000 / 45분 · 출장 피로 케어</span>
+                            <span class="hotel-cta-title">PT 예약하기</span>
+                            <span class="hotel-cta-desc">1:1 퍼스널 트레이닝 · 출장 피로 케어</span>
                         </span>
                         <span class="hotel-cta-arrow" aria-hidden="true">›</span>
                     </button>
                 </li>
 
-                <!-- CTA 3: 회원 마이페이지 (내 예약 조회·변경) -->
+                <!-- CTA 3: 내 예약 조회·변경 -->
                 <li>
                     <button class="hotel-cta-card hotel-cta-card--muted"
                             onclick="showMyManageModal()"
-                            aria-label="회원 마이페이지">
+                            aria-label="내 예약 조회·변경">
                         <span class="hotel-cta-icon" aria-hidden="true">🪪</span>
                         <span class="hotel-cta-body">
-                            <span class="hotel-cta-title">회원 마이페이지</span>
-                            <span class="hotel-cta-desc">예약 내역 · 취소 · 변경</span>
+                            <span class="hotel-cta-title">내 예약 조회·변경</span>
+                            <span class="hotel-cta-desc">예약 내역 확인 · 취소 · 변경</span>
                         </span>
                         <span class="hotel-cta-arrow" aria-hidden="true">›</span>
                     </button>
@@ -133,14 +131,14 @@
 
             </ul>
 
-            <!-- 임직원 링크 (하단 텍스트 링크) -->
+            <!-- 임직원 링크 -->
             <div style="text-align:center;margin-top:20px;">
                 <button class="hotel-staff-link" onclick="showInquiryForm()">
-                    라마다 임직원이신가요?
+                    임직원 / 장기 이용 문의
                 </button>
             </div>
 
-            <!-- 기타 서비스 (아파트와 동일한 기능 모두 제공) -->
+            <!-- 기타 서비스 그리드 -->
             <div class="hotel-sub-actions" id="hotelSubActions">
                 <button class="hotel-sub-btn" onclick="showMyInquiryModal()">
                     <i class="fas fa-search"></i><span>내 문의 조회</span>
@@ -149,10 +147,10 @@
                     <i class="fas fa-table"></i><span>시간표</span>
                 </button>
                 <button class="hotel-sub-btn" onclick="showCurriculumModal()">
-                    <i class="fas fa-calendar-alt"></i><span>커리큘럼</span>
+                    <i class="fas fa-calendar-alt"></i><span>프로그램 안내</span>
                 </button>
                 <button class="hotel-sub-btn" onclick="openInstructorsModal()">
-                    <i class="fas fa-user-tie"></i><span>강사 소개</span>
+                    <i class="fas fa-user-tie"></i><span>트레이너 소개</span>
                 </button>
                 <button class="hotel-sub-btn" onclick="scrollToNotices()">
                     <i class="fas fa-bullhorn"></i><span>공지사항</span>
@@ -164,7 +162,7 @@
                     <i class="fas fa-list-check"></i><span>내 신청 조회·변경</span>
                 </button>
                 <button class="hotel-sub-btn hotel-sub-btn--accent" onclick="showCancellationForm()">
-                    <i class="fas fa-file-signature"></i><span>해지 신청</span>
+                    <i class="fas fa-file-signature"></i><span>이용 해지 신청</span>
                 </button>
             </div>
         </div>
