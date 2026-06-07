@@ -123,7 +123,8 @@ if (flags.hotelMode) {
     app.use('/api/hotel/quick-class', hotelQuickClassRouter);
     app.use('/api/hotel/refresh-pt',  hotelRefreshPtRouter);
     app.use('/api/hotel/members',     hotelMembersRouter);
-    app.use('/api/hotel/staff',       require('./routes/hotel/staff-roster'));
+    app.use('/api/hotel/staff',            require('./routes/hotel/staff-roster'));
+    app.use('/api/hotel/workout-reports',  require('./routes/hotel/workout-reports'));
     console.log('[HOTEL MODE] Routes mounted under /api/hotel/*');
 } else {
     console.log('[HOTEL MODE] Disabled — hotel routes not mounted');
