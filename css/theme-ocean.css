@@ -38,15 +38,7 @@ body.theme-ocean .header {
     background: linear-gradient(135deg, #0A2540 0%, #1565c0 100%);
     border-bottom: 3px solid var(--ocean-aqua);
 }
-body.theme-ocean .header::before {
-    content: '🌊 AQUA FITNESS';
-    display: block;
-    font-size: .63rem;
-    letter-spacing: .18em;
-    color: var(--ocean-aqua);
-    margin-bottom: 8px;
-    opacity: .9;
-}
+body.theme-ocean .header::before { content: ''; display: none; }
 body.theme-ocean .header h1 { font-weight: 700; }
 body.theme-ocean .header-icon,
 body.theme-ocean .header-subtitle { color: var(--ocean-aqua); }

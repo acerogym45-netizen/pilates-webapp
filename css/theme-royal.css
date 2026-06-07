@@ -40,17 +40,7 @@ body.theme-royal .header {
     border-bottom: 2px solid var(--royal-gold);
     position: relative;
 }
-body.theme-royal .header::before {
-    content: 'ROYAL FITNESS CLUB';
-    display: block;
-    font-family: 'Noto Serif KR', serif;
-    font-size: .65rem;
-    letter-spacing: .2em;
-    color: var(--royal-gold);
-    margin-bottom: 10px;
-    opacity: .85;
-    text-transform: uppercase;
-}
+body.theme-royal .header::before { content: ''; display: none; }
 body.theme-royal .header h1 { font-family: 'Noto Serif KR', serif; font-weight: 700; letter-spacing: .03em; }
 body.theme-royal .header-icon,
 body.theme-royal .header-subtitle { color: var(--royal-gold); }

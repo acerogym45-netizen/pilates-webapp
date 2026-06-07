@@ -41,15 +41,7 @@ body.theme-modern .header {
     background: linear-gradient(135deg, #1E2A38 0%, #2d3e52 100%);
     border-bottom: 3px solid var(--modern-cyan);
 }
-body.theme-modern .header::before {
-    content: 'MODERN FITNESS STUDIO';
-    display: block;
-    font-size: .62rem;
-    letter-spacing: .2em;
-    color: var(--modern-cyan);
-    margin-bottom: 8px;
-    opacity: .9;
-}
+body.theme-modern .header::before { content: ''; display: none; }
 body.theme-modern .header h1 { font-weight: 700; font-size: 1.25rem; }
 body.theme-modern .header-icon,
 body.theme-modern .header-subtitle { color: var(--modern-cyan); }
