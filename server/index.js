@@ -25,6 +25,14 @@ const renewalRouter       = require('./routes/renewal');
 const backupRouter        = require('./routes/backup');
 const { startCron }       = require('./cron');
 
+// ── 호텔 모드 라우터 import (B-1~B-4) ────────────────────────────────────────
+// Feature Flag OFF(기본값) 시 require는 실행되지만 app.use에 등록되지 않음 → 런타임 영향 0
+const flags                = require('./config/feature-flags');
+const hotelAuthRouter      = require('./routes/hotel/auth');
+const hotelQuickClassRouter = require('./routes/hotel/quick-class');
+const hotelRefreshPtRouter = require('./routes/hotel/refresh-pt');
+const hotelMembersRouter   = require('./routes/hotel/members');
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -107,6 +115,18 @@ app.use('/api',              miscRouter);
 app.use('/api/upload',       uploadRouter);
 // ── 연장 자동화 라우터 (GET /renew/:token 포함) ───────────────────────────────
 app.use('/',                 renewalRouter);
+
+// ── 호텔 모드 라우터 등록 (ENABLE_HOTEL_MODE=true 시에만 활성화) ──────────────
+// 기존 라우트(/api/complexes 등)와 경로 충돌 없음 — /api/hotel/* 네임스페이스 격리
+if (flags.hotelMode) {
+    app.use('/api/hotel/auth',        hotelAuthRouter);
+    app.use('/api/hotel/quick-class', hotelQuickClassRouter);
+    app.use('/api/hotel/refresh-pt',  hotelRefreshPtRouter);
+    app.use('/api/hotel/members',     hotelMembersRouter);
+    console.log('[HOTEL MODE] Routes mounted under /api/hotel/*');
+} else {
+    console.log('[HOTEL MODE] Disabled — hotel routes not mounted');
+}
 
 // ── 헬스체크 ─────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
