@@ -142,20 +142,20 @@
                 <h2 class="hotel-lobby-title" id="hotelCtaIntro">아세로짐 대전 라마다호텔점에<br>어서 오세요.</h2>
             </div>
 
-            <!-- ── PRIMARY CTA: 헬스 클래스 신청 (풀폭) ── -->
+            <!-- ── PRIMARY CTA: 피트니스 신청하기 (바텀시트 트리거) ── -->
             <div class="hotel-primary-cta">
                 <button class="hotel-cta-card hotel-cta-card--primary"
                         id="hotelCtaLesson"
-                        onclick="document.getElementById('page1').scrollIntoView({behavior:'smooth'})"
-                        aria-label="헬스 클래스 신청하기">
+                        onclick="openHotelServiceSheet()"
+                        aria-label="피트니스 신청하기">
                     <span class="hotel-cta-icon-wrap" aria-hidden="true">
                         <img src="/icons/hotel/icon-wellness-class.png"
                              alt="" class="hotel-cta-img">
                     </span>
                     <span class="hotel-cta-body">
-                        <span class="hotel-cta-label">WELLNESS CLASS</span>
-                        <span class="hotel-cta-title">헬스 클래스 신청</span>
-                        <span class="hotel-cta-desc" id="hotelCtaLessonDesc">그룹 트레이닝 · 근력 · 유산소</span>
+                        <span class="hotel-cta-label">WELLNESS SERVICE</span>
+                        <span class="hotel-cta-title" id="hotelCtaLessonTitle">피트니스 신청하기</span>
+                        <span class="hotel-cta-desc" id="hotelCtaLessonDesc">헬스 클래스 · PT · 그룹 클래스 · 리프레시 PT</span>
                     </span>
                     <span class="hotel-cta-arrow" aria-hidden="true">›</span>
                 </button>
@@ -259,6 +259,231 @@
 
         </div>
         <!-- / .hotel-cta-overlay -->
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             🏨 피트니스 신청 바텀시트 — openHotelServiceSheet()
+        ════════════════════════════════════════════════════════════════ -->
+        <div id="hotelServiceSheetBackdrop" class="hotel-sheet-backdrop" aria-hidden="true"
+             onclick="closeHotelServiceSheet()"></div>
+        <div id="hotelServiceSheet" class="hotel-service-sheet" role="dialog"
+             aria-modal="true" aria-labelledby="hotelSheetTitle">
+            <!-- 드래그 핸들 -->
+            <div class="hotel-sheet-handle" aria-hidden="true"></div>
+            <div class="hotel-sheet-header">
+                <h3 class="hotel-sheet-title" id="hotelSheetTitle">무엇을 도와드릴까요?</h3>
+                <button class="hotel-sheet-close" onclick="closeHotelServiceSheet()"
+                        aria-label="닫기">✕</button>
+            </div>
+
+            <div class="hotel-sheet-cards">
+
+                <!-- 카드 1: 헬스 클래스 등록 (외부 회원) -->
+                <button class="hotel-svc-card hotel-svc-card--primary"
+                        onclick="closeHotelServiceSheet(); document.getElementById('page1').scrollIntoView({behavior:'smooth'})"
+                        aria-label="헬스 클래스 등록">
+                    <span class="hotel-svc-icon">
+                        <img src="/icons/hotel/icon-wellness-class.png" alt="" class="hotel-svc-img">
+                    </span>
+                    <span class="hotel-svc-body">
+                        <span class="hotel-svc-badge">MEMBERSHIP</span>
+                        <span class="hotel-svc-name">헬스 클래스 등록</span>
+                        <span class="hotel-svc-desc">월 회원권 · 외부 회원 대상</span>
+                    </span>
+                    <span class="hotel-svc-chevron">›</span>
+                </button>
+
+                <!-- 카드 2: 아세로 순환 운동 (그룹 클래스) -->
+                <button class="hotel-svc-card hotel-svc-card--group"
+                        onclick="closeHotelServiceSheet(); openGroupClassModal()"
+                        aria-label="아세로 순환 운동 그룹 클래스">
+                    <span class="hotel-svc-icon">
+                        <img src="/icons/hotel/icon-program.png" alt="" class="hotel-svc-img">
+                    </span>
+                    <span class="hotel-svc-body">
+                        <span class="hotel-svc-badge hotel-svc-badge--free">FREE · 선착순 5명</span>
+                        <span class="hotel-svc-name">아세로 순환 운동</span>
+                        <span class="hotel-svc-desc">매주 월·수 10:00 · 회원+투숙객</span>
+                    </span>
+                    <span class="hotel-svc-chevron">›</span>
+                </button>
+
+                <!-- 카드 3: 1:1 PT 예약 -->
+                <button class="hotel-svc-card hotel-svc-card--pt"
+                        onclick="closeHotelServiceSheet(); hotelSelectPT()"
+                        aria-label="1:1 PT 예약">
+                    <span class="hotel-svc-icon">
+                        <img src="/icons/hotel/icon-pt.png" alt="" class="hotel-svc-img">
+                    </span>
+                    <span class="hotel-svc-body">
+                        <span class="hotel-svc-badge">PERSONAL</span>
+                        <span class="hotel-svc-name">1:1 PT 예약</span>
+                        <span class="hotel-svc-desc">퍼스널 트레이닝 · 회원 대상</span>
+                    </span>
+                    <span class="hotel-svc-chevron">›</span>
+                </button>
+
+                <!-- 카드 4: 리프레시 PT (투숙객 단타) -->
+                <button class="hotel-svc-card hotel-svc-card--refresh"
+                        onclick="closeHotelServiceSheet(); openRefreshPTModal()"
+                        aria-label="리프레시 PT 예약">
+                    <span class="hotel-svc-icon">
+                        <img src="/icons/hotel/icon-booking.png" alt="" class="hotel-svc-img">
+                    </span>
+                    <span class="hotel-svc-body">
+                        <span class="hotel-svc-badge hotel-svc-badge--guest">GUEST · 투숙객</span>
+                        <span class="hotel-svc-name">리프레시 PT</span>
+                        <span class="hotel-svc-desc">45분 · 40,000원 · 당일 예약</span>
+                    </span>
+                    <span class="hotel-svc-chevron">›</span>
+                </button>
+
+            </div><!-- /.hotel-sheet-cards -->
+        </div><!-- /#hotelServiceSheet -->
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             🤸 아세로 순환 운동 모달 — openGroupClassModal()
+        ════════════════════════════════════════════════════════════════ -->
+        <div id="groupClassModalBackdrop" class="hotel-sheet-backdrop" aria-hidden="true"
+             onclick="closeGroupClassModal()"></div>
+        <div id="groupClassModal" class="hotel-inner-modal" role="dialog"
+             aria-modal="true" aria-labelledby="groupClassTitle">
+            <div class="hotel-inner-modal-head">
+                <button class="hotel-inner-back" onclick="closeGroupClassModal(); openHotelServiceSheet()"
+                        aria-label="뒤로">‹ 뒤로</button>
+                <button class="hotel-sheet-close" onclick="closeGroupClassModal()"
+                        aria-label="닫기">✕</button>
+            </div>
+
+            <div class="hotel-inner-modal-body">
+                <div class="hotel-inner-badge hotel-inner-badge--free">FREE CLASS</div>
+                <h3 class="hotel-inner-title" id="groupClassTitle">아세로 순환 운동</h3>
+                <p class="hotel-inner-subtitle">Circuit Training · 매니저 직접 진행</p>
+
+                <div class="hotel-info-grid">
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">일정</span>
+                        <span class="hotel-info-val">매주 <strong>월 · 수</strong> 10:00 – 10:40</span>
+                    </div>
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">정원</span>
+                        <span class="hotel-info-val"><strong>선착순 5명</strong> (회원 + 투숙객)</span>
+                    </div>
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">신청</span>
+                        <span class="hotel-info-val">매주 일요일 21:00 QR 오픈 → 자동 확정</span>
+                    </div>
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">장비</span>
+                        <span class="hotel-info-val">케틀벨 · 불가리안백 · 소도구</span>
+                    </div>
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">비용</span>
+                        <span class="hotel-info-val hotel-info-val--free">무료</span>
+                    </div>
+                </div>
+
+                <div class="hotel-inner-desc">
+                    <p>매니저가 직접 지도하는 풀바디 순환 운동 클래스입니다.<br>
+                    회원권만으로 <strong>월 8회 무료 그룹 PT</strong> 효과를 누리실 수 있습니다.</p>
+                </div>
+
+                <!-- 신청 현황 -->
+                <div class="hotel-quota-wrap" id="groupClassQuota">
+                    <span class="hotel-quota-label">이번 주 신청 현황</span>
+                    <div class="hotel-quota-bar-wrap">
+                        <div class="hotel-quota-bar" id="groupClassQuotaBar" style="width:0%"></div>
+                    </div>
+                    <span class="hotel-quota-count" id="groupClassQuotaCount">확인 중…</span>
+                </div>
+
+                <button class="hotel-inner-cta" id="groupClassApplyBtn"
+                        onclick="applyGroupClass()">
+                    <i class="fas fa-check-circle"></i> 신청하기
+                </button>
+                <p class="hotel-inner-notice">
+                    신청 확정 시 문자·알림으로 안내드립니다.<br>
+                    노쇼 2회 누적 시 당월 신청이 제한됩니다.
+                </p>
+            </div>
+        </div><!-- /#groupClassModal -->
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             ⚡ 리프레시 PT 모달 — openRefreshPTModal()
+        ════════════════════════════════════════════════════════════════ -->
+        <div id="refreshPTModalBackdrop" class="hotel-sheet-backdrop" aria-hidden="true"
+             onclick="closeRefreshPTModal()"></div>
+        <div id="refreshPTModal" class="hotel-inner-modal" role="dialog"
+             aria-modal="true" aria-labelledby="refreshPTTitle">
+            <div class="hotel-inner-modal-head">
+                <button class="hotel-inner-back" onclick="closeRefreshPTModal(); openHotelServiceSheet()"
+                        aria-label="뒤로">‹ 뒤로</button>
+                <button class="hotel-sheet-close" onclick="closeRefreshPTModal()"
+                        aria-label="닫기">✕</button>
+            </div>
+
+            <div class="hotel-inner-modal-body">
+                <div class="hotel-inner-badge hotel-inner-badge--guest">GUEST ONLY</div>
+                <h3 class="hotel-inner-title" id="refreshPTTitle">리프레시 PT</h3>
+                <p class="hotel-inner-subtitle">출장·여행 피로 회복 웰니스 케어</p>
+
+                <div class="hotel-info-grid">
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">소요 시간</span>
+                        <span class="hotel-info-val"><strong>45분</strong></span>
+                    </div>
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">이용 요금</span>
+                        <span class="hotel-info-val hotel-info-val--price"><strong>40,000원</strong> / 1회</span>
+                    </div>
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">이용 시간</span>
+                        <span class="hotel-info-val">10:00 – 16:00 <small>(데드타임 슬롯)</small></span>
+                    </div>
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">대상</span>
+                        <span class="hotel-info-val">라마다호텔 <strong>투숙객 본인</strong></span>
+                    </div>
+                    <div class="hotel-info-row">
+                        <span class="hotel-info-label">결제</span>
+                        <span class="hotel-info-val">룸 결제 또는 현장 결제</span>
+                    </div>
+                </div>
+
+                <!-- 3단계 프로그램 -->
+                <div class="hotel-program-steps">
+                    <div class="hotel-program-step">
+                        <span class="hotel-step-num">①</span>
+                        <span class="hotel-step-body">
+                            <strong>사전 설문</strong>
+                            <small>출장 통증 부위 · 운동 목적 · 식습관</small>
+                        </span>
+                    </div>
+                    <div class="hotel-program-step">
+                        <span class="hotel-step-num">②</span>
+                        <span class="hotel-step-body">
+                            <strong>체형·움직임 분석</strong>
+                            <small>스쿼트·런지 평가 · 관절 가동범위</small>
+                        </span>
+                    </div>
+                    <div class="hotel-program-step">
+                        <span class="hotel-step-num">③</span>
+                        <span class="hotel-step-body">
+                            <strong>근막 이완 + 셀프 운동 처방</strong>
+                            <small>목·어깨·요추 케어 · 셀프 운동 루틴 안내</small>
+                        </span>
+                    </div>
+                </div>
+
+                <button class="hotel-inner-cta hotel-inner-cta--gold"
+                        onclick="applyRefreshPT()">
+                    <i class="fas fa-calendar-check"></i> 당일 예약하기
+                </button>
+                <p class="hotel-inner-notice">
+                    예약 후 1층 피트니스 센터로 방문해 주세요.<br>
+                    객실 번호 확인이 필요합니다.
+                </p>
+            </div>
+        </div><!-- /#refreshPTModal -->
 
         <!-- 퀵 액션 버튼 (3행 구성) -->
         <div class="quick-actions-wrap">

@@ -3641,14 +3641,10 @@ function initHotelMode() {
         }
     }
 
-    /* 헬스 클래스 타이틀/설명: page_settings 우선 */
-    const lessonCard = document.getElementById('hotelCtaLesson');
-    if (lessonCard) {
-        if (ps.lesson_title) {
-            const t = lessonCard.querySelector('.hotel-cta-title');
-            if (t) t.textContent = ps.lesson_title;
-        }
-    }
+    /* PRIMARY CTA 타이틀/설명: page_settings 우선 (바텀시트 트리거 버튼) */
+    const lessonTitleEl = document.getElementById('hotelCtaLessonTitle');
+    if (lessonTitleEl && ps.lesson_title) lessonTitleEl.textContent = ps.lesson_title;
+
     const lessonDesc = document.getElementById('hotelCtaLessonDesc');
     if (lessonDesc) {
         if (ps.lesson_desc) {
@@ -3865,4 +3861,265 @@ function hotelSelectPT() {
         if (ptOption) select.value = ptOption.value;
     }
     document.getElementById('page1')?.scrollIntoView({ behavior: 'smooth' });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🏨 피트니스 신청 바텀시트
+   ─ openHotelServiceSheet / closeHotelServiceSheet
+   ════════════════════════════════════════════════════════════════════ */
+
+function openHotelServiceSheet() {
+    const backdrop = document.getElementById('hotelServiceSheetBackdrop');
+    const sheet    = document.getElementById('hotelServiceSheet');
+    if (!backdrop || !sheet) return;
+
+    // display 먼저 block → 다음 프레임에 is-open 추가 (CSS transition 발동)
+    backdrop.style.display = 'block';
+    sheet.style.display    = 'block';
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            backdrop.classList.add('is-open');
+            sheet.classList.add('is-open');
+        });
+    });
+
+    document.body.style.overflow = 'hidden';
+    sheet.scrollTop = 0;
+}
+
+function closeHotelServiceSheet() {
+    const backdrop = document.getElementById('hotelServiceSheetBackdrop');
+    const sheet    = document.getElementById('hotelServiceSheet');
+    if (!backdrop || !sheet) return;
+
+    backdrop.classList.remove('is-open');
+    sheet.classList.remove('is-open');
+
+    // transition 끝난 후 display:none
+    const onEnd = () => {
+        backdrop.style.display = 'none';
+        sheet.style.display    = 'none';
+        document.body.style.overflow = '';
+        sheet.removeEventListener('transitionend', onEnd);
+    };
+    sheet.addEventListener('transitionend', onEnd);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   🤸 그룹 클래스 모달
+   ─ openGroupClassModal / closeGroupClassModal / applyGroupClass
+   ════════════════════════════════════════════════════════════════════ */
+
+function openGroupClassModal() {
+    const backdrop = document.getElementById('groupClassModalBackdrop');
+    const modal    = document.getElementById('groupClassModal');
+    if (!backdrop || !modal) return;
+
+    backdrop.style.display = 'block';
+    modal.style.display    = 'block';
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            backdrop.classList.add('is-open');
+            modal.classList.add('is-open');
+        });
+    });
+
+    document.body.style.overflow = 'hidden';
+    modal.scrollTop = 0;
+
+    // 신청 현황 로드 (현재는 localStorage 기반 임시 구현)
+    _loadGroupClassQuota();
+}
+
+function closeGroupClassModal() {
+    const backdrop = document.getElementById('groupClassModalBackdrop');
+    const modal    = document.getElementById('groupClassModal');
+    if (!backdrop || !modal) return;
+
+    backdrop.classList.remove('is-open');
+    modal.classList.remove('is-open');
+
+    const onEnd = () => {
+        backdrop.style.display = 'none';
+        modal.style.display    = 'none';
+        document.body.style.overflow = '';
+        modal.removeEventListener('transitionend', onEnd);
+    };
+    modal.addEventListener('transitionend', onEnd);
+}
+
+/**
+ * 그룹 클래스 신청 현황 로드
+ * 실제 API 연동 전 단계: localStorage에서 현재 주(월요일 기준) 신청 수 관리
+ */
+function _loadGroupClassQuota() {
+    const bar   = document.getElementById('groupClassQuotaBar');
+    const count = document.getElementById('groupClassQuotaCount');
+    const btn   = document.getElementById('groupClassApplyBtn');
+    if (!bar || !count || !btn) return;
+
+    const MAX = 5;
+    const key = _groupClassWeekKey();
+    let applied = 0;
+    try {
+        const stored = JSON.parse(localStorage.getItem('groupClassQuota') || '{}');
+        applied = Number(stored[key] || 0);
+    } catch (e) { applied = 0; }
+
+    const pct = Math.min(100, Math.round((applied / MAX) * 100));
+    bar.style.width = pct + '%';
+    bar.classList.toggle('is-full', applied >= MAX);
+
+    if (applied >= MAX) {
+        count.textContent = '마감 (5/5명)';
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-ban"></i> 이번 주 마감';
+    } else {
+        count.textContent = applied + '/' + MAX + '명';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check-circle"></i> 신청하기';
+    }
+}
+
+/** 현재 주의 월요일 날짜를 키로 사용 (YYYY-MM-DD) */
+function _groupClassWeekKey() {
+    const now = new Date();
+    const day = now.getDay(); // 0=일, 1=월 ...
+    const diff = day === 0 ? -6 : 1 - day; // 이번 주 월요일
+    const mon = new Date(now);
+    mon.setDate(now.getDate() + diff);
+    return mon.toISOString().slice(0, 10);
+}
+
+function applyGroupClass() {
+    const btn = document.getElementById('groupClassApplyBtn');
+    if (!btn || btn.disabled) return;
+
+    const MAX = 5;
+    const key = _groupClassWeekKey();
+    let quota = {};
+    try { quota = JSON.parse(localStorage.getItem('groupClassQuota') || '{}'); } catch (e) {}
+
+    const current = Number(quota[key] || 0);
+    if (current >= MAX) {
+        alert('이번 주 신청이 마감되었습니다.');
+        return;
+    }
+
+    // 이미 신청 여부 체크 (같은 기기 기준)
+    const appliedKey = 'groupClassApplied_' + key;
+    if (localStorage.getItem(appliedKey) === '1') {
+        alert('이번 주 신청이 이미 완료되었습니다.\n중복 신청은 불가합니다.');
+        return;
+    }
+
+    quota[key] = current + 1;
+    localStorage.setItem('groupClassQuota', JSON.stringify(quota));
+    localStorage.setItem(appliedKey, '1');
+
+    _loadGroupClassQuota();
+
+    // 완료 피드백
+    btn.innerHTML = '<i class="fas fa-check-circle"></i> 신청 완료!';
+    btn.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+    btn.disabled = true;
+
+    setTimeout(() => {
+        closeGroupClassModal();
+        _showHotelToast('✅ 아세로 순환 운동 신청이 완료되었습니다!\n매주 일요일 21시 이후 확정 안내를 드립니다.');
+    }, 900);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ⚡ 리프레시 PT 모달
+   ─ openRefreshPTModal / closeRefreshPTModal / applyRefreshPT
+   ════════════════════════════════════════════════════════════════════ */
+
+function openRefreshPTModal() {
+    const backdrop = document.getElementById('refreshPTModalBackdrop');
+    const modal    = document.getElementById('refreshPTModal');
+    if (!backdrop || !modal) return;
+
+    backdrop.style.display = 'block';
+    modal.style.display    = 'block';
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            backdrop.classList.add('is-open');
+            modal.classList.add('is-open');
+        });
+    });
+
+    document.body.style.overflow = 'hidden';
+    modal.scrollTop = 0;
+}
+
+function closeRefreshPTModal() {
+    const backdrop = document.getElementById('refreshPTModalBackdrop');
+    const modal    = document.getElementById('refreshPTModal');
+    if (!backdrop || !modal) return;
+
+    backdrop.classList.remove('is-open');
+    modal.classList.remove('is-open');
+
+    const onEnd = () => {
+        backdrop.style.display = 'none';
+        modal.style.display    = 'none';
+        document.body.style.overflow = '';
+        modal.removeEventListener('transitionend', onEnd);
+    };
+    modal.addEventListener('transitionend', onEnd);
+}
+
+function applyRefreshPT() {
+    // 리프레시 PT = 투숙객 신청 폼으로 연결
+    // lessonType 셀렉트에서 'pt' 또는 '리프레시' 옵션 우선, 없으면 첫 옵션
+    closeRefreshPTModal();
+
+    const select = document.getElementById('lessonType');
+    if (select) {
+        const refreshOpt = Array.from(select.options).find(o =>
+            o.text.includes('리프레시') || o.text.toLowerCase().includes('refresh')
+        );
+        const ptOpt = Array.from(select.options).find(o =>
+            o.text.toLowerCase().includes('pt') || o.text.includes('피티')
+        );
+        if (refreshOpt) select.value = refreshOpt.value;
+        else if (ptOpt)  select.value = ptOpt.value;
+    }
+
+    document.getElementById('page1')?.scrollIntoView({ behavior: 'smooth' });
+    _showHotelToast('⚡ 리프레시 PT 예약\n아래 신청 폼을 작성해 주세요.');
+}
+
+/* ── 공통 토스트 알림 ── */
+function _showHotelToast(msg) {
+    let toast = document.getElementById('hotelToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'hotelToast';
+        toast.style.cssText = [
+            'position:fixed', 'bottom:calc(env(safe-area-inset-bottom,0px) + 24px)',
+            'left:50%', 'transform:translateX(-50%) translateY(20px)',
+            'background:rgba(10,26,46,.96)', 'color:#e2c97e',
+            'border:1px solid rgba(200,168,100,.4)', 'border-radius:12px',
+            'padding:12px 20px', 'font-size:.82rem', 'font-weight:600',
+            'line-height:1.5', 'text-align:center', 'white-space:pre-line',
+            'z-index:1500', 'box-shadow:0 4px 20px rgba(0,0,0,.5)',
+            'opacity:0', 'transition:opacity .25s,transform .25s',
+            'pointer-events:none', 'max-width:calc(100vw - 40px)',
+        ].join(';');
+        document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+        });
+    });
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(-50%) translateY(20px)';
+    }, 3200);
 }
