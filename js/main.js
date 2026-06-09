@@ -1112,12 +1112,13 @@ function closeMyInquiryModal() {
 }
 
 async function searchMyInquiries() {
+    const isHotelMode = complexContext?.isHotel?.() ?? false;
     const dong      = document.getElementById('myInqDong')?.value.trim();
     const ho        = document.getElementById('myInqHo')?.value.trim();
     const phone4    = document.getElementById('myInqPhone4')?.value.trim();
     const resultEl  = document.getElementById('myInquiryResult');
 
-    // 유효성 검사 — 전화번호 끝 4자리만 필수, 동·호수는 선택
+    // 유효성 검사 — 전화번호 끝 4자리만 필수, 동·호수/객실은 선택
     if (!phone4 || !/^\d{4}$/.test(phone4)) {
         document.getElementById('myInqPhone4').style.borderColor = '#ef4444';
         resultEl.innerHTML = `<p style="color:#e53e3e;font-size:.85rem;text-align:center;padding:8px 0">
@@ -1131,10 +1132,15 @@ async function searchMyInquiries() {
     try {
         const complexId   = complexContext?.getComplexId?.()   || '';
         const complexCode = complexContext?.getComplexCode?.() || '';
-        // 전화번호 끝 4자리 필수, 동·호수는 입력된 경우에만 파라미터 추가
+        // 전화번호 끝 4자리 필수, 동·호수/객실은 입력된 경우에만 파라미터 추가
         const params = new URLSearchParams({ phoneLast4: phone4 });
-        if (dong) params.set('dong', dong);
-        if (ho)   params.set('ho', ho);
+        if (isHotelMode) {
+            // 호텔 모드: myInqDong에 객실 번호가 입력됨 (hotelPatch 후 단일 필드)
+            if (dong) params.set('room', dong);
+        } else {
+            if (dong) params.set('dong', dong);
+            if (ho)   params.set('ho', ho);
+        }
         if (complexId)   params.set('complexId', complexId);
         if (complexCode) params.set('complexCode', complexCode);
 
@@ -1218,10 +1224,17 @@ async function submitInquiry(e) {
     if (!title)   { alert('제목을 입력해주세요.'); return; }
     if (!content) { alert('내용을 입력해주세요.'); return; }
 
+    const isHotelModeInq = complexContext?.isHotel?.() ?? false;
+    // 호텔 모드: room 필드에서 객실 번호 읽기 / 아파트 모드: dong·ho 필드
+    const dongVal = isHotelModeInq
+        ? (document.getElementById('inquiryRoom')?.value.trim() || '')
+        : document.getElementById('inquiryDong')?.value.trim() || '';
+    const hoVal   = isHotelModeInq ? '' : (document.getElementById('inquiryHo')?.value.trim() || '');
+
     const inquiryData = {
         complex_id: complexContext.getComplexId(),
-        dong: document.getElementById('inquiryDong').value,
-        ho: document.getElementById('inquiryHo').value,
+        dong: dongVal,
+        ho:   hoVal,
         name,
         phone,
         title,
@@ -3723,8 +3736,9 @@ function initHotelMode() {
         }
     });
 
-    /* 3. 폼 커스터마이징 */
+    /* 3. 폼 + 모달 커스터마이징 */
     _hotelCustomizeForm();
+    _hotelCustomizeModals();
 
     /* 4. 헤더 서브라인 — 브랜드 헤더가 없을 때만 삽입 (fallback)
      *  brandHeaderActive: style.display가 'none' 이거나 빈 문자('')가 아니면 active로 판단
@@ -3880,6 +3894,122 @@ function _hotelCustomizeForm() {
     if (autoRenewRow) autoRenewRow.style.display = 'none';
 
     console.log('✅ Hotel form customization applied');
+}
+
+/**
+ * 호텔 모드 — 공유 모달 커스터마이징
+ * (내 문의 조회 / 문의하기 / 시간표 / 프로그램 안내 / 트레이너 소개 모달)
+ * ─ initHotelMode() 및 _applyHotelI18n()에서 호출
+ */
+function _hotelCustomizeModals() {
+    /* ── 1. 내 문의 조회 모달 (#myInquiryModal) ── */
+    const myInqModal = document.getElementById('myInquiryModal');
+    if (myInqModal && !myInqModal.dataset.hotelPatched) {
+        myInqModal.dataset.hotelPatched = '1';
+
+        /* 헤더 타이틀 */
+        const hdr = myInqModal.querySelector('[style*="background:var(--color-primary"] span');
+        if (hdr) hdr.innerHTML = '<i class="fas fa-search"></i> ' + _i18n('myinq.title');
+
+        /* 안내 문구 박스 — 동/호수 언급 제거, 호텔 투숙객용으로 교체 */
+        const infoBubble = myInqModal.querySelector('[style*="background:#eff6ff"]');
+        if (infoBubble) {
+            infoBubble.innerHTML =
+                `<i class="fas fa-info-circle"></i>
+                <strong>${_i18n('myinq.hint.bold')}</strong>${_i18n('myinq.hint.body')}`;
+        }
+
+        /* 동·호수 입력 행 → 객실 번호 단일 필드로 교체 */
+        const dongHoWrap = myInqModal.querySelector('[style*="display:flex;gap:8px"]');
+        if (dongHoWrap) {
+            dongHoWrap.innerHTML = `
+                <div style="flex:1">
+                    <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:3px">
+                        ${_i18n('form.room.label')} <span style="color:#9ca3af;font-weight:400">(${_i18n('myinq.optional')})</span>
+                    </label>
+                    <input type="text" id="myInqDong" placeholder="${_i18n('form.room.placeholder')}"
+                           style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:.88rem"
+                           oninput="this.style.borderColor='#d1d5db'">
+                    <input type="hidden" id="myInqHo" value="">
+                </div>
+                <div style="flex:1">
+                    <label style="font-size:.8rem;font-weight:600;color:#374151;display:block;margin-bottom:3px">
+                        ${_i18n('myinq.phone.label')} <span style="color:#e53e3e">*</span>
+                    </label>
+                    <input type="tel" id="myInqPhone4" placeholder="${_i18n('myinq.phone.placeholder')}" maxlength="4" inputmode="numeric"
+                           style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:7px;font-size:.88rem"
+                           oninput="this.style.borderColor='#d1d5db'">
+                </div>`;
+        }
+
+        /* 조회 버튼 */
+        const searchBtn = myInqModal.querySelector('button[onclick="searchMyInquiries()"]');
+        if (searchBtn) searchBtn.innerHTML = `<i class="fas fa-search"></i> ${_i18n('myinq.search.btn')}`;
+    }
+
+    /* ── 2. 문의하기 모달 (#inquiryModal) ── */
+    const inqModal = document.getElementById('inquiryModal');
+    if (inqModal && !inqModal.dataset.hotelPatched) {
+        inqModal.dataset.hotelPatched = '1';
+
+        /* 헤더 타이틀 */
+        const h2 = inqModal.querySelector('.modal-header h2');
+        if (h2) h2.innerHTML = `<i class="fas fa-pen"></i> ${_i18n('inq.title')}`;
+
+        /* 동·호수 행 숨기기 → 객실 번호 행 삽입 */
+        const dongHoRow = inqModal.querySelector('.form-row:has(#inquiryDong)');
+        if (dongHoRow) dongHoRow.style.display = 'none';
+
+        /* 동/호수 필수 안내 문구 숨기기 */
+        const dongNotice = inqModal.querySelector('p[style*="color:#b45309"]');
+        if (dongNotice) dongNotice.style.display = 'none';
+
+        /* 객실 번호 필드 삽입 (중복 방지) */
+        if (!document.getElementById('inquiryRoomRow')) {
+            const formBody = inqModal.querySelector('.modal-body form');
+            if (formBody) {
+                const roomRow = document.createElement('div');
+                roomRow.id = 'inquiryRoomRow';
+                roomRow.className = 'form-group';
+                roomRow.innerHTML = `
+                    <label for="inquiryRoom">${_i18n('form.room.label')} <span class="required">*</span></label>
+                    <input type="text" id="inquiryRoom" placeholder="${_i18n('form.room.placeholder')}"
+                           inputmode="numeric" autocomplete="off"
+                           oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+                    <small style="color:#6b7280;font-size:.78rem;margin-top:4px;display:block">
+                        ${_i18n('form.room.hint')}
+                    </small>`;
+                /* 동·호수 행 바로 뒤(= formBody 첫 번째 자식)에 삽입 */
+                formBody.insertBefore(roomRow, formBody.firstChild);
+            }
+        } else {
+            /* 언어 전환 시 기존 필드 갱신 */
+            const lbl = document.querySelector('#inquiryRoomRow label');
+            if (lbl) lbl.innerHTML = `${_i18n('form.room.label')} <span class="required">*</span>`;
+            const inp = document.getElementById('inquiryRoom');
+            if (inp) inp.placeholder = _i18n('form.room.placeholder');
+            const hint = document.querySelector('#inquiryRoomRow small');
+            if (hint) hint.textContent = _i18n('form.room.hint');
+        }
+
+        /* 공개 문의 레이블 호텔용 */
+        const publicLabel = inqModal.querySelector('input[id="inquiryPublic"] + span');
+        if (publicLabel) publicLabel.textContent = _i18n('inq.public.label');
+    }
+
+    /* ── 3. 시간표 모달 헤더 ── */
+    const ttHeader = document.querySelector('#timetableModal .modal-header h2');
+    if (ttHeader) ttHeader.innerHTML = `<i class="fas fa-table"></i> ${_i18n('sub.timetable')}`;
+
+    /* ── 4. 프로그램 안내 모달 헤더 ── */
+    const currHeader = document.querySelector('#curriculumModal .modal-header h2');
+    if (currHeader) currHeader.innerHTML = `<i class="fas fa-calendar-alt"></i> ${_i18n('sub.program')}`;
+
+    /* ── 5. 강사(트레이너) 소개 모달 헤더 ── */
+    const instrHeader = document.querySelector('#instructorsModal .modal-header h2');
+    if (instrHeader) instrHeader.innerHTML = `<i class="fas fa-user-tie"></i> ${_i18n('sub.trainer')}`;
+
+    console.log('✅ Hotel modal customization applied');
 }
 
 /* PT 예약 버튼: PT 타입 자동 선택 후 폼 스크롤 */
@@ -4444,6 +4574,19 @@ const _hotelI18n = {
         'alert.lesson':       '프로그램을 선택해주세요.',
         'alert.time':         '희망 시간대를 선택해주세요.',
         'alert.agreement':    '개인정보 수집 및 이용에 동의해주세요.',
+
+        /* ── 내 문의 조회 모달 ── */
+        'myinq.title':          '내 문의 조회',
+        'myinq.hint.bold':      '전화번호 끝 4자리',
+        'myinq.hint.body':      '를 입력하면 등록한 문의와 답변을 확인할 수 있습니다. 객실 번호도 함께 입력하면 더 정확하게 조회됩니다.',
+        'myinq.optional':       '선택',
+        'myinq.phone.label':    '전화 끝 4자리',
+        'myinq.phone.placeholder': '예: 5678',
+        'myinq.search.btn':     '조회하기',
+
+        /* ── 문의하기 모달 ── */
+        'inq.title':            '투숙객 문의',
+        'inq.public.label':     '공개 문의로 등록 (다른 투숙객이 볼 수 있습니다)',
     },
 
     en: {
@@ -4571,6 +4714,19 @@ const _hotelI18n = {
         'alert.lesson':       'Please select a program.',
         'alert.time':         'Please select a preferred time.',
         'alert.agreement':    'Please agree to the privacy policy.',
+
+        /* ── My Inquiry modal ── */
+        'myinq.title':          'My Inquiries',
+        'myinq.hint.bold':      'Last 4 digits of your phone number',
+        'myinq.hint.body':      ' — enter to view your submitted inquiries and replies. Adding your room number improves accuracy.',
+        'myinq.optional':       'optional',
+        'myinq.phone.label':    'Phone (last 4)',
+        'myinq.phone.placeholder': 'e.g. 5678',
+        'myinq.search.btn':     'Search',
+
+        /* ── Contact modal ── */
+        'inq.title':            'Guest Inquiry',
+        'inq.public.label':     'Post as public inquiry (visible to other guests)',
     },
 
     ja: {
@@ -4698,6 +4854,19 @@ const _hotelI18n = {
         'alert.lesson':       'プログラムを選択してください。',
         'alert.time':         '希望時間帯を選択してください。',
         'alert.agreement':    '個人情報の収集・利用に同意してください。',
+
+        /* ── 問い合わせ照会モーダル ── */
+        'myinq.title':          'お問い合わせ照会',
+        'myinq.hint.bold':      '電話番号下4桁',
+        'myinq.hint.body':      'を入力すると、登録したお問い合わせと回答を確認できます。客室番号も入力するとより正確に照会できます。',
+        'myinq.optional':       '任意',
+        'myinq.phone.label':    '電話下4桁',
+        'myinq.phone.placeholder': '例: 5678',
+        'myinq.search.btn':     '照会する',
+
+        /* ── お問い合わせモーダル ── */
+        'inq.title':            '宿泊客お問い合わせ',
+        'inq.public.label':     '公開お問い合わせとして登録 (他の宿泊客が閲覧できます)',
     },
 
     zh: {
@@ -4825,6 +4994,19 @@ const _hotelI18n = {
         'alert.lesson':       '请选择项目。',
         'alert.time':         '请选择希望时段。',
         'alert.agreement':    '请同意个人信息收集及使用。',
+
+        /* ── 我的咨询查询弹窗 ── */
+        'myinq.title':          '我的咨询查询',
+        'myinq.hint.bold':      '手机号后4位',
+        'myinq.hint.body':      '输入后可查看已提交的咨询及回复。同时填写客房号码可提高查询准确性。',
+        'myinq.optional':       '选填',
+        'myinq.phone.label':    '手机后4位',
+        'myinq.phone.placeholder': '例: 5678',
+        'myinq.search.btn':     '查询',
+
+        /* ── 咨询弹窗 ── */
+        'inq.title':            '住客咨询',
+        'inq.public.label':     '公开发布 (其他住客可查看)',
     },
 };
 
@@ -4890,6 +5072,15 @@ function _applyHotelI18n() {
     /* 폼 커스터마이징 재적용 (언어 전환 시 폼 레이블도 갱신) */
     if (typeof _hotelCustomizeForm === 'function') {
         _hotelCustomizeForm();
+    }
+    /* 공유 모달 커스터마이징 재적용 (언어 전환 시 모달 레이블도 갱신) */
+    if (typeof _hotelCustomizeModals === 'function') {
+        /* dataset.hotelPatched 초기화 → 다음 호출 시 다국어 레이블 재삽입 */
+        ['myInquiryModal','inquiryModal'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) delete el.dataset.hotelPatched;
+        });
+        _hotelCustomizeModals();
     }
 }
 
