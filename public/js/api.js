@@ -37,6 +37,8 @@ const API = {
         update: (id, data) => API.put(`/complexes/${id}`, data),
         selfUpdate: (id, data) => API.put(`/complexes/${id}/self`, data),
         patchFlags: (id, data) => API.request('PATCH', `/complexes/${id}/flags`, data),
+        savePageSettings: (id, page_settings, auth) =>
+            API.request('PATCH', `/complexes/${id}/page-settings`, { page_settings, ...auth }),
         delete: (id, masterPassword) => API.delete(`/complexes/${id}`, { masterPassword }),
     },
 

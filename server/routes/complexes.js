@@ -485,6 +485,57 @@ router.patch('/:id/flags', async (req, res) => {
     } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ── 입주민 페이지 설정 저장 (page_settings) ───────────────────
+// PATCH /api/complexes/:id/page-settings
+// body: { page_settings: { hero_title, hero_subtitle, lesson_desc, ... } }
+router.patch('/:id/page-settings', async (req, res) => {
+    try {
+        const { page_settings, masterPassword, adminPassword } = req.body;
+        if (!page_settings || typeof page_settings !== 'object') {
+            return res.status(400).json({ success: false, error: 'page_settings 객체가 필요합니다' });
+        }
+        const sb = getSupabase();
+        // 인증: 마스터 비밀번호 또는 단지 관리자 비밀번호
+        const { data: cx, error: fetchErr } = await sb
+            .from('complexes')
+            .select('id, admin_password')
+            .eq('id', req.params.id)
+            .single();
+        if (fetchErr || !cx) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+
+        const isMaster = masterPassword && masterPassword === process.env.MASTER_PASSWORD;
+        const isAdmin  = adminPassword  && adminPassword  === cx.admin_password;
+        if (!isMaster && !isAdmin) {
+            return res.status(403).json({ success: false, error: '인증 실패' });
+        }
+
+        // 허용 키만 필터링 (XSS·오염 방지)
+        const ALLOWED_KEYS = [
+            'hero_title', 'hero_subtitle', 'lesson_desc',
+            'pt_title', 'pt_desc', 'booking_title', 'booking_desc',
+            'inquiry_label', 'timetable_label', 'program_label',
+            'trainer_label', 'notice_label', 'contact_label',
+            'manage_label', 'cancel_label', 'staff_label',
+            'show_pt', 'show_inquiry', 'show_timetable', 'show_program',
+            'show_trainer', 'show_notice', 'show_contact',
+            'show_manage', 'show_cancel', 'show_staff',
+        ];
+        const sanitized = {};
+        for (const k of ALLOWED_KEYS) {
+            if (page_settings[k] !== undefined) sanitized[k] = page_settings[k];
+        }
+
+        const { data, error } = await sb
+            .from('complexes')
+            .update({ page_settings: JSON.stringify(sanitized) })
+            .eq('id', req.params.id)
+            .select()
+            .single();
+        if (error) throw error;
+        res.json({ success: true, data });
+    } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 // ── 내 단지 설정 수정 (일반 관리자) ──────────────────────────
 router.put('/:id/self', async (req, res) => {
     try {

@@ -645,7 +645,161 @@ const mycomplex = {
                         각 단지는 <strong>발신번호만</strong> 별도로 설정하면 됩니다.
                     </div>
                 </div>
-            </div>`;
+            </div>
+
+            ${cx.venue_type === 'hotel' ? `
+            <!-- ── 입주민 페이지 화면 미리보기 및 설정 (호텔 모드 전용) ── -->
+            <div class="settings-card" id="pagePreviewCard"
+                 style="border:2px solid rgba(200,168,100,.45);background:linear-gradient(135deg,#0d1b2e,#132336)">
+                <div class="settings-card-header"
+                     style="background:linear-gradient(90deg,#0d1b2e,#1a2e45);color:#C8A864;border-bottom:1px solid rgba(200,168,100,.3)">
+                    <i class="fas fa-tv" style="margin-right:6px"></i>
+                    입주민 페이지 화면 미리보기 및 설정
+                    <span style="font-size:.75rem;font-weight:400;color:#8ba8c2;margin-left:8px">
+                        클릭하여 텍스트/표시 여부 편집
+                    </span>
+                </div>
+                <div class="settings-card-body" style="padding:16px;background:transparent">
+
+                    <!-- 안내 -->
+                    <p style="font-size:.82rem;color:#8ba8c2;margin-bottom:14px;line-height:1.6;padding:10px 12px;background:rgba(200,168,100,.07);border-radius:8px;border:1px solid rgba(200,168,100,.2)">
+                        <i class="fas fa-info-circle" style="color:#C8A864;margin-right:4px"></i>
+                        각 항목을 수정하면 입주민 페이지에 즉시 반영됩니다.
+                        공란으로 두면 기본값이 표시됩니다.
+                    </p>
+
+                    <!-- 미리보기 패널 -->
+                    <div id="hotelPagePreview" style="
+                        background:#0d1b2e;border:1px solid rgba(200,168,100,.25);border-radius:14px;
+                        padding:16px 14px;margin-bottom:18px;position:relative;overflow:hidden;
+                        font-family:'Noto Sans KR',sans-serif;">
+
+                        <!-- 헤더 슬로건 -->
+                        <div style="text-align:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(200,168,100,.15)">
+                            <div style="font-size:.55rem;letter-spacing:.22em;color:#C8A864;margin-bottom:4px">FITNESS CONCIERGE</div>
+                            <div id="prevHeroTitle" style="font-size:1rem;font-weight:700;color:#f0eade;line-height:1.4">
+                                ${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return s.hero_title||'아세로짐 대전 라마다호텔점에<br>어서 오세요.'; }catch(e){ return '아세로짐 대전 라마다호텔점에<br>어서 오세요.'; } })()}
+                            </div>
+                        </div>
+
+                        <!-- PRIMARY CTA 미리보기 -->
+                        <div style="background:rgba(200,168,100,.09);border:1px solid rgba(200,168,100,.3);border-left:3px solid #C8A864;border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px">
+                            <div style="width:36px;height:36px;background:rgba(200,168,100,.18);border-radius:8px;border:1px solid rgba(200,168,100,.4);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🏋</div>
+                            <div style="flex:1;min-width:0">
+                                <div style="font-size:.5rem;color:#C8A864;letter-spacing:.12em">WELLNESS CLASS</div>
+                                <div id="prevLessonTitle" style="font-size:.85rem;font-weight:700;color:#e2c97e">헬스 클래스 신청</div>
+                                <div id="prevLessonDesc" style="font-size:.62rem;color:#7a9ab8">
+                                    ${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return s.lesson_desc||'그룹 트레이닝 · 근력 · 유산소'; }catch(e){ return '그룹 트레이닝 · 근력 · 유산소'; } })()}
+                                </div>
+                            </div>
+                            <span style="color:#C8A864;font-size:1rem">›</span>
+                        </div>
+
+                        <!-- SECONDARY 2열 -->
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+                            <div style="background:rgba(26,58,90,.8);border:1px solid rgba(200,168,100,.2);border-radius:8px;padding:8px 10px;display:flex;align-items:center;gap:6px">
+                                <div style="width:28px;height:28px;background:rgba(200,168,100,.15);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0">🧑‍💼</div>
+                                <div>
+                                    <div style="font-size:.48rem;color:#7a9ab8;letter-spacing:.1em">PERSONAL</div>
+                                    <div id="prevPtTitle" style="font-size:.75rem;font-weight:700;color:#f0eade">
+                                        ${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return s.pt_title||'PT 예약'; }catch(e){ return 'PT 예약'; } })()}
+                                    </div>
+                                    <div id="prevPtDesc" style="font-size:.58rem;color:#7a9ab8">
+                                        ${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return s.pt_desc||'1:1 퍼스널 트레이닝'; }catch(e){ return '1:1 퍼스널 트레이닝'; } })()}
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="background:rgba(18,45,72,.8);border:1px solid rgba(200,168,100,.15);border-radius:8px;padding:8px 10px;display:flex;align-items:center;gap:6px">
+                                <div style="width:28px;height:28px;background:rgba(200,168,100,.1);border-radius:6px;display:flex;align-items:center;justify-content:function:.85rem;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.85rem">📋</div>
+                                <div>
+                                    <div style="font-size:.48rem;color:#7a9ab8;letter-spacing:.1em">BOOKING</div>
+                                    <div id="prevBookingTitle" style="font-size:.75rem;font-weight:700;color:#f0eade">예약 조회·변경</div>
+                                    <div style="font-size:.58rem;color:#7a9ab8">내역 확인 · 취소 · 변경</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- MORE SERVICES 레이블 -->
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                            <div style="flex:1;height:1px;background:rgba(200,168,100,.2)"></div>
+                            <span style="font-size:.5rem;letter-spacing:.2em;color:#C8A864;opacity:.6">MORE SERVICES</span>
+                            <div style="flex:1;height:1px;background:rgba(200,168,100,.2)"></div>
+                        </div>
+
+                        <!-- 서브 6버튼 그리드 미리보기 -->
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:8px">
+                            ${mycomplex._renderSubPreviewGrid(cx.page_settings)}
+                        </div>
+
+                        <!-- 아웃라인 버튼 2종 -->
+                        <div style="display:flex;flex-direction:column;gap:5px">
+                            <div style="border:1.5px solid rgba(200,168,100,.35);border-radius:8px;padding:8px;text-align:center;font-size:.72rem;color:#e2c97e">📋 내 신청 내역 조회·변경</div>
+                            <div style="border:1.5px solid rgba(180,60,60,.35);border-radius:8px;padding:8px;text-align:center;font-size:.72rem;color:#d08888">❌ 이용 해지 신청</div>
+                        </div>
+                    </div>
+
+                    <!-- 편집 폼 -->
+                    <div style="border-top:1px solid rgba(200,168,100,.2);padding-top:16px">
+                        <div style="font-size:.85rem;font-weight:700;color:#C8A864;margin-bottom:12px">
+                            <i class="fas fa-edit"></i> 텍스트 편집
+                        </div>
+
+                        <!-- 헤더 타이틀 -->
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label style="font-size:.8rem;color:#8ba8c2">환영 타이틀 (상단 h2)</label>
+                            <input type="text" id="psHeroTitle" placeholder="아세로짐 대전 라마다호텔점에&#10;어서 오세요."
+                                   value="${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return escHtml(s.hero_title||''); }catch(e){ return ''; } })()}"
+                                   style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
+                                   oninput="mycomplex._livePreview('heroTitle',this.value)">
+                            <small style="color:#5a7a9a;font-size:.72rem">줄바꿈이 필요하면 직접 HTML br을 사용하거나, 자동 줄바꿈됩니다</small>
+                        </div>
+
+                        <!-- 클래스 설명 -->
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label style="font-size:.8rem;color:#8ba8c2">헬스 클래스 설명 (서브텍스트)</label>
+                            <input type="text" id="psLessonDesc" placeholder="그룹 트레이닝 · 근력 · 유산소"
+                                   value="${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return escHtml(s.lesson_desc||''); }catch(e){ return ''; } })()}"
+                                   style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
+                                   oninput="mycomplex._livePreview('lessonDesc',this.value)">
+                        </div>
+
+                        <!-- PT 설명 -->
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label style="font-size:.8rem;color:#8ba8c2">PT 예약 타이틀</label>
+                            <input type="text" id="psPtTitle" placeholder="PT 예약"
+                                   value="${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return escHtml(s.pt_title||''); }catch(e){ return ''; } })()}"
+                                   style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
+                                   oninput="mycomplex._livePreview('ptTitle',this.value)">
+                        </div>
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label style="font-size:.8rem;color:#8ba8c2">PT 예약 설명</label>
+                            <input type="text" id="psPtDesc" placeholder="1:1 퍼스널 트레이닝"
+                                   value="${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return escHtml(s.pt_desc||''); }catch(e){ return ''; } })()}"
+                                   style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
+                                   oninput="mycomplex._livePreview('ptDesc',this.value)">
+                        </div>
+
+                        <!-- 서브 버튼 레이블 + 표시 여부 -->
+                        <div style="font-size:.8rem;font-weight:700;color:#8ba8c2;margin-bottom:8px;margin-top:4px">서브 서비스 표시 / 레이블</div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+                            ${mycomplex._renderSubEditGrid(cx.page_settings)}
+                        </div>
+
+                        <!-- 저장 버튼 -->
+                        <div style="display:flex;gap:8px;align-items:center">
+                            <button class="btn-primary btn-sm"
+                                    style="background:linear-gradient(135deg,#b8902a,#C8A864);border:none;color:#0d1b2e;font-weight:700"
+                                    onclick="mycomplex._savePageSettings('${cx.id}')">
+                                <i class="fas fa-save"></i> 화면 설정 저장
+                            </button>
+                            <button class="btn-secondary btn-sm"
+                                    onclick="window.open('/?complex=${cx.code}','_blank')">
+                                <i class="fas fa-external-link-alt"></i> 실제 페이지 확인
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>` : ''}`;
 
         // SMS 설정 상태 비동기 로드
         setTimeout(() => mycomplex._loadSmsStatus(), 100);
@@ -943,6 +1097,170 @@ const mycomplex = {
             showToast('비밀번호가 변경되었습니다. 다음 로그인부터 새 비밀번호를 사용하세요');
         } catch(e) {
             showToast('변경 실패: ' + e.message, 'error');
+        }
+    },
+
+    /* ─── 입주민 페이지 미리보기 실시간 업데이트 ──────────────── */
+
+    /** 서브 버튼 미리보기 그리드 HTML 생성 */
+    _renderSubPreviewGrid(pageSettingsRaw) {
+        let ps = {};
+        try { ps = JSON.parse(pageSettingsRaw || '{}'); } catch(e) {}
+        const items = [
+            ['prevInquiry',  'show_inquiry',  'inquiry_label',  '내 문의 조회', '🔍'],
+            ['prevTimetable','show_timetable','timetable_label','시간표',       '🕐'],
+            ['prevProgram',  'show_program',  'program_label',  '프로그램 안내','📚'],
+            ['prevTrainer',  'show_trainer',  'trainer_label',  '트레이너 소개','👤'],
+            ['prevNotice',   'show_notice',   'notice_label',   '공지사항',     '📢'],
+            ['prevContact',  'show_contact',  'contact_label',  '문의하기',     '💬'],
+        ];
+        return items.map(([pid, showKey, labelKey, defLabel, icon]) => {
+            const show  = ps[showKey] !== false;
+            const label = escHtml(ps[labelKey] || defLabel);
+            if (show) {
+                return '<div id="' + pid + '" style="background:rgba(200,168,100,.07);border:1px solid rgba(200,168,100,.2);border-radius:8px;padding:8px 4px;text-align:center;font-size:.6rem;color:#8ba8c2">'
+                     + icon + '<br>' + label + '</div>';
+            } else {
+                return '<div id="' + pid + '" style="background:rgba(0,0,0,.2);border:1px dashed rgba(255,255,255,.08);border-radius:8px;padding:8px 4px;text-align:center;font-size:.6rem;color:#3a4a5a;text-decoration:line-through">'
+                     + icon + '<br>' + label + '</div>';
+            }
+        }).join('');
+    },
+
+    /** 서브 버튼 편집 그리드 HTML 생성 */
+    _renderSubEditGrid(pageSettingsRaw) {
+        let ps = {};
+        try { ps = JSON.parse(pageSettingsRaw || '{}'); } catch(e) {}
+        const items = [
+            ['psInquiryLabel',  'inquiry_label',  'psShowInquiry',  'show_inquiry',  '내 문의 조회'],
+            ['psTimetableLabel','timetable_label','psShowTimetable','show_timetable','시간표'],
+            ['psProgramLabel',  'program_label',  'psShowProgram',  'show_program',  '프로그램 안내'],
+            ['psTrainerLabel',  'trainer_label',  'psShowTrainer',  'show_trainer',  '트레이너 소개'],
+            ['psNoticeLabel',   'notice_label',   'psShowNotice',   'show_notice',   '공지사항'],
+            ['psContactLabel',  'contact_label',  'psShowContact',  'show_contact',  '문의하기'],
+        ];
+        return items.map(([labelId, labelKey, showId, showKey, defLabel]) => {
+            const show = ps[showKey] !== false;
+            const val  = escHtml(ps[labelKey] || '');
+            const def  = escHtml(defLabel);
+            return '<div style="background:rgba(255,255,255,.03);border:1px solid rgba(200,168,100,.15);border-radius:8px;padding:8px 10px">'
+                 + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">'
+                 +   '<label style="font-size:.72rem;color:#8ba8c2">' + def + '</label>'
+                 +   '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:.68rem;color:#8ba8c2">'
+                 +     '<input type="checkbox" id="' + showId + '" ' + (show ? 'checked' : '') + ' style="width:14px;height:14px"'
+                 +     ' onchange="mycomplex._livePreview(\'' + showId + '\',this.checked)"> 표시'
+                 +   '</label>'
+                 + '</div>'
+                 + '<input type="text" id="' + labelId + '" placeholder="' + def + '" value="' + val + '"'
+                 + ' style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.2);border-radius:6px;padding:5px 8px;font-size:.78rem;width:100%"'
+                 + ' oninput="mycomplex._livePreview(\'' + labelId + '\',this.value)">'
+                 + '</div>';
+        }).join('');
+    },
+
+    /**
+     * 폼 인풋 변경 시 미리보기 패널 실시간 반영
+     * @param {string} field - 필드 식별자
+     * @param {*}      value - 새 값
+     */
+    _livePreview(field, value) {
+        const map = {
+            heroTitle:      'prevHeroTitle',
+            lessonDesc:     'prevLessonDesc',
+            ptTitle:        'prevPtTitle',
+            ptDesc:         'prevPtDesc',
+        };
+        // 텍스트 필드
+        if (map[field]) {
+            const el = document.getElementById(map[field]);
+            if (el) el.textContent = value || '';
+            return;
+        }
+        // 서브 버튼 레이블
+        const labelMap = {
+            psInquiryLabel:  'prevInquiry',
+            psTimetableLabel:'prevTimetable',
+            psProgramLabel:  'prevProgram',
+            psTrainerLabel:  'prevTrainer',
+            psNoticeLabel:   'prevNotice',
+            psContactLabel:  'prevContact',
+        };
+        if (labelMap[field]) {
+            const el = document.getElementById(labelMap[field]);
+            if (el) {
+                const cur = el.innerHTML;
+                // 이모지 앞부분 유지, 레이블만 교체
+                el.innerHTML = cur.replace(/(<br>|<BR>).*$/, '<br>' + escHtml(value));
+            }
+            return;
+        }
+        // 서브 버튼 표시 여부 토글
+        const showMap = {
+            psShowInquiry:  'prevInquiry',
+            psShowTimetable:'prevTimetable',
+            psShowProgram:  'prevProgram',
+            psShowTrainer:  'prevTrainer',
+            psShowNotice:   'prevNotice',
+            psShowContact:  'prevContact',
+        };
+        if (showMap[field]) {
+            const el = document.getElementById(showMap[field]);
+            if (!el) return;
+            if (value) {
+                el.style.background = 'rgba(200,168,100,.07)';
+                el.style.border     = '1px solid rgba(200,168,100,.2)';
+                el.style.color      = '#8ba8c2';
+                el.style.textDecoration = '';
+            } else {
+                el.style.background = 'rgba(0,0,0,.2)';
+                el.style.border     = '1px dashed rgba(255,255,255,.08)';
+                el.style.color      = '#3a4a5a';
+                el.style.textDecoration = 'line-through';
+            }
+        }
+    },
+
+    /** 입주민 페이지 설정 저장 */
+    async _savePageSettings(complexId) {
+        const get = (id, fallback='') => {
+            const el = document.getElementById(id);
+            return el ? el.value.trim() : fallback;
+        };
+        const chk = (id, fallback=true) => {
+            const el = document.getElementById(id);
+            return el ? el.checked : fallback;
+        };
+
+        const page_settings = {
+            hero_title:       get('psHeroTitle'),
+            lesson_desc:      get('psLessonDesc'),
+            pt_title:         get('psPtTitle'),
+            pt_desc:          get('psPtDesc'),
+            inquiry_label:    get('psInquiryLabel'),
+            timetable_label:  get('psTimetableLabel'),
+            program_label:    get('psProgramLabel'),
+            trainer_label:    get('psTrainerLabel'),
+            notice_label:     get('psNoticeLabel'),
+            contact_label:    get('psContactLabel'),
+            show_inquiry:     chk('psShowInquiry'),
+            show_timetable:   chk('psShowTimetable'),
+            show_program:     chk('psShowProgram'),
+            show_trainer:     chk('psShowTrainer'),
+            show_notice:      chk('psShowNotice'),
+            show_contact:     chk('psShowContact'),
+        };
+
+        try {
+            const auth = mycomplex._masterPw
+                ? { masterPassword: mycomplex._masterPw }
+                : { adminPassword: Admin.complex?.admin_password || '' };
+            await API.complexes.savePageSettings(complexId, page_settings, auth);
+            showToast('✅ 페이지 설정이 저장되었습니다');
+            // 로컬 데이터 갱신
+            const cx = mycomplex.complexData.find(x => x.id === complexId);
+            if (cx) cx.page_settings = JSON.stringify(page_settings);
+        } catch(e) {
+            showToast('저장 실패: ' + e.message, 'error');
         }
     },
 
