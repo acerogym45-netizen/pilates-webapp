@@ -273,17 +273,17 @@ function handlePage1Submit(e) {
     
     // Validation
     if (!formData.agreement) {
-        alert('개인정보 수집 및 이용에 동의해주세요.');
+        alert(isHotelMode ? _i18n('alert.agreement') : '개인정보 수집 및 이용에 동의해주세요.');
         return;
     }
 
     // 호텔 모드 전용 검증
     if (isHotelMode) {
-        if (!roomVal) { alert('객실 번호를 입력해주세요.'); document.getElementById('hotelRoom')?.focus(); return; }
-        if (!formData.name)  { alert('이름을 입력해주세요.'); return; }
-        if (!formData.phone) { alert('전화번호를 입력해주세요.'); return; }
-        if (!formData.lesson_type) { alert('프로그램을 선택해주세요.'); return; }
-        if (!formData.preferred_time) { alert('희망 시간대를 선택해주세요.'); return; }
+        if (!roomVal) { alert(_i18n('alert.room')); document.getElementById('hotelRoom')?.focus(); return; }
+        if (!formData.name)  { alert(_i18n('alert.name')); return; }
+        if (!formData.phone) { alert(_i18n('alert.phone')); return; }
+        if (!formData.lesson_type) { alert(_i18n('alert.lesson')); return; }
+        if (!formData.preferred_time) { alert(_i18n('alert.time')); return; }
         goToPage2();
         return;
     }
@@ -3756,7 +3756,7 @@ function initHotelMode() {
 function _hotelCustomizeForm() {
     /* Step1 섹션 헤더 */
     const step1Header = document.querySelector('#page1 .section-header h3');
-    if (step1Header) step1Header.innerHTML = '<i class="fas fa-concierge-bell"></i> 피트니스 이용 신청';
+    if (step1Header) step1Header.innerHTML = `<i class="fas fa-concierge-bell"></i> ${_i18n('form.step1.header')}`;
 
     /* 동/호수 행 숨기고 객실 번호 필드 삽입 */
     const dongHoRow = document.querySelector('.form-row:has(#dong)');
@@ -3765,40 +3765,50 @@ function _hotelCustomizeForm() {
     if (dongConfirmRow) dongConfirmRow.style.display = 'none';
 
     const basicFieldset = document.querySelector('#page1 fieldset');
-    if (basicFieldset && !document.getElementById('hotelRoomRow')) {
-        const roomRow = document.createElement('div');
-        roomRow.id = 'hotelRoomRow';
-        roomRow.className = 'form-group';
-        roomRow.innerHTML = `
-            <label for="hotelRoom">객실 번호 <span class="required">*</span></label>
-            <input type="text" id="hotelRoom" placeholder="예: 1204" inputmode="numeric" autocomplete="off"
-                   oninput="this.value=this.value.replace(/[^0-9]/g,'')">
-            <small style="color:#7f8c8d;font-size:.78rem;margin-top:4px;display:block">
-                투숙 중인 객실 번호를 입력하세요
-            </small>`;
-        basicFieldset.insertBefore(roomRow, basicFieldset.firstChild);
+    const existingRoomRow = document.getElementById('hotelRoomRow');
+    if (basicFieldset) {
+        if (!existingRoomRow) {
+            const roomRow = document.createElement('div');
+            roomRow.id = 'hotelRoomRow';
+            roomRow.className = 'form-group';
+            roomRow.innerHTML = `
+                <label for="hotelRoom">${_i18n('form.room.label')} <span class="required">*</span></label>
+                <input type="text" id="hotelRoom" placeholder="${_i18n('form.room.placeholder')}" inputmode="numeric" autocomplete="off"
+                       oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+                <small style="color:#7f8c8d;font-size:.78rem;margin-top:4px;display:block">
+                    ${_i18n('form.room.hint')}
+                </small>`;
+            basicFieldset.insertBefore(roomRow, basicFieldset.firstChild);
+        } else {
+            /* 언어 전환 시 기존 필드 레이블/placeholder/hint 갱신 */
+            const lbl = existingRoomRow.querySelector('label');
+            if (lbl) lbl.innerHTML = `${_i18n('form.room.label')} <span class="required">*</span>`;
+            const inp = existingRoomRow.querySelector('input');
+            if (inp) inp.placeholder = _i18n('form.room.placeholder');
+            const hint = existingRoomRow.querySelector('small');
+            if (hint) hint.textContent = _i18n('form.room.hint');
+        }
     }
 
     /* fieldset legend 변경 */
     const legendBasic = document.querySelector('#page1 fieldset:first-of-type legend');
-    if (legendBasic) legendBasic.innerHTML = '<i class="fas fa-user"></i> 투숙객 정보';
+    if (legendBasic) legendBasic.innerHTML = `<i class="fas fa-user"></i> ${_i18n('form.legend.guest')}`;
     const legendLesson = document.querySelector('#page1 fieldset:nth-of-type(2) legend');
-    if (legendLesson) legendLesson.innerHTML = '<i class="fas fa-dumbbell"></i> 이용 서비스 선택';
+    if (legendLesson) legendLesson.innerHTML = `<i class="fas fa-dumbbell"></i> ${_i18n('form.legend.service')}`;
 
     /* 개인정보 동의 문구 */
     const consentDetail = document.querySelector('#page1 .consent-detail');
     if (consentDetail) {
-        consentDetail.innerHTML =
-            '수집항목: 객실번호, 이름, 전화번호 &nbsp;|&nbsp; 목적: 피트니스 이용 신청 처리 &nbsp;|&nbsp; 보유기간: 체크아웃 후 30일';
+        consentDetail.innerHTML = _i18n('form.consent.detail');
     }
 
     /* Step1 → Step2 버튼 */
     const submitBtn = document.querySelector('#contractForm button[type="submit"]');
-    if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-arrow-right"></i> 이용 약관 확인';
+    if (submitBtn) submitBtn.innerHTML = `<i class="fas fa-arrow-right"></i> ${_i18n('form.next.label')}`;
 
     /* Step2 헤더 */
     const step2Header = document.querySelector('#page2 .section-header h3');
-    if (step2Header) step2Header.innerHTML = '<i class="fas fa-file-contract"></i> 피트니스 이용 동의서';
+    if (step2Header) step2Header.innerHTML = `<i class="fas fa-file-contract"></i> ${_i18n('form.step2.header')}`;
 
     /* 신청·해지 기간 안내 박스 숨김 */
     const periodBox = document.querySelector('.period-notice-box');
@@ -3807,7 +3817,7 @@ function _hotelCustomizeForm() {
     /* 계약 요약 동호수 → 객실 번호 */
     document.querySelectorAll('#page2 .summary-row').forEach(row => {
         const lbl = row.querySelector('span:first-child');
-        if (lbl && lbl.textContent.trim() === '동호수') lbl.textContent = '객실 번호';
+        if (lbl && lbl.textContent.trim() === '동호수') lbl.textContent = _i18n('form.summary.room');
     });
 
     /* 환불 정책 교체 */
@@ -3837,7 +3847,7 @@ function _hotelCustomizeForm() {
             </div>
             <label class="policy-consent-label">
                 <input type="checkbox" id="refundAgreement" required>
-                <span>위 <strong>이용 취소 및 환불 정책</strong>을 모두 읽고 동의합니다 <span class="required">*</span></span>
+                <span>${_i18n('form.refund.agree')} <span class="required">*</span></span>
             </label>`;
     }
 
@@ -3862,7 +3872,7 @@ function _hotelCustomizeForm() {
     /* 이용약관 동의 레이블 */
     const termsAgreeLabel = document.getElementById('termsAgreeLabel');
     if (termsAgreeLabel) {
-        termsAgreeLabel.innerHTML = '위 이용약관 전체 (①~⑥)를 모두 읽고 동의합니다 <span class="required">*</span>';
+        termsAgreeLabel.innerHTML = `${_i18n('form.terms.agree')} <span class="required">*</span>`;
     }
 
     /* 자동재등록 안내 행 숨김 */
@@ -4371,6 +4381,69 @@ const _hotelI18n = {
         'form.next':          '다음',
         'form.submit':        '신청 완료',
         'form.back':          '이전',
+
+        /* ── 그룹 클래스 모달 상세 ── */
+        'grp.badge':          'FREE CLASS',
+        'grp.subtitle':       'Circuit Training · 매니저 직접 진행',
+        'grp.info.schedule':  '일정',
+        'grp.info.schedule.val': '매주 <strong>월 · 수</strong> 10:00 – 10:40',
+        'grp.info.capacity':  '정원',
+        'grp.info.capacity.val': '<strong>선착순 5명</strong> (회원 + 투숙객)',
+        'grp.info.open':      '신청',
+        'grp.info.open.val':  '매주 일요일 21:00 QR 오픈 → 자동 확정',
+        'grp.info.equip':     '장비',
+        'grp.info.equip.val': '케틀벨 · 불가리안백 · 소도구',
+        'grp.info.price':     '비용',
+        'grp.info.price.val': '무료',
+        'grp.desc.body':      '매니저가 직접 지도하는 풀바디 순환 운동 클래스입니다.<br>회원권만으로 <strong>월 8회 무료 그룹 PT</strong> 효과를 누리실 수 있습니다.',
+        'grp.quota.label':    '이번 주 신청 현황',
+        'grp.quota.loading':  '확인 중…',
+        'grp.notice':         '신청 확정 시 문자·알림으로 안내드립니다.<br>노쇼 2회 누적 시 당월 신청이 제한됩니다.',
+
+        /* ── 리프레시 PT 모달 상세 ── */
+        'rpt.badge':          'GUEST ONLY',
+        'rpt.sub':            '출장·여행 피로 회복 웰니스 케어',
+        'rpt.info.duration':  '소요 시간',
+        'rpt.info.duration.val': '<strong>45분</strong>',
+        'rpt.info.price':     '이용 요금',
+        'rpt.info.price.val': '<strong>40,000원</strong> / 1회',
+        'rpt.info.time':      '이용 시간',
+        'rpt.info.time.val':  '10:00 – 16:00 <small>(데드타임 슬롯)</small>',
+        'rpt.info.target':    '대상',
+        'rpt.info.target.val':'라마다호텔 <strong>투숙객 본인</strong>',
+        'rpt.info.pay':       '결제',
+        'rpt.info.pay.val':   '룸 결제 또는 현장 결제',
+        'rpt.step1.title':    '사전 설문',
+        'rpt.step1.desc':     '출장 통증 부위 · 운동 목적 · 식습관',
+        'rpt.step2.title':    '체형·움직임 분석',
+        'rpt.step2.desc':     '스쿼트·런지 평가 · 관절 가동범위',
+        'rpt.step3.title':    '근막 이완 + 셀프 운동 처방',
+        'rpt.step3.desc':     '목·어깨·요추 케어 · 셀프 운동 루틴 안내',
+        'rpt.cta':            '당일 예약하기',
+        'rpt.notice':         '예약 후 1층 피트니스 센터로 방문해 주세요.<br>객실 번호 확인이 필요합니다.',
+
+        /* ── 폼 레이블 (page1 · page2) ── */
+        'form.step1.header':  '피트니스 이용 신청',
+        'form.legend.guest':  '투숙객 정보',
+        'form.legend.service':'이용 서비스 선택',
+        'form.room.label':    '객실 번호',
+        'form.room.placeholder': '예: 1204',
+        'form.room.hint':     '투숙 중인 객실 번호를 입력하세요',
+        'form.consent.detail':'수집항목: 객실번호, 이름, 전화번호 &nbsp;|&nbsp; 목적: 피트니스 이용 신청 처리 &nbsp;|&nbsp; 보유기간: 체크아웃 후 30일',
+        'form.next.label':    '이용 약관 확인',
+        'form.step2.header':  '피트니스 이용 동의서',
+        'form.summary.room':  '객실 번호',
+        'form.terms.agree':   '위 이용약관 전체 (①~⑥)를 모두 읽고 동의합니다',
+        'form.refund.agree':  '위 <strong>이용 취소 및 환불 정책</strong>을 모두 읽고 동의합니다',
+        'header.sub':         'WELLNESS CONCIERGE SERVICE',
+
+        /* ── 유효성 검사 alert ── */
+        'alert.room':         '객실 번호를 입력해주세요.',
+        'alert.name':         '이름을 입력해주세요.',
+        'alert.phone':        '전화번호를 입력해주세요.',
+        'alert.lesson':       '프로그램을 선택해주세요.',
+        'alert.time':         '희망 시간대를 선택해주세요.',
+        'alert.agreement':    '개인정보 수집 및 이용에 동의해주세요.',
     },
 
     en: {
@@ -4435,6 +4508,69 @@ const _hotelI18n = {
         'form.next':          'Next',
         'form.submit':        'Submit',
         'form.back':          'Back',
+
+        /* ── Group Class modal ── */
+        'grp.badge':          'FREE CLASS',
+        'grp.subtitle':       'Circuit Training · Led by Manager',
+        'grp.info.schedule':  'Schedule',
+        'grp.info.schedule.val': 'Every <strong>Mon · Wed</strong> 10:00 – 10:40',
+        'grp.info.capacity':  'Capacity',
+        'grp.info.capacity.val': '<strong>First 5</strong> (Members & Guests)',
+        'grp.info.open':      'Open',
+        'grp.info.open.val':  'QR opens Sun 21:00 → Auto-confirmed',
+        'grp.info.equip':     'Equipment',
+        'grp.info.equip.val': 'Kettlebell · Bulgarian Bag · Small Tools',
+        'grp.info.price':     'Price',
+        'grp.info.price.val': 'Free',
+        'grp.desc.body':      'Full-body circuit class led by our trainer.<br>Enjoy <strong>8 free group PT sessions per month</strong> with membership.',
+        'grp.quota.label':    'This Week\'s Bookings',
+        'grp.quota.loading':  'Loading…',
+        'grp.notice':         'Confirmation will be sent via SMS.<br>2 no-shows restrict same-month bookings.',
+
+        /* ── Refresh PT modal ── */
+        'rpt.badge':          'GUEST ONLY',
+        'rpt.sub':            'Wellness Recovery for Travelers',
+        'rpt.info.duration':  'Duration',
+        'rpt.info.duration.val': '<strong>45 min</strong>',
+        'rpt.info.price':     'Price',
+        'rpt.info.price.val': '<strong>₩40,000</strong> / session',
+        'rpt.info.time':      'Available',
+        'rpt.info.time.val':  '10:00 – 16:00 <small>(dead-time slots)</small>',
+        'rpt.info.target':    'For',
+        'rpt.info.target.val':'Ramada Hotel <strong>guests only</strong>',
+        'rpt.info.pay':       'Payment',
+        'rpt.info.pay.val':   'Room charge or on-site',
+        'rpt.step1.title':    'Pre-assessment',
+        'rpt.step1.desc':     'Pain areas · Goals · Lifestyle',
+        'rpt.step2.title':    'Movement Analysis',
+        'rpt.step2.desc':     'Squat/lunge screening · Joint ROM',
+        'rpt.step3.title':    'Myofascial Release + Exercise Rx',
+        'rpt.step3.desc':     'Neck/shoulder/lumbar care · Self-exercise guide',
+        'rpt.cta':            'Book Same-Day',
+        'rpt.notice':         'Visit 1F Fitness after booking.<br>Room number verification required.',
+
+        /* ── Form labels ── */
+        'form.step1.header':  'Fitness Registration',
+        'form.legend.guest':  'Guest Information',
+        'form.legend.service':'Select Service',
+        'form.room.label':    'Room No.',
+        'form.room.placeholder': 'e.g. 1204',
+        'form.room.hint':     'Enter your current room number',
+        'form.consent.detail':'Items: Room No., Name, Phone &nbsp;|&nbsp; Purpose: Fitness booking &nbsp;|&nbsp; Retention: 30 days after checkout',
+        'form.next.label':    'Review Terms',
+        'form.step2.header':  'Fitness Usage Agreement',
+        'form.summary.room':  'Room No.',
+        'form.terms.agree':   'I have read and agree to all terms (①–⑥)',
+        'form.refund.agree':  'I have read and agree to the <strong>cancellation & refund policy</strong>',
+        'header.sub':         'WELLNESS CONCIERGE SERVICE',
+
+        /* ── Validation alerts ── */
+        'alert.room':         'Please enter your room number.',
+        'alert.name':         'Please enter your name.',
+        'alert.phone':        'Please enter your phone number.',
+        'alert.lesson':       'Please select a program.',
+        'alert.time':         'Please select a preferred time.',
+        'alert.agreement':    'Please agree to the privacy policy.',
     },
 
     ja: {
@@ -4499,6 +4635,69 @@ const _hotelI18n = {
         'form.next':          '次へ',
         'form.submit':        '申込完了',
         'form.back':          '戻る',
+
+        /* ── グループクラス モーダル詳細 ── */
+        'grp.badge':          'FREE CLASS',
+        'grp.subtitle':       'サーキットトレーニング · マネージャー直接指導',
+        'grp.info.schedule':  '日程',
+        'grp.info.schedule.val': '毎週 <strong>月 · 水</strong> 10:00 – 10:40',
+        'grp.info.capacity':  '定員',
+        'grp.info.capacity.val': '<strong>先着5名</strong> (会員＋宿泊客)',
+        'grp.info.open':      '申込',
+        'grp.info.open.val':  '毎週日曜21:00 QRオープン → 自動確定',
+        'grp.info.equip':     '器具',
+        'grp.info.equip.val': 'ケトルベル · ブルガリアンバッグ · 小道具',
+        'grp.info.price':     '料金',
+        'grp.info.price.val': '無料',
+        'grp.desc.body':      'マネージャーが直接指導する全身サーキット運動クラスです。<br>会員証だけで <strong>月8回無料グループPT</strong> の効果をお楽しみいただけます。',
+        'grp.quota.label':    '今週の申込状況',
+        'grp.quota.loading':  '確認中…',
+        'grp.notice':         '申込確定時にSMS・通知でご案内します。<br>無断欠席2回累積で当月の申込が制限されます。',
+
+        /* ── リフレッシュPT モーダル詳細 ── */
+        'rpt.badge':          'GUEST ONLY',
+        'rpt.sub':            '出張・旅行疲れ回復ウェルネスケア',
+        'rpt.info.duration':  '所要時間',
+        'rpt.info.duration.val': '<strong>45分</strong>',
+        'rpt.info.price':     '料金',
+        'rpt.info.price.val': '<strong>40,000ウォン</strong> / 1回',
+        'rpt.info.time':      '利用時間',
+        'rpt.info.time.val':  '10:00 – 16:00 <small>(デッドタイムスロット)</small>',
+        'rpt.info.target':    '対象',
+        'rpt.info.target.val':'ラマダホテル <strong>宿泊客本人</strong>',
+        'rpt.info.pay':       '支払',
+        'rpt.info.pay.val':   'ルームチャージまたは現地払い',
+        'rpt.step1.title':    '事前アンケート',
+        'rpt.step1.desc':     '出張での痛み部位 · 運動目的 · 食習慣',
+        'rpt.step2.title':    '体型・動作分析',
+        'rpt.step2.desc':     'スクワット・ランジ評価 · 関節可動域',
+        'rpt.step3.title':    '筋膜リリース＋セルフ運動処方',
+        'rpt.step3.desc':     '首・肩・腰椎ケア · セルフ運動ルーティン案内',
+        'rpt.cta':            '当日予約する',
+        'rpt.notice':         '予約後、1階フィットネスセンターにお越しください。<br>客室番号の確認が必要です。',
+
+        /* ── フォームラベル ── */
+        'form.step1.header':  'フィットネス利用申込',
+        'form.legend.guest':  '宿泊客情報',
+        'form.legend.service':'利用サービス選択',
+        'form.room.label':    '客室番号',
+        'form.room.placeholder': '例: 1204',
+        'form.room.hint':     'ご宿泊中の客室番号を入力してください',
+        'form.consent.detail':'収集項目: 客室番号・氏名・電話番号 &nbsp;|&nbsp; 目的: フィットネス申込処理 &nbsp;|&nbsp; 保有期間: チェックアウト後30日',
+        'form.next.label':    '利用規約確認',
+        'form.step2.header':  'フィットネス利用同意書',
+        'form.summary.room':  '客室番号',
+        'form.terms.agree':   '上記利用規約全項目 (①〜⑥) を読み、同意します',
+        'form.refund.agree':  '上記 <strong>キャンセル・返金ポリシー</strong> を読み、同意します',
+        'header.sub':         'WELLNESS CONCIERGE SERVICE',
+
+        /* ── バリデーション alert ── */
+        'alert.room':         '客室番号を入力してください。',
+        'alert.name':         '氏名を入力してください。',
+        'alert.phone':        '電話番号を入力してください。',
+        'alert.lesson':       'プログラムを選択してください。',
+        'alert.time':         '希望時間帯を選択してください。',
+        'alert.agreement':    '個人情報の収集・利用に同意してください。',
     },
 
     zh: {
@@ -4563,6 +4762,69 @@ const _hotelI18n = {
         'form.next':          '下一步',
         'form.submit':        '提交申请',
         'form.back':          '返回',
+
+        /* ── 团体课程 弹窗详情 ── */
+        'grp.badge':          'FREE CLASS',
+        'grp.subtitle':       '循环训练 · 由管理员亲自带领',
+        'grp.info.schedule':  '时间',
+        'grp.info.schedule.val': '每周 <strong>周一 · 周三</strong> 10:00 – 10:40',
+        'grp.info.capacity':  '名额',
+        'grp.info.capacity.val': '<strong>限前5名</strong> (会员＋住客)',
+        'grp.info.open':      '报名',
+        'grp.info.open.val':  '每周日21:00 QR码开放 → 自动确认',
+        'grp.info.equip':     '器材',
+        'grp.info.equip.val': '壶铃 · 保加利亚袋 · 小器械',
+        'grp.info.price':     '费用',
+        'grp.info.price.val': '免费',
+        'grp.desc.body':      '由管理员亲自指导的全身循环运动课程。<br>凭会员卡即可享受 <strong>每月8次免费团体PT</strong> 效果。',
+        'grp.quota.label':    '本周报名情况',
+        'grp.quota.loading':  '查询中…',
+        'grp.notice':         '确认报名后将通过短信·通知告知。<br>累计2次无故缺席将限制当月报名。',
+
+        /* ── 刷新PT 弹窗详情 ── */
+        'rpt.badge':          'GUEST ONLY',
+        'rpt.sub':            '商务出行·旅行疲劳恢复健康护理',
+        'rpt.info.duration':  '时长',
+        'rpt.info.duration.val': '<strong>45分钟</strong>',
+        'rpt.info.price':     '费用',
+        'rpt.info.price.val': '<strong>40,000韩元</strong> / 次',
+        'rpt.info.time':      '可用时间',
+        'rpt.info.time.val':  '10:00 – 16:00 <small>(空闲时段)</small>',
+        'rpt.info.target':    '对象',
+        'rpt.info.target.val':'拉马达酒店 <strong>住客本人</strong>',
+        'rpt.info.pay':       '结算',
+        'rpt.info.pay.val':   '房间结账或现场付款',
+        'rpt.step1.title':    '预约问卷',
+        'rpt.step1.desc':     '出行疼痛部位 · 运动目的 · 饮食习惯',
+        'rpt.step2.title':    '体态·动作分析',
+        'rpt.step2.desc':     '深蹲·弓步评估 · 关节活动范围',
+        'rpt.step3.title':    '筋膜放松＋自我运动处方',
+        'rpt.step3.desc':     '颈部·肩部·腰椎护理 · 自我运动方案指导',
+        'rpt.cta':            '当日预约',
+        'rpt.notice':         '预约后请前往1楼健身中心。<br>需要核实客房号码。',
+
+        /* ── 表单标签 ── */
+        'form.step1.header':  '健身使用申请',
+        'form.legend.guest':  '住客信息',
+        'form.legend.service':'选择使用服务',
+        'form.room.label':    '客房号码',
+        'form.room.placeholder': '例: 1204',
+        'form.room.hint':     '请输入您入住的客房号码',
+        'form.consent.detail':'收集项目: 客房号·姓名·电话 &nbsp;|&nbsp; 目的: 健身申请处理 &nbsp;|&nbsp; 保存期限: 退房后30天',
+        'form.next.label':    '确认使用条款',
+        'form.step2.header':  '健身使用同意书',
+        'form.summary.room':  '客房号码',
+        'form.terms.agree':   '本人已阅读并同意上述全部条款 (①–⑥)',
+        'form.refund.agree':  '本人已阅读并同意上述 <strong>取消及退款政策</strong>',
+        'header.sub':         'WELLNESS CONCIERGE SERVICE',
+
+        /* ── 验证 alert ── */
+        'alert.room':         '请输入客房号码。',
+        'alert.name':         '请输入姓名。',
+        'alert.phone':        '请输入联系方式。',
+        'alert.lesson':       '请选择项目。',
+        'alert.time':         '请选择希望时段。',
+        'alert.agreement':    '请同意个人信息收集及使用。',
     },
 };
 
@@ -4581,15 +4843,31 @@ function setHotelLang(lang) {
     _updateLangSwitcher(lang);
 }
 
+/**
+ * 현재 언어 사전에서 키에 해당하는 값 반환 (호텔 모드 전용 헬퍼)
+ * @param {string} key  사전 키
+ * @returns {string}    번역 문자열 (없으면 빈 문자열)
+ */
+function _i18n(key) {
+    const dict = _hotelI18n[_hotelLang] || _hotelI18n.ko;
+    return dict[key] !== undefined ? dict[key] : '';
+}
+
 /** data-i18n 속성으로 텍스트 일괄 교체 */
 function _applyHotelI18n() {
     const dict = _hotelI18n[_hotelLang] || _hotelI18n.ko;
 
-    /* textContent 교체 */
+    /* textContent 교체 (HTML 마크업 포함 키는 innerHTML로) */
     document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
         const val = dict[key];
-        if (val !== undefined) el.textContent = val;
+        if (val === undefined) return;
+        /* HTML 태그 포함 여부로 innerHTML / textContent 선택 */
+        if (/<[a-z]/i.test(val)) {
+            el.innerHTML = val;
+        } else {
+            el.textContent = val;
+        }
     });
 
     /* placeholder 교체 */
@@ -4608,6 +4886,11 @@ function _applyHotelI18n() {
     /* html[lang] 속성 동기화 */
     const langMap = { ko:'ko', en:'en', ja:'ja', zh:'zh-Hans' };
     document.documentElement.lang = langMap[_hotelLang] || 'ko';
+
+    /* 폼 커스터마이징 재적용 (언어 전환 시 폼 레이블도 갱신) */
+    if (typeof _hotelCustomizeForm === 'function') {
+        _hotelCustomizeForm();
+    }
 }
 
 /** 언어 선택 버튼 active 상태 업데이트 */
