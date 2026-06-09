@@ -276,9 +276,9 @@
              🏨 피트니스 신청 바텀시트 — openHotelServiceSheet()
         ════════════════════════════════════════════════════════════════ -->
         <div id="hotelServiceSheetBackdrop" class="hotel-sheet-backdrop" aria-hidden="true"
-             onclick="closeHotelServiceSheet()"></div>
+             style="display:none" onclick="closeHotelServiceSheet()"></div>
         <div id="hotelServiceSheet" class="hotel-service-sheet" role="dialog"
-             aria-modal="true" aria-labelledby="hotelSheetTitle">
+             aria-modal="true" aria-labelledby="hotelSheetTitle" style="display:none">
             <!-- 드래그 핸들 -->
             <div class="hotel-sheet-handle" aria-hidden="true"></div>
             <div class="hotel-sheet-header">
@@ -356,9 +356,9 @@
              🤸 아세로 순환 운동 모달 — openGroupClassModal()
         ════════════════════════════════════════════════════════════════ -->
         <div id="groupClassModalBackdrop" class="hotel-sheet-backdrop" aria-hidden="true"
-             onclick="closeGroupClassModal()"></div>
+             style="display:none" onclick="closeGroupClassModal()"></div>
         <div id="groupClassModal" class="hotel-inner-modal" role="dialog"
-             aria-modal="true" aria-labelledby="groupClassTitle">
+             aria-modal="true" aria-labelledby="groupClassTitle" style="display:none">
             <div class="hotel-inner-modal-head">
                 <button class="hotel-inner-back" onclick="closeGroupClassModal(); openHotelServiceSheet()"
                         aria-label="뒤로">‹ 뒤로</button>
@@ -423,9 +423,9 @@
              ⚡ 리프레시 PT 모달 — openRefreshPTModal()
         ════════════════════════════════════════════════════════════════ -->
         <div id="refreshPTModalBackdrop" class="hotel-sheet-backdrop" aria-hidden="true"
-             onclick="closeRefreshPTModal()"></div>
+             style="display:none" onclick="closeRefreshPTModal()"></div>
         <div id="refreshPTModal" class="hotel-inner-modal" role="dialog"
-             aria-modal="true" aria-labelledby="refreshPTTitle">
+             aria-modal="true" aria-labelledby="refreshPTTitle" style="display:none">
             <div class="hotel-inner-modal-head">
                 <button class="hotel-inner-back" onclick="closeRefreshPTModal(); openHotelServiceSheet()"
                         aria-label="뒤로">‹ 뒤로</button>
