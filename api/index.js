@@ -116,6 +116,16 @@ app.get('/admin/css/:file', (req, res) => {
     }
 });
 
+// ── 호텔 아이콘 정적 서빙: /icons/hotel/* → public/icons/hotel/* ─────────────
+app.get('/icons/hotel/:file', (req, res) => {
+    const filePath = path.join(ROOT_DIR, 'public', 'icons', 'hotel', req.params.file);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).send('Not found');
+    }
+});
+
 // ── HOTEL 정적 페이지 (catch-all 보다 위, additive) ──────────────────────────
 // /hotel, /hotel/, /hotel/xxx.html 및 /hotel/{css,js,img}/* 직접 서빙
 // 리다이렉트 없음 (무한 루프 방지) — 모든 경로를 직접 처리

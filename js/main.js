@@ -3613,12 +3613,9 @@ function initHotelMode() {
         defaultLogo.setAttribute('aria-hidden', 'true');
         brandHeader.style.display = 'flex';
         brandHeader.removeAttribute('aria-hidden');
-        /* 단지명을 아세로짐 tagline에 반영 */
-        const complexName = complex?.name || complex?.complex_name || '';
-        if (complexName) {
-            const aceroTag = brandHeader.querySelector('.hotel-brand-acerogym .hotel-brand-tagline');
-            if (aceroTag) aceroTag.textContent = complexName;
-        }
+        /* 호텔측 공식 상호명 고정 반영: 아세로짐 대전 라마다호텔점 */
+        const aceroTag = brandHeader.querySelector('.hotel-brand-acerogym .hotel-brand-tagline');
+        if (aceroTag) aceroTag.textContent = '대전 라마다호텔점';
         console.log('🏨 Brand header switched to RAMADA × ACEROGYM');
     }
 
@@ -3638,8 +3635,10 @@ function initHotelMode() {
         if (cName) {
             /* <h2> 태그 — innerHTML 허용 (단지명은 서버 검증값) */
             intro.innerHTML = `${cName} 피트니스에<br>어서 오세요.`;
+        } else {
+            /* 단지명 없을 때 호텔측 공식 상호명으로 표시 */
+            intro.innerHTML = '아세로짐 대전 라마다호텔점<br>피트니스에 어서 오세요.';
         }
-        /* 단지명 없을 때는 기본값("지금 바로 시작하세요") 유지 */
     }
     const lessonDesc = document.getElementById('hotelCtaLessonDesc');
     if (lessonDesc && Array.isArray(complex?.lesson_types) && complex.lesson_types.length) {
