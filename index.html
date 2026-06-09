@@ -279,7 +279,7 @@
 
                 <!-- 카드 1: 헬스 클래스 등록 (외부 회원) -->
                 <button class="hotel-svc-card hotel-svc-card--primary"
-                        onclick="closeHotelServiceSheet(); document.getElementById('page1').scrollIntoView({behavior:'smooth'})"
+                        onclick="closeHotelServiceSheet(); setTimeout(() => openHotelApplyModal('class'), 320)"
                         aria-label="헬스 클래스 등록">
                     <span class="hotel-svc-icon">
                         <img src="/icons/hotel/icon-wellness-class.png" alt="" class="hotel-svc-img">
@@ -309,7 +309,7 @@
 
                 <!-- 카드 3: 1:1 PT 예약 -->
                 <button class="hotel-svc-card hotel-svc-card--pt"
-                        onclick="closeHotelServiceSheet(); hotelSelectPT()"
+                        onclick="closeHotelServiceSheet(); setTimeout(() => openHotelApplyModal('pt'), 320)"
                         aria-label="1:1 PT 예약">
                     <span class="hotel-svc-icon">
                         <img src="/icons/hotel/icon-pt.png" alt="" class="hotel-svc-img">
@@ -484,6 +484,48 @@
                 </p>
             </div>
         </div><!-- /#refreshPTModal -->
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             🏨 호텔 풀스크린 신청 모달 — openHotelApplyModal()
+             ─ 호텔 모드에서만 표시 / page1·page2 섹션을 이 안으로 이동해 재사용
+        ════════════════════════════════════════════════════════════════ -->
+        <div id="hotelApplyModal" class="hotel-apply-modal" role="dialog"
+             aria-modal="true" aria-labelledby="hotelApplyModalTitle"
+             style="display:none">
+
+            <!-- 모달 헤더 -->
+            <div class="hotel-apply-modal-header">
+                <button class="hotel-apply-back" id="hotelApplyBackBtn"
+                        onclick="hotelApplyGoBack()" aria-label="뒤로">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <div class="hotel-apply-header-center">
+                    <span class="hotel-apply-service-tag" id="hotelApplyServiceTag">WELLNESS CLASS</span>
+                    <h2 class="hotel-apply-title" id="hotelApplyModalTitle">피트니스 신청</h2>
+                </div>
+                <button class="hotel-apply-close" onclick="closeHotelApplyModal()"
+                        aria-label="닫기">✕</button>
+            </div>
+
+            <!-- Step 진행 표시 -->
+            <div class="hotel-apply-steps">
+                <div class="hotel-apply-step hotel-apply-step--active" id="hotelApplyStep1Dot">
+                    <span class="hotel-apply-step-num">1</span>
+                    <span class="hotel-apply-step-label">신청 정보</span>
+                </div>
+                <div class="hotel-apply-step-line"></div>
+                <div class="hotel-apply-step" id="hotelApplyStep2Dot">
+                    <span class="hotel-apply-step-num">2</span>
+                    <span class="hotel-apply-step-label">약관 · 서명</span>
+                </div>
+            </div>
+
+            <!-- 폼 컨테이너 — JS가 page1/page2를 여기로 이동 -->
+            <div class="hotel-apply-modal-body" id="hotelApplyBody">
+                <!-- page1, page2 섹션이 JS에 의해 이곳으로 appendChild됨 -->
+            </div>
+
+        </div><!-- /#hotelApplyModal -->
 
         <!-- 퀵 액션 버튼 (3행 구성) -->
         <div class="quick-actions-wrap">
