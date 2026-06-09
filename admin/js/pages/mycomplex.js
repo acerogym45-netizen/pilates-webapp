@@ -733,8 +733,12 @@ const mycomplex = {
 
                         <!-- 아웃라인 버튼 2종 -->
                         <div style="display:flex;flex-direction:column;gap:5px">
-                            <div style="border:1.5px solid rgba(200,168,100,.35);border-radius:8px;padding:8px;text-align:center;font-size:.72rem;color:#e2c97e">📋 내 신청 내역 조회·변경</div>
-                            <div style="border:1.5px solid rgba(180,60,60,.35);border-radius:8px;padding:8px;text-align:center;font-size:.72rem;color:#d08888">❌ 이용 해지 신청</div>
+                            <div id="prevManage" style="border:1.5px solid rgba(200,168,100,.35);border-radius:8px;padding:8px;text-align:center;font-size:.72rem;color:#e2c97e">
+                                📋 ${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return s.manage_label||'내 신청 내역 조회·변경'; }catch(e){ return '내 신청 내역 조회·변경'; } })()}
+                            </div>
+                            <div id="prevCancel" style="border:1.5px solid rgba(180,60,60,.35);border-radius:8px;padding:8px;text-align:center;font-size:.72rem;color:#d08888">
+                                ❌ ${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return s.cancel_label||'이용 해지 신청'; }catch(e){ return '이용 해지 신청'; } })()}
+                            </div>
                         </div>
                     </div>
 
@@ -752,6 +756,20 @@ const mycomplex = {
                                    style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
                                    oninput="mycomplex._livePreview('heroTitle',this.value)">
                             <small style="color:#5a7a9a;font-size:.72rem">줄바꿈이 필요하면 직접 HTML br을 사용하거나, 자동 줄바꿈됩니다</small>
+                        </div>
+
+                        <!-- PRIMARY CTA 타이틀 구분선 -->
+                        <div style="font-size:.8rem;font-weight:700;color:#C8A864;margin:4px 0 8px;padding-top:8px;border-top:1px solid rgba(200,168,100,.15)">
+                            PRIMARY · SECONDARY CTA
+                        </div>
+
+                        <!-- 헬스 클래스 타이틀 -->
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label style="font-size:.8rem;color:#8ba8c2">헬스 클래스 신청 타이틀</label>
+                            <input type="text" id="psLessonTitle" placeholder="헬스 클래스 신청"
+                                   value="${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return escHtml(s.lesson_title||''); }catch(e){ return ''; } })()}"
+                                   style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
+                                   oninput="mycomplex._livePreview('lessonTitle',this.value)">
                         </div>
 
                         <!-- 클래스 설명 -->
@@ -779,6 +797,39 @@ const mycomplex = {
                                    oninput="mycomplex._livePreview('ptDesc',this.value)">
                         </div>
 
+                        <!-- 예약 조회·변경 타이틀 -->
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label style="font-size:.8rem;color:#8ba8c2">예약 조회·변경 타이틀</label>
+                            <input type="text" id="psBookingTitle" placeholder="예약 조회·변경"
+                                   value="${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return escHtml(s.booking_title||''); }catch(e){ return ''; } })()}"
+                                   style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
+                                   oninput="mycomplex._livePreview('bookingTitle',this.value)">
+                        </div>
+
+                        <!-- 아웃라인 버튼 레이블 구분선 -->
+                        <div style="font-size:.8rem;font-weight:700;color:#C8A864;margin:4px 0 8px;padding-top:8px;border-top:1px solid rgba(200,168,100,.15)">
+                            하단 버튼
+                        </div>
+
+                        <!-- 내 신청 내역 조회·변경 -->  
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label style="font-size:.8rem;color:#8ba8c2">내 신청 내역 버튼 레이블</label>
+                            <input type="text" id="psManageLabel" placeholder="내 신청 내역 조회·변경"
+                                   value="${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return escHtml(s.manage_label||''); }catch(e){ return ''; } })()}"
+                                   style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
+                                   oninput="mycomplex._livePreview('manageLabel',this.value)">
+                        </div>
+
+                        <!-- 이용 해지 신청 -->
+                        <div class="form-group" style="margin-bottom:10px">
+                            <label style="font-size:.8rem;color:#8ba8c2">이용 해지 신청 버튼 레이블</label>
+                            <input type="text" id="psCancelLabel" placeholder="이용 해지 신청"
+                                   value="${(()=>{ try{ const s=JSON.parse(cx.page_settings||'{}'); return escHtml(s.cancel_label||''); }catch(e){ return ''; } })()}"
+                                   style="background:#0d1b2e;color:#f0eade;border:1px solid rgba(200,168,100,.3);border-radius:8px;padding:8px 10px;font-size:.85rem;width:100%"
+                                   oninput="mycomplex._livePreview('cancelLabel',this.value)">
+                        </div>
+
+                        <!-- 서브 버튼 레이블 + 표시 여부 구분선 -->
                         <!-- 서브 버튼 레이블 + 표시 여부 -->
                         <div style="font-size:.8rem;font-weight:700;color:#8ba8c2;margin-bottom:8px;margin-top:4px">서브 서비스 표시 / 레이블</div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
@@ -1166,14 +1217,27 @@ const mycomplex = {
     _livePreview(field, value) {
         const map = {
             heroTitle:      'prevHeroTitle',
+            lessonTitle:    'prevLessonTitle',
             lessonDesc:     'prevLessonDesc',
             ptTitle:        'prevPtTitle',
             ptDesc:         'prevPtDesc',
+            bookingTitle:   'prevBookingTitle',
         };
-        // 텍스트 필드
+        // 텍스트 필드 (단순 textContent)
         if (map[field]) {
             const el = document.getElementById(map[field]);
             if (el) el.textContent = value || '';
+            return;
+        }
+        // 아웃라인 버튼 레이블 (이모지 앞부분 유지)
+        if (field === 'manageLabel') {
+            const el = document.getElementById('prevManage');
+            if (el) el.innerHTML = '📋 ' + escHtml(value || '내 신청 내역 조회·변경');
+            return;
+        }
+        if (field === 'cancelLabel') {
+            const el = document.getElementById('prevCancel');
+            if (el) el.innerHTML = '❌ ' + escHtml(value || '이용 해지 신청');
             return;
         }
         // 서브 버튼 레이블
@@ -1233,9 +1297,13 @@ const mycomplex = {
 
         const page_settings = {
             hero_title:       get('psHeroTitle'),
+            lesson_title:     get('psLessonTitle'),
             lesson_desc:      get('psLessonDesc'),
             pt_title:         get('psPtTitle'),
             pt_desc:          get('psPtDesc'),
+            booking_title:    get('psBookingTitle'),
+            manage_label:     get('psManageLabel'),
+            cancel_label:     get('psCancelLabel'),
             inquiry_label:    get('psInquiryLabel'),
             timetable_label:  get('psTimetableLabel'),
             program_label:    get('psProgramLabel'),

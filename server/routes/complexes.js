@@ -511,7 +511,7 @@ router.patch('/:id/page-settings', async (req, res) => {
 
         // 허용 키만 필터링 (XSS·오염 방지)
         const ALLOWED_KEYS = [
-            'hero_title', 'hero_subtitle', 'lesson_desc',
+            'hero_title', 'hero_subtitle', 'lesson_title', 'lesson_desc',
             'pt_title', 'pt_desc', 'booking_title', 'booking_desc',
             'inquiry_label', 'timetable_label', 'program_label',
             'trainer_label', 'notice_label', 'contact_label',
