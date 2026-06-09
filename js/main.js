@@ -3747,6 +3747,9 @@ function initHotelMode() {
     const loadingIcon = document.querySelector('.loading-logo i');
     if (loadingIcon) loadingIcon.className = 'fas fa-hotel';
 
+    /* 6. 언어 초기화 (저장된 언어 or 기본 한국어) */
+    initHotelI18n();
+
     console.log('✅ Hotel mode UI applied');
 }
 
@@ -4276,4 +4279,351 @@ function _showHotelToast(msg) {
         toast.style.opacity = '0';
         toast.style.transform = 'translateX(-50%) translateY(20px)';
     }, 3200);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   🌐 호텔 i18n — 언어 선택 모듈 (호텔 모드 전용)
+      지원 언어: ko(한국어) · en(English) · ja(日本語) · zh(中文)
+      - data-i18n="key" 속성이 있는 요소의 textContent/placeholder 교체
+      - localStorage 'hotelLang' 에 영속 저장
+      - body.theme-hotel 스코프 전용 — 아파트 단지 완전 무영향
+   ════════════════════════════════════════════════════════════════════ */
+
+const _hotelI18n = {
+    ko: {
+        /* ── 헤더 / 브랜드 ── */
+        'brand.tagline':      '대전 라마다호텔점',
+        'lang.btn':           '언어',
+
+        /* ── 로비 헤더 ── */
+        'lobby.caption':      'FITNESS CONCIERGE',
+        'lobby.title':        '아세로짐 대전 라마다호텔점에\n어서 오세요.',
+
+        /* ── PRIMARY CTA ── */
+        'cta.primary.label':  'WELLNESS SERVICE',
+        'cta.primary.title':  '피트니스 신청하기',
+        'cta.primary.desc':   '헬스 클래스 · PT · 그룹 클래스 · 리프레시 PT',
+
+        /* ── SECONDARY CTA ── */
+        'cta.pt.label':       'PERSONAL',
+        'cta.pt.title':       'PT 예약',
+        'cta.pt.desc':        '1:1 퍼스널 트레이닝',
+        'cta.booking.label':  'BOOKING',
+        'cta.booking.title':  '예약 조회·변경',
+        'cta.booking.desc':   '내역 확인 · 취소 · 변경',
+
+        /* ── MORE SERVICES ── */
+        'more.label':         'MORE SERVICES',
+        'sub.mybook':         '내 문의 조회',
+        'sub.timetable':      '시간표',
+        'sub.program':        '프로그램 안내',
+        'sub.trainer':        '트레이너 소개',
+        'sub.notice':         '공지사항',
+        'sub.contact':        '문의하기',
+        'sub.manage':         '내 신청 내역 조회·변경',
+        'sub.cancel':         '이용 해지 신청',
+        'sub.staff':          '임직원 / 장기 이용 문의',
+
+        /* ── 바텀시트 ── */
+        'sheet.title':        '무엇을 도와드릴까요?',
+        'card.class.badge':   'MEMBERSHIP',
+        'card.class.name':    '헬스 클래스 등록',
+        'card.class.desc':    '월 회원권 · 외부 회원 대상',
+        'card.group.badge':   'FREE · 선착순 5명',
+        'card.group.name':    '아세로 순환 운동',
+        'card.group.desc':    '매주 월·수 10:00 · 회원+투숙객',
+        'card.pt.badge':      'PERSONAL',
+        'card.pt.name':       '1:1 PT 예약',
+        'card.pt.desc':       '퍼스널 트레이닝 · 회원 대상',
+        'card.refresh.badge': 'GUEST · 투숙객',
+        'card.refresh.name':  '리프레시 PT',
+        'card.refresh.desc':  '45분 · 40,000원 · 당일 예약',
+
+        /* ── 그룹 클래스 모달 ── */
+        'grp.title':          '아세로 순환 운동',
+        'grp.desc':           '호텔 피트니스센터 무료 그룹 클래스',
+        'grp.apply':          '이번 주 신청하기',
+        'grp.full':           '이번 주 마감',
+        'grp.done':           '신청 완료',
+
+        /* ── 리프레시 PT 모달 ── */
+        'rpt.title':          '리프레시 PT',
+        'rpt.subtitle':       '투숙객 전용 퍼스널 트레이닝',
+        'rpt.apply':          '신청하기',
+
+        /* ── 풀스크린 신청 모달 ── */
+        'apply.step1':        '신청 정보',
+        'apply.step2':        '약관 · 서명',
+        'apply.tag.class':    'WELLNESS CLASS',
+        'apply.tag.pt':       'PERSONAL TRAINING',
+        'apply.tag.refresh':  'REFRESH PT',
+        'apply.title.class':  '헬스 클래스 등록',
+        'apply.title.pt':     'PT 예약',
+        'apply.title.refresh':'리프레시 PT 신청',
+
+        /* ── 폼 레이블 ── */
+        'form.dong':          '동호수',
+        'form.hotel.room':    '객실 번호',
+        'form.name':          '이름',
+        'form.phone':         '연락처',
+        'form.lesson':        '이용 서비스',
+        'form.time':          '희망 시간',
+        'form.next':          '다음',
+        'form.submit':        '신청 완료',
+        'form.back':          '이전',
+    },
+
+    en: {
+        'brand.tagline':      'Daejeon Ramada Hotel',
+        'lang.btn':           'Language',
+        'lobby.caption':      'FITNESS CONCIERGE',
+        'lobby.title':        'Welcome to\nAcerogym Daejeon Ramada.',
+        'cta.primary.label':  'WELLNESS SERVICE',
+        'cta.primary.title':  'Book Fitness',
+        'cta.primary.desc':   'Wellness Class · PT · Group · Refresh PT',
+        'cta.pt.label':       'PERSONAL',
+        'cta.pt.title':       'PT Booking',
+        'cta.pt.desc':        '1:1 Personal Training',
+        'cta.booking.label':  'BOOKING',
+        'cta.booking.title':  'My Reservations',
+        'cta.booking.desc':   'Check · Cancel · Modify',
+        'more.label':         'MORE SERVICES',
+        'sub.mybook':         'My Inquiries',
+        'sub.timetable':      'Timetable',
+        'sub.program':        'Programs',
+        'sub.trainer':        'Trainers',
+        'sub.notice':         'Notice',
+        'sub.contact':        'Contact',
+        'sub.manage':         'Manage My Booking',
+        'sub.cancel':         'Cancel Membership',
+        'sub.staff':          'Staff / Long-term Inquiry',
+        'sheet.title':        'How can we help you?',
+        'card.class.badge':   'MEMBERSHIP',
+        'card.class.name':    'Wellness Class',
+        'card.class.desc':    'Monthly pass · External members',
+        'card.group.badge':   'FREE · First 5',
+        'card.group.name':    'Group Circuit',
+        'card.group.desc':    'Mon·Wed 10:00 · Members & Guests',
+        'card.pt.badge':      'PERSONAL',
+        'card.pt.name':       '1:1 PT Booking',
+        'card.pt.desc':       'Personal Training · Members only',
+        'card.refresh.badge': 'GUEST · Hotel Guest',
+        'card.refresh.name':  'Refresh PT',
+        'card.refresh.desc':  '45 min · ₩40,000 · Same-day',
+        'grp.title':          'Group Circuit Training',
+        'grp.desc':           'Free group class for hotel fitness',
+        'grp.apply':          'Book This Week',
+        'grp.full':           'Fully Booked',
+        'grp.done':           'Booked',
+        'rpt.title':          'Refresh PT',
+        'rpt.subtitle':       'Personal training for hotel guests',
+        'rpt.apply':          'Book Now',
+        'apply.step1':        'Details',
+        'apply.step2':        'Terms & Sign',
+        'apply.tag.class':    'WELLNESS CLASS',
+        'apply.tag.pt':       'PERSONAL TRAINING',
+        'apply.tag.refresh':  'REFRESH PT',
+        'apply.title.class':  'Wellness Class',
+        'apply.title.pt':     'PT Booking',
+        'apply.title.refresh':'Refresh PT',
+        'form.dong':          'Unit No.',
+        'form.hotel.room':    'Room No.',
+        'form.name':          'Name',
+        'form.phone':         'Phone',
+        'form.lesson':        'Service',
+        'form.time':          'Preferred Time',
+        'form.next':          'Next',
+        'form.submit':        'Submit',
+        'form.back':          'Back',
+    },
+
+    ja: {
+        'brand.tagline':      '大田ラマダホテル店',
+        'lang.btn':           '言語',
+        'lobby.caption':      'フィットネス コンシェルジュ',
+        'lobby.title':        'アセロジム 大田ラマダへ\nようこそ。',
+        'cta.primary.label':  'ウェルネスサービス',
+        'cta.primary.title':  'フィットネス申込',
+        'cta.primary.desc':   'クラス · PT · グループ · リフレッシュPT',
+        'cta.pt.label':       'パーソナル',
+        'cta.pt.title':       'PT予約',
+        'cta.pt.desc':        '1対1 パーソナルトレーニング',
+        'cta.booking.label':  '予約確認',
+        'cta.booking.title':  '予約確認・変更',
+        'cta.booking.desc':   '確認 · キャンセル · 変更',
+        'more.label':         'その他のサービス',
+        'sub.mybook':         'お問い合わせ履歴',
+        'sub.timetable':      'タイムテーブル',
+        'sub.program':        'プログラム案内',
+        'sub.trainer':        'トレーナー紹介',
+        'sub.notice':         'お知らせ',
+        'sub.contact':        'お問い合わせ',
+        'sub.manage':         '申込履歴の確認・変更',
+        'sub.cancel':         '退会申請',
+        'sub.staff':          'スタッフ・長期利用のお問い合わせ',
+        'sheet.title':        'ご用件をお聞かせください',
+        'card.class.badge':   '会員制',
+        'card.class.name':    'ウェルネスクラス登録',
+        'card.class.desc':    '月額会員 · 外部会員対象',
+        'card.group.badge':   '無料 · 先着5名',
+        'card.group.name':    'グループサーキット',
+        'card.group.desc':    '毎週月・水 10:00 · 会員＋宿泊客',
+        'card.pt.badge':      'パーソナル',
+        'card.pt.name':       '1対1 PT予約',
+        'card.pt.desc':       'パーソナルトレーニング · 会員限定',
+        'card.refresh.badge': 'ゲスト · 宿泊客',
+        'card.refresh.name':  'リフレッシュPT',
+        'card.refresh.desc':  '45分 · 40,000ウォン · 当日予約',
+        'grp.title':          'グループサーキット',
+        'grp.desc':           'フィットネス無料グループクラス',
+        'grp.apply':          '今週申し込む',
+        'grp.full':           '今週満員',
+        'grp.done':           '申込済み',
+        'rpt.title':          'リフレッシュPT',
+        'rpt.subtitle':       '宿泊客専用パーソナルトレーニング',
+        'rpt.apply':          '申し込む',
+        'apply.step1':        '申込情報',
+        'apply.step2':        '約款・署名',
+        'apply.tag.class':    'ウェルネスクラス',
+        'apply.tag.pt':       'パーソナルトレーニング',
+        'apply.tag.refresh':  'リフレッシュPT',
+        'apply.title.class':  'クラス登録',
+        'apply.title.pt':     'PT予約',
+        'apply.title.refresh':'リフレッシュPT申込',
+        'form.dong':          '部屋番号',
+        'form.hotel.room':    '客室番号',
+        'form.name':          '氏名',
+        'form.phone':         '電話番号',
+        'form.lesson':        'サービス種別',
+        'form.time':          '希望時間帯',
+        'form.next':          '次へ',
+        'form.submit':        '申込完了',
+        'form.back':          '戻る',
+    },
+
+    zh: {
+        'brand.tagline':      '大田乐天希尔顿酒店店',
+        'lang.btn':           '语言',
+        'lobby.caption':      '健身管家服务',
+        'lobby.title':        '欢迎光临\n阿塞罗健身 大田拉马达店。',
+        'cta.primary.label':  '健康服务',
+        'cta.primary.title':  '健身预约',
+        'cta.primary.desc':   '健身课程 · PT · 团课 · 刷新PT',
+        'cta.pt.label':       '私教',
+        'cta.pt.title':       'PT预约',
+        'cta.pt.desc':        '1对1私人训练',
+        'cta.booking.label':  '预约管理',
+        'cta.booking.title':  '预约查询·修改',
+        'cta.booking.desc':   '查询 · 取消 · 修改',
+        'more.label':         '更多服务',
+        'sub.mybook':         '咨询记录',
+        'sub.timetable':      '课程表',
+        'sub.program':        '项目介绍',
+        'sub.trainer':        '教练介绍',
+        'sub.notice':         '公告',
+        'sub.contact':        '联系我们',
+        'sub.manage':         '预约记录查询·修改',
+        'sub.cancel':         '退会申请',
+        'sub.staff':          '员工/长期使用咨询',
+        'sheet.title':        '请问有什么可以帮您？',
+        'card.class.badge':   '会员制',
+        'card.class.name':    '健身课程登记',
+        'card.class.desc':    '月卡 · 外部会员专享',
+        'card.group.badge':   '免费 · 限前5名',
+        'card.group.name':    '团体循环训练',
+        'card.group.desc':    '每周一·三 10:00 · 会员+住客',
+        'card.pt.badge':      '私教',
+        'card.pt.name':       '1对1 PT预约',
+        'card.pt.desc':       '私人训练 · 仅限会员',
+        'card.refresh.badge': '住客专属',
+        'card.refresh.name':  '刷新PT',
+        'card.refresh.desc':  '45分钟 · 40,000韩元 · 当日预约',
+        'grp.title':          '团体循环训练',
+        'grp.desc':           '酒店健身房免费团课',
+        'grp.apply':          '本周预约',
+        'grp.full':           '本周已满',
+        'grp.done':           '已预约',
+        'rpt.title':          '刷新PT',
+        'rpt.subtitle':       '住客专属私人训练',
+        'rpt.apply':          '立即预约',
+        'apply.step1':        '申请信息',
+        'apply.step2':        '条款·签名',
+        'apply.tag.class':    '健身课程',
+        'apply.tag.pt':       '私人训练',
+        'apply.tag.refresh':  '刷新PT',
+        'apply.title.class':  '课程登记',
+        'apply.title.pt':     'PT预约',
+        'apply.title.refresh':'刷新PT申请',
+        'form.dong':          '房间号',
+        'form.hotel.room':    '客房号码',
+        'form.name':          '姓名',
+        'form.phone':         '联系方式',
+        'form.lesson':        '服务类别',
+        'form.time':          '希望时段',
+        'form.next':          '下一步',
+        'form.submit':        '提交申请',
+        'form.back':          '返回',
+    },
+};
+
+/** 현재 활성 언어 (호텔 모드 전용) */
+let _hotelLang = localStorage.getItem('hotelLang') || 'ko';
+
+/**
+ * 언어 전환 (호텔 모드 전용)
+ * @param {string} lang  'ko' | 'en' | 'ja' | 'zh'
+ */
+function setHotelLang(lang) {
+    if (!_hotelI18n[lang]) return;
+    _hotelLang = lang;
+    try { localStorage.setItem('hotelLang', lang); } catch(_) {}
+    _applyHotelI18n();
+    _updateLangSwitcher(lang);
+}
+
+/** data-i18n 속성으로 텍스트 일괄 교체 */
+function _applyHotelI18n() {
+    const dict = _hotelI18n[_hotelLang] || _hotelI18n.ko;
+
+    /* textContent 교체 */
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        const val = dict[key];
+        if (val !== undefined) el.textContent = val;
+    });
+
+    /* placeholder 교체 */
+    document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+        const key = el.getAttribute('data-i18n-ph');
+        const val = dict[key];
+        if (val !== undefined) el.placeholder = val;
+    });
+
+    /* lobby-title은 \n → <br> */
+    const lobbyTitleEl = document.getElementById('hotelCtaIntro');
+    if (lobbyTitleEl && dict['lobby.title']) {
+        lobbyTitleEl.innerHTML = dict['lobby.title'].replace(/\n/g, '<br>');
+    }
+
+    /* html[lang] 속성 동기화 */
+    const langMap = { ko:'ko', en:'en', ja:'ja', zh:'zh-Hans' };
+    document.documentElement.lang = langMap[_hotelLang] || 'ko';
+}
+
+/** 언어 선택 버튼 active 상태 업데이트 */
+function _updateLangSwitcher(lang) {
+    document.querySelectorAll('.hotel-lang-btn').forEach(btn => {
+        const l = btn.getAttribute('data-lang');
+        btn.classList.toggle('is-active', l === lang);
+        btn.setAttribute('aria-pressed', l === lang ? 'true' : 'false');
+    });
+}
+
+/**
+ * 호텔 모드 언어 초기화 — initHotelMode()에서 호출
+ */
+function initHotelI18n() {
+    _hotelLang = localStorage.getItem('hotelLang') || 'ko';
+    _applyHotelI18n();
+    _updateLangSwitcher(_hotelLang);
 }

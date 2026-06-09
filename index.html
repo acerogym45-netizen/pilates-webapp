@@ -88,6 +88,18 @@
                     </div>
                 </div>
 
+                <!-- 언어 선택 스위처 -->
+                <div class="hotel-lang-switcher" id="hotelLangSwitcher" aria-label="언어 선택">
+                    <button class="hotel-lang-btn is-active" data-lang="ko"
+                            onclick="setHotelLang('ko')" aria-pressed="true" aria-label="한국어">한</button>
+                    <button class="hotel-lang-btn" data-lang="en"
+                            onclick="setHotelLang('en')" aria-pressed="false" aria-label="English">EN</button>
+                    <button class="hotel-lang-btn" data-lang="ja"
+                            onclick="setHotelLang('ja')" aria-pressed="false" aria-label="日本語">日</button>
+                    <button class="hotel-lang-btn" data-lang="zh"
+                            onclick="setHotelLang('zh')" aria-pressed="false" aria-label="中文">中</button>
+                </div>
+
             </div>
             <!-- /hotel-brand-header -->
 
@@ -138,7 +150,7 @@
 
             <!-- ── 상단 슬로건 헤더 ── -->
             <div class="hotel-lobby-header">
-                <span class="hotel-lobby-caption">FITNESS CONCIERGE</span>
+                <span class="hotel-lobby-caption" data-i18n="lobby.caption">FITNESS CONCIERGE</span>
                 <h2 class="hotel-lobby-title" id="hotelCtaIntro">아세로짐 대전 라마다호텔점에<br>어서 오세요.</h2>
             </div>
 
@@ -153,9 +165,9 @@
                              alt="" class="hotel-cta-img">
                     </span>
                     <span class="hotel-cta-body">
-                        <span class="hotel-cta-label">WELLNESS SERVICE</span>
-                        <span class="hotel-cta-title" id="hotelCtaLessonTitle">피트니스 신청하기</span>
-                        <span class="hotel-cta-desc" id="hotelCtaLessonDesc">헬스 클래스 · PT · 그룹 클래스 · 리프레시 PT</span>
+                        <span class="hotel-cta-label" data-i18n="cta.primary.label">WELLNESS SERVICE</span>
+                        <span class="hotel-cta-title" id="hotelCtaLessonTitle" data-i18n="cta.primary.title">피트니스 신청하기</span>
+                        <span class="hotel-cta-desc" id="hotelCtaLessonDesc" data-i18n="cta.primary.desc">헬스 클래스 · PT · 그룹 클래스 · 리프레시 PT</span>
                     </span>
                     <span class="hotel-cta-arrow" aria-hidden="true">›</span>
                 </button>
@@ -172,9 +184,9 @@
                              alt="" class="hotel-cta-img">
                     </span>
                     <span class="hotel-cta-body">
-                        <span class="hotel-cta-label">PERSONAL</span>
-                        <span class="hotel-cta-title">PT 예약</span>
-                        <span class="hotel-cta-desc">1:1 퍼스널 트레이닝</span>
+                        <span class="hotel-cta-label" data-i18n="cta.pt.label">PERSONAL</span>
+                        <span class="hotel-cta-title" data-i18n="cta.pt.title">PT 예약</span>
+                        <span class="hotel-cta-desc" data-i18n="cta.pt.desc">1:1 퍼스널 트레이닝</span>
                     </span>
                     <span class="hotel-cta-arrow-sm" aria-hidden="true">›</span>
                 </button>
@@ -187,9 +199,9 @@
                              alt="" class="hotel-cta-img">
                     </span>
                     <span class="hotel-cta-body">
-                        <span class="hotel-cta-label">BOOKING</span>
-                        <span class="hotel-cta-title">예약 조회·변경</span>
-                        <span class="hotel-cta-desc">내역 확인 · 취소 · 변경</span>
+                        <span class="hotel-cta-label" data-i18n="cta.booking.label">BOOKING</span>
+                        <span class="hotel-cta-title" data-i18n="cta.booking.title">예약 조회·변경</span>
+                        <span class="hotel-cta-desc" data-i18n="cta.booking.desc">내역 확인 · 취소 · 변경</span>
                     </span>
                     <span class="hotel-cta-arrow-sm" aria-hidden="true">›</span>
                 </button>
@@ -198,7 +210,7 @@
             <!-- ── MORE SERVICES 구분 레이블 ── -->
             <div class="hotel-more-label" aria-hidden="true">
                 <span class="hotel-more-line"></span>
-                <span class="hotel-more-text">MORE SERVICES</span>
+                <span class="hotel-more-text" data-i18n="more.label">MORE SERVICES</span>
                 <span class="hotel-more-line"></span>
             </div>
 
@@ -207,32 +219,32 @@
                 <button class="hotel-sub-btn" onclick="showMyInquiryModal()">
                     <img src="/icons/hotel/icon-inquiry.png"
                          alt="" class="hotel-sub-img">
-                    <span>내 문의 조회</span>
+                    <span data-i18n="sub.mybook">내 문의 조회</span>
                 </button>
                 <button class="hotel-sub-btn" onclick="showTimetableModal()">
                     <img src="/icons/hotel/icon-timetable.png"
                          alt="" class="hotel-sub-img">
-                    <span>시간표</span>
+                    <span data-i18n="sub.timetable">시간표</span>
                 </button>
                 <button class="hotel-sub-btn" onclick="showCurriculumModal()">
                     <img src="/icons/hotel/icon-program.png"
                          alt="" class="hotel-sub-img">
-                    <span>프로그램 안내</span>
+                    <span data-i18n="sub.program">프로그램 안내</span>
                 </button>
                 <button class="hotel-sub-btn" onclick="openInstructorsModal()">
                     <img src="/icons/hotel/icon-trainer.png"
                          alt="" class="hotel-sub-img">
-                    <span>트레이너 소개</span>
+                    <span data-i18n="sub.trainer">트레이너 소개</span>
                 </button>
                 <button class="hotel-sub-btn" onclick="scrollToNotices()">
                     <img src="/icons/hotel/icon-notice.png"
                          alt="" class="hotel-sub-img">
-                    <span>공지사항</span>
+                    <span data-i18n="sub.notice">공지사항</span>
                 </button>
                 <button class="hotel-sub-btn" onclick="showInquiryForm()">
                     <img src="/icons/hotel/icon-contact.png"
                          alt="" class="hotel-sub-img">
-                    <span>문의하기</span>
+                    <span data-i18n="sub.contact">문의하기</span>
                 </button>
             </div>
 
@@ -241,19 +253,19 @@
                 <button class="hotel-outline-btn" onclick="showMyManageModal()">
                     <img src="/icons/hotel/icon-booking.png"
                          alt="" class="hotel-outline-img">
-                    <span>내 신청 내역 조회·변경</span>
+                    <span data-i18n="sub.manage">내 신청 내역 조회·변경</span>
                 </button>
                 <button class="hotel-outline-btn hotel-outline-btn--cancel" onclick="showCancellationForm()">
                     <img src="/icons/hotel/icon-cancel.png"
                          alt="" class="hotel-outline-img">
-                    <span>이용 해지 신청</span>
+                    <span data-i18n="sub.cancel">이용 해지 신청</span>
                 </button>
             </div>
 
             <!-- ── 임직원 링크 ── -->
             <div class="hotel-staff-wrap">
                 <button class="hotel-staff-link" onclick="showInquiryForm()">
-                    임직원 / 장기 이용 문의
+                    <span data-i18n="sub.staff">임직원 / 장기 이용 문의</span>
                 </button>
             </div>
 
@@ -270,7 +282,7 @@
             <!-- 드래그 핸들 -->
             <div class="hotel-sheet-handle" aria-hidden="true"></div>
             <div class="hotel-sheet-header">
-                <h3 class="hotel-sheet-title" id="hotelSheetTitle">무엇을 도와드릴까요?</h3>
+                <h3 class="hotel-sheet-title" id="hotelSheetTitle" data-i18n="sheet.title">무엇을 도와드릴까요?</h3>
                 <button class="hotel-sheet-close" onclick="closeHotelServiceSheet()"
                         aria-label="닫기">✕</button>
             </div>
@@ -285,9 +297,9 @@
                         <img src="/icons/hotel/icon-wellness-class.png" alt="" class="hotel-svc-img">
                     </span>
                     <span class="hotel-svc-body">
-                        <span class="hotel-svc-badge">MEMBERSHIP</span>
-                        <span class="hotel-svc-name">헬스 클래스 등록</span>
-                        <span class="hotel-svc-desc">월 회원권 · 외부 회원 대상</span>
+                        <span class="hotel-svc-badge" data-i18n="card.class.badge">MEMBERSHIP</span>
+                        <span class="hotel-svc-name" data-i18n="card.class.name">헬스 클래스 등록</span>
+                        <span class="hotel-svc-desc" data-i18n="card.class.desc">월 회원권 · 외부 회원 대상</span>
                     </span>
                     <span class="hotel-svc-chevron">›</span>
                 </button>
@@ -300,9 +312,9 @@
                         <img src="/icons/hotel/icon-program.png" alt="" class="hotel-svc-img">
                     </span>
                     <span class="hotel-svc-body">
-                        <span class="hotel-svc-badge hotel-svc-badge--free">FREE · 선착순 5명</span>
-                        <span class="hotel-svc-name">아세로 순환 운동</span>
-                        <span class="hotel-svc-desc">매주 월·수 10:00 · 회원+투숙객</span>
+                        <span class="hotel-svc-badge hotel-svc-badge--free" data-i18n="card.group.badge">FREE · 선착순 5명</span>
+                        <span class="hotel-svc-name" data-i18n="card.group.name">아세로 순환 운동</span>
+                        <span class="hotel-svc-desc" data-i18n="card.group.desc">매주 월·수 10:00 · 회원+투숙객</span>
                     </span>
                     <span class="hotel-svc-chevron">›</span>
                 </button>
@@ -315,9 +327,9 @@
                         <img src="/icons/hotel/icon-pt.png" alt="" class="hotel-svc-img">
                     </span>
                     <span class="hotel-svc-body">
-                        <span class="hotel-svc-badge">PERSONAL</span>
-                        <span class="hotel-svc-name">1:1 PT 예약</span>
-                        <span class="hotel-svc-desc">퍼스널 트레이닝 · 회원 대상</span>
+                        <span class="hotel-svc-badge" data-i18n="card.pt.badge">PERSONAL</span>
+                        <span class="hotel-svc-name" data-i18n="card.pt.name">1:1 PT 예약</span>
+                        <span class="hotel-svc-desc" data-i18n="card.pt.desc">퍼스널 트레이닝 · 회원 대상</span>
                     </span>
                     <span class="hotel-svc-chevron">›</span>
                 </button>
@@ -330,9 +342,9 @@
                         <img src="/icons/hotel/icon-booking.png" alt="" class="hotel-svc-img">
                     </span>
                     <span class="hotel-svc-body">
-                        <span class="hotel-svc-badge hotel-svc-badge--guest">GUEST · 투숙객</span>
-                        <span class="hotel-svc-name">리프레시 PT</span>
-                        <span class="hotel-svc-desc">45분 · 40,000원 · 당일 예약</span>
+                        <span class="hotel-svc-badge hotel-svc-badge--guest" data-i18n="card.refresh.badge">GUEST · 투숙객</span>
+                        <span class="hotel-svc-name" data-i18n="card.refresh.name">리프레시 PT</span>
+                        <span class="hotel-svc-desc" data-i18n="card.refresh.desc">45분 · 40,000원 · 당일 예약</span>
                     </span>
                     <span class="hotel-svc-chevron">›</span>
                 </button>
@@ -511,12 +523,12 @@
             <div class="hotel-apply-steps">
                 <div class="hotel-apply-step hotel-apply-step--active" id="hotelApplyStep1Dot">
                     <span class="hotel-apply-step-num">1</span>
-                    <span class="hotel-apply-step-label">신청 정보</span>
+                    <span class="hotel-apply-step-label" data-i18n="apply.step1">신청 정보</span>
                 </div>
                 <div class="hotel-apply-step-line"></div>
                 <div class="hotel-apply-step" id="hotelApplyStep2Dot">
                     <span class="hotel-apply-step-num">2</span>
-                    <span class="hotel-apply-step-label">약관 · 서명</span>
+                    <span class="hotel-apply-step-label" data-i18n="apply.step2">약관 · 서명</span>
                 </div>
             </div>
 

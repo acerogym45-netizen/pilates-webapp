@@ -4,42 +4,75 @@
    기존 아파트 단지(body 클래스 없음)는 1픽셀도 영향받지 않음
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ── Google Fonts: Noto Serif KR (제목) + Noto Sans KR (본문) ── */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Noto+Sans+KR:wght@400;500;600&display=swap');
+/* ── Google Fonts ──────────────────────────────────────────────────────────
+   포인트(간판·타이틀): Playfair Display (라틴) + Noto Serif KR (한/일/중)
+   본문 전체:           Noto Sans KR (고딕) — 가독성·다국어 우선
+   ── */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Noto+Serif+KR:wght@600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
 
 /* ── CSS 변수 오버라이드 (style.css :root 변수명 그대로 재정의) ─────────────── */
 body.theme-hotel {
-    --color-primary:   #0E1A2B;        /* 다크 네이비 */
-    --color-primary-d: #0a1320;        /* 더 깊은 네이비 */
+    /* ── 시스템 색상 재정의 ── */
+    --color-primary:   #0E1A2B;
+    --color-primary-d: #0a1320;
     --color-success:   #2d7a4f;
     --color-warning:   #b8922a;
     --color-danger:    #c0392b;
     --color-info:      #4a6fa5;
-    --color-bg:        #0E1A2B;        /* ★ 전체 배경 = 다크 네이비 (오버레이와 통일) */
-    --color-card:      #162338;        /* ★ 카드 배경 = 약간 밝은 네이비 */
-    --color-text:      #e8edf3;        /* ★ 텍스트 = 밝은 색 (다크 배경 대응) */
+    --color-bg:        #0E1A2B;
+    --color-card:      var(--hotel-navy-mid);
+    --color-text:      #e8edf3;
     --color-text-muted:#7a90a8;
-    --color-border:    rgba(200,168,100,.18);   /* 옅은 골드 보더 */
+    --color-border:    rgba(200,168,100,.18);
     --radius:          10px;
     --shadow:          0 2px 16px rgba(0,0,0,.35);
     --shadow-md:       0 4px 24px rgba(0,0,0,.45);
 
-    /* 호텔 전용 추가 변수 */
-    --hotel-gold:       #C8A864;
-    --hotel-gold-d:     #a8893f;
-    --hotel-gold-light: #e2c97e;
-    --hotel-navy:       #0E1A2B;
-    --hotel-navy-mid:   #162338;
-    --hotel-navy-card:  #1e3a5f;
+    /* ── 호텔 골드 팔레트 ── */
+    --hotel-gold:        #C8A864;
+    --hotel-gold-d:      #a8893f;
+    --hotel-gold-light:  #e2c97e;
+    --hotel-gold-border: rgba(200,168,100,.18);
 
-    font-family: 'Noto Sans KR', -apple-system, sans-serif;
+    /* ── 호텔 네이비 팔레트 (레이어별 토큰화) ── */
+    --hotel-navy:        #0E1A2B;   /* 최하단 배경 */
+    --hotel-navy-mid:    #162338;   /* 카드 기본 배경 */
+    --hotel-navy-card:   #1a2f4a;   /* 카드 hover / 필드셋 */
+    --hotel-navy-deep:   #131f30;   /* 가장 어두운 영역 */
+    --hotel-navy-light:  #243b55;   /* 인풋·셀렉트 배경 */
+    --hotel-navy-input:  #1a3050;   /* 폼 인풋 배경 */
+    --hotel-navy-hover:  #1e3a5a;   /* CTA secondary hover */
+    --hotel-navy-hover2: #1a2b40;   /* CTA muted hover */
+    --hotel-navy-sheet:  #162a42;   /* 바텀시트 배경 */
+
+    /* ── 텍스트 토큰 ── */
+    --hotel-text:        #e8edf3;
+    --hotel-text-soft:   #c8d8e8;
+    --hotel-text-muted:  #7a90a8;
+    --hotel-text-faint:  #b0c8de;
+    --hotel-text-body:   #d4e0ec;
+    --hotel-text-white:  #f0eade;
+
+    /* ── 강조 컬러 ── */
+    --hotel-green:   #4ade80;
+    --hotel-amber:   #f59e0b;
+    --hotel-red:     #f87171;
+    --hotel-red-d:   #d05555;
+    --hotel-red-soft:#f0aaaa;
+
+    /* ── 폰트 패밀리 토큰 ── */
+    --font-display:  'Playfair Display', 'Noto Serif KR', Georgia, serif;
+    --font-serif:    'Noto Serif KR', Georgia, serif;
+    --font-sans:     'Noto Sans KR', -apple-system, 'Apple SD Gothic Neo', sans-serif;
+
+    font-family: var(--font-sans);
     background: var(--hotel-navy);
-    color: var(--color-text);
+    color: var(--hotel-text);
 }
 
 /* ── 로딩 화면 ── */
 body.theme-hotel .loading-screen {
-    background: linear-gradient(160deg, #0E1A2B 0%, #1a2f4a 60%, #0E1A2B 100%);
+    background: linear-gradient(160deg, #0E1A2B 0%, var(--hotel-navy-card) 60%, #0E1A2B 100%);
 }
 body.theme-hotel .loading-logo {
     color: var(--hotel-gold);
@@ -107,7 +140,7 @@ body.theme-hotel .hotel-brand-wordmark {
     gap: 1px;
 }
 body.theme-hotel .hotel-brand-name {
-    font-family: 'Noto Serif KR', Georgia, serif;
+    font-family: var(--font-display);  /* ★ 브랜드 워드마크 — Playfair Display */
     font-size: .82rem;
     font-weight: 700;
     letter-spacing: .14em;
@@ -116,7 +149,7 @@ body.theme-hotel .hotel-brand-name {
     white-space: nowrap;
 }
 body.theme-hotel .hotel-brand-tagline {
-    font-family: 'Noto Sans KR', sans-serif;
+    font-family: var(--font-sans);
     font-size: .58rem;
     font-weight: 400;
     letter-spacing: .1em;
@@ -137,14 +170,14 @@ body.theme-hotel .hotel-brand-cross {
     font-size: .9rem;
     color: var(--hotel-gold);
     opacity: .6;
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-sans);
     line-height: 1;
     display: block;
 }
 
 /* 호텔 모드 일반 헤더 텍스트 스타일 (기본 로고 숨긴 뒤 남는 h1 등) */
 body.theme-hotel .header h1 {
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-display)  /* ★ 포인트 헤딩 */;
     font-weight: 700;
     font-size: 1.25rem;
     letter-spacing: .03em;
@@ -173,14 +206,14 @@ body.theme-hotel .card-section,
 body.theme-hotel .form-body,
 body.theme-hotel .contract-summary,
 body.theme-hotel .policy-box {
-    background: var(--hotel-navy-mid, #162338);
+    background: var(--hotel-navy-mid);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
     box-shadow: var(--shadow);
 }
 
 body.theme-hotel .section-header h3 {
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-display)  /* ★ 포인트 헤딩 */;
     font-weight: 600;
     color: var(--hotel-gold-light, #e2c97e);  /* ★ 다크배경용 밝은 골드 */
     font-size: 1rem;
@@ -198,8 +231,8 @@ body.theme-hotel select,
 body.theme-hotel textarea {
     border: 1px solid rgba(200,168,100,.35);
     border-radius: var(--radius);
-    background: #243b55;              /* ★ 중간 네이비 — 다크 배경에서 구분 가능 */
-    color: #f0f4f8;                   /* ★ 더 밝은 텍스트 */
+    background: var(--hotel-navy-light);              /* ★ 중간 네이비 — 다크 배경에서 구분 가능 */
+    color: var(--hotel-text);                   /* ★ 더 밝은 텍스트 */
     transition: border-color .2s, box-shadow .2s;
 }
 body.theme-hotel input[type="text"]:focus,
@@ -216,7 +249,7 @@ body.theme-hotel textarea:focus {
 body.theme-hotel label,
 body.theme-hotel .form-group label {
     font-weight: 600;
-    color: #dce8f4;                   /* ★ 더 밝은 라벨 */
+    color: var(--hotel-text-body);                   /* ★ 더 밝은 라벨 */
     font-size: .85rem;
     letter-spacing: .01em;
 }
@@ -226,7 +259,7 @@ body.theme-hotel .btn-primary {
     background: var(--hotel-navy);
     border: 1.5px solid var(--hotel-gold);
     color: var(--hotel-gold);
-    font-family: 'Noto Sans KR', sans-serif;
+    font-family: var(--font-sans);
     font-weight: 600;
     letter-spacing: .04em;
     border-radius: var(--radius);
@@ -319,36 +352,36 @@ body.theme-hotel input[type="checkbox"] {
 
 /* ── 공지 / 안내 박스 ── */
 body.theme-hotel .period-notice-box {
-    background: #162338;
+    background: var(--hotel-navy-mid);
     border: 1px solid var(--hotel-gold);
     border-radius: var(--radius);
 }
 body.theme-hotel .period-notice-title {
     color: var(--hotel-gold-light, #e2c97e);
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-display)  /* ★ 포인트 헤딩 */;
     font-weight: 600;
 }
 
 /* ── 약관 박스 ── */
 body.theme-hotel .terms-box {
-    background: #1a2f4a;
+    background: var(--hotel-navy-card);
     border: 1px solid rgba(200,168,100,.2);
     border-radius: var(--radius);
-    color: #c8d8e8;
+    color: var(--hotel-text-soft);
 }
 body.theme-hotel .terms-section strong {
     color: var(--hotel-gold-light, #e2c97e);
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-sans);
 }
 
 /* ── policy 박스 ── */
 body.theme-hotel .policy-box {
-    background: #1a2f4a;
+    background: var(--hotel-navy-card);
     border-left: 3px solid var(--hotel-gold);
 }
 body.theme-hotel .policy-box-header {
     color: var(--hotel-gold-light, #e2c97e);
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-display)  /* ★ 포인트 헤딩 */;
     font-weight: 600;
 }
 body.theme-hotel .policy-box-header i {
@@ -357,11 +390,11 @@ body.theme-hotel .policy-box-header i {
 
 /* ── contract-summary ── */
 body.theme-hotel .contract-summary .summary-row span {
-    color: #7a90a8;
+    color: var(--hotel-text-muted);
     font-size: .82rem;
 }
 body.theme-hotel .contract-summary .summary-row strong {
-    color: #e8edf3;
+    color: var(--hotel-text);
     font-weight: 600;
 }
 
@@ -378,7 +411,7 @@ body.theme-hotel .btn-clear-sig {
 
 /* ── 에러/경고 박스 ── */
 body.theme-hotel .mismatch-msg {
-    color: #8b3a2a;
+    color: var(--hotel-red-d);
 }
 
 /* ── 모달 ── */
@@ -391,7 +424,7 @@ body.theme-hotel .modal-content {
 }
 body.theme-hotel .modal-title,
 body.theme-hotel .modal-header h3 {
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-display)  /* ★ 포인트 헤딩 */;
     font-weight: 600;
     color: var(--hotel-navy);
 }
@@ -406,7 +439,7 @@ body.theme-hotel .instructor-card {
     box-shadow: var(--shadow);
 }
 body.theme-hotel .instructor-name {
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-sans);
     font-weight: 600;
     color: var(--hotel-navy);
 }
@@ -428,17 +461,17 @@ body.theme-hotel .timetable-slot.selected {
 body.theme-hotel fieldset.form-fieldset {
     border: 1.5px solid rgba(200,168,100,.35);
     border-radius: var(--radius);
-    background: #1a2f4a;              /* ★ 카드보다 살짝 밝아서 구분 */
+    background: var(--hotel-navy-card);              /* ★ 카드보다 살짝 밝아서 구분 */
     padding: 16px 14px 14px;
 }
 body.theme-hotel fieldset.form-fieldset legend {
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-sans);
     font-weight: 700;
     color: var(--hotel-gold-light, #e2c97e);  /* ★ 더 밝은 골드 */
     font-size: .88rem;
     letter-spacing: .04em;
     padding: 2px 10px;
-    background: #1a2f4a;              /* fieldset 배경과 동일하게 */
+    background: var(--hotel-navy-card);              /* fieldset 배경과 동일하게 */
     border-radius: 4px;
 }
 body.theme-hotel fieldset.form-fieldset legend i {
@@ -468,7 +501,7 @@ body.theme-hotel ::-webkit-scrollbar-thumb {
 
 body.theme-hotel .hotel-cta-overlay {
     display: block;
-    background: linear-gradient(160deg, #0c1828 0%, #162338 50%, #0E1A2B 100%);
+    background: linear-gradient(160deg, var(--hotel-navy-deep) 0%, var(--hotel-navy-mid) 50%, #0E1A2B 100%);
     padding: 24px 18px 28px;
     border-bottom: 1px solid rgba(200,168,100,.3);
 }
@@ -482,7 +515,7 @@ body.theme-hotel .hotel-lobby-header {
 }
 body.theme-hotel .hotel-lobby-caption {
     display: block;
-    font-family: 'Noto Serif KR', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: .62rem;
     letter-spacing: .22em;
     color: var(--hotel-gold);
@@ -491,10 +524,10 @@ body.theme-hotel .hotel-lobby-caption {
     text-transform: uppercase;
 }
 body.theme-hotel .hotel-lobby-title {
-    font-family: 'Noto Serif KR', serif;
+    font-family: var(--font-display);  /* ★ 포인트 타이틀 — Playfair Display */
     font-size: 1.25rem;
     font-weight: 700;
-    color: #f0eade;
+    color: var(--hotel-text-white);
     letter-spacing: .02em;
     margin: 0;
     line-height: 1.3;
@@ -567,18 +600,18 @@ body.theme-hotel .hotel-secondary-cta .hotel-cta-card {
     gap: 8px;
 }
 body.theme-hotel .hotel-cta-card--secondary {
-    background: #162a42;
+    background: var(--hotel-navy-sheet);
     border: 1px solid rgba(255,255,255,.1);
     box-shadow: 0 3px 14px rgba(0,0,0,.35);
 }
 body.theme-hotel .hotel-cta-card--muted {
-    background: #131f30;
+    background: var(--hotel-navy-deep);
     border: 1px solid rgba(255,255,255,.07);
     box-shadow: 0 3px 14px rgba(0,0,0,.3);
 }
 @media (hover: hover) {
-    body.theme-hotel .hotel-cta-card--secondary:hover { background: #1e3a5a; }
-    body.theme-hotel .hotel-cta-card--muted:hover     { background: #1a2b40; }
+    body.theme-hotel .hotel-cta-card--secondary:hover { background: var(--hotel-navy-hover); }
+    body.theme-hotel .hotel-cta-card--muted:hover     { background: var(--hotel-navy-hover2); }
 }
 /* 2열 카드 내부 아이콘 wrap — 가로 배치 */
 body.theme-hotel .hotel-secondary-cta .hotel-cta-icon-wrap {
@@ -640,7 +673,7 @@ body.theme-hotel .hotel-cta-body {
     padding: 0 4px;
 }
 body.theme-hotel .hotel-cta-label {
-    font-family: 'Noto Serif KR', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: .58rem;
     letter-spacing: .16em;
     color: var(--hotel-gold);
@@ -651,9 +684,9 @@ body.theme-hotel .hotel-cta-label {
 body.theme-hotel .hotel-cta-title {
     font-size: .98rem;
     font-weight: 700;
-    color: #f0eade;
+    color: var(--hotel-text-white);
     line-height: 1.25;
-    font-family: 'Noto Sans KR', sans-serif;
+    font-family: var(--font-display);  /* ★ CTA 주요 타이틀 — Playfair Display */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -661,7 +694,7 @@ body.theme-hotel .hotel-cta-title {
 body.theme-hotel .hotel-cta-card--primary .hotel-cta-title { color: var(--hotel-gold-light, #e2c97e); }
 body.theme-hotel .hotel-cta-desc {
     font-size: .72rem;
-    color: #7a9ab8;
+    color: var(--hotel-text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -709,7 +742,7 @@ body.theme-hotel .hotel-more-line {
     background: rgba(200,168,100,.2);
 }
 body.theme-hotel .hotel-more-text {
-    font-family: 'Noto Serif KR', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: .6rem;
     letter-spacing: .2em;
     color: var(--hotel-gold);
@@ -737,7 +770,7 @@ body.theme-hotel .hotel-sub-btn {
     background: rgba(200,168,100,.07);
     border: 1px solid rgba(200,168,100,.2);
     border-radius: 12px;
-    color: #b0c8de;
+    color: var(--hotel-text-faint);
     font-size: .68rem;
     font-weight: 600;
     cursor: pointer;
@@ -790,7 +823,7 @@ body.theme-hotel .hotel-outline-btn {
     color: var(--hotel-gold-light, #e2c97e);
     font-size: .88rem;
     font-weight: 600;
-    font-family: 'Noto Sans KR', inherit;
+    font-family: var(--font-sans);
     cursor: pointer;
     letter-spacing: .02em;
     transition: background .18s, border-color .18s, color .18s;
@@ -820,14 +853,14 @@ body.theme-hotel .hotel-outline-btn:active {
 }
 body.theme-hotel .hotel-outline-btn--cancel {
     border-color: rgba(180,60,60,.35);
-    color: #d08888;
+    color: var(--hotel-text-muted);
 }
 body.theme-hotel .hotel-outline-btn--cancel .hotel-outline-img { opacity: .7; }
 body.theme-hotel .hotel-outline-btn--cancel:hover,
 body.theme-hotel .hotel-outline-btn--cancel:active {
     background: rgba(180,60,60,.1);
-    border-color: #d05555;
-    color: #f0aaaa;
+    border-color: var(--hotel-red-d);
+    color: var(--hotel-red-soft);
 }
 
 /* ── 임직원 링크 ── */
@@ -857,8 +890,8 @@ body.theme-hotel .hotel-staff-link:active { color: var(--hotel-gold); }
 body.theme-hotel .quick-actions-wrap { display: none !important; }
 
 /* ── 플레이스홀더 ── */
-body.theme-hotel ::placeholder { color: #7a9ab8; opacity: 1; }
-body.theme-hotel .mismatch-msg { color: #f06060; }
+body.theme-hotel ::placeholder { color: var(--hotel-text-muted); opacity: 1; }
+body.theme-hotel .mismatch-msg { color: var(--hotel-red); }
 body.theme-hotel .required { color: var(--hotel-gold); }
 
 /* ── step-badge ── */
@@ -873,9 +906,9 @@ body.theme-hotel #mainContainer,
 body.theme-hotel .container { background: var(--hotel-navy); }
 
 /* ── 공지사항 ── */
-body.theme-hotel .notice-item { color: #c8d8e8; border-bottom: 1px solid rgba(255,255,255,.08); }
-body.theme-hotel .notice-title { color: #e8edf3; }
-body.theme-hotel .notice-date  { color: #7a90a8; }
+body.theme-hotel .notice-item { color: var(--hotel-text-soft); border-bottom: 1px solid rgba(255,255,255,.08); }
+body.theme-hotel .notice-title { color: var(--hotel-text); }
+body.theme-hotel .notice-date  { color: var(--hotel-text-muted); }
 
 /* ═══════════════════════════════════════════════════════════
    가독성 보완 패치 — 다크 네이비 배경에서 텍스트 명확성 강화
@@ -884,7 +917,7 @@ body.theme-hotel .notice-date  { color: #7a90a8; }
 /* form-body / card-section 배경을 조금 더 밝게 */
 body.theme-hotel .card-section,
 body.theme-hotel .form-body {
-    background: #162338;
+    background: var(--hotel-navy-mid);
 }
 
 /* 개인정보 동의 영역 */
@@ -895,11 +928,11 @@ body.theme-hotel .consent-group {
     padding: 12px 14px;
 }
 body.theme-hotel .consent-group .checkbox-label {
-    color: #dce8f4;
+    color: var(--hotel-text-body);
     font-weight: 500;
 }
 body.theme-hotel .consent-detail {
-    color: #7a9ab8;
+    color: var(--hotel-text-muted);
     font-size: .78rem;
     margin-top: 6px;
     line-height: 1.5;
@@ -907,22 +940,22 @@ body.theme-hotel .consent-detail {
 
 /* small 안내 텍스트 */
 body.theme-hotel .form-group small {
-    color: #7a9ab8;
+    color: var(--hotel-text-muted);
 }
 
 /* select 옵션 텍스트 (시스템 렌더링 한계 내 최대화) */
 body.theme-hotel select option {
-    background: #243b55;
-    color: #f0f4f8;
+    background: var(--hotel-navy-light);
+    color: var(--hotel-text);
 }
 
 /* 호텔 객실 번호 필드 강조 */
 body.theme-hotel #hotelRoom {
-    background: #243b55;
+    background: var(--hotel-navy-light);
     border-color: rgba(200,168,100,.5);
     font-size: 1.05rem;
     letter-spacing: .03em;
-    color: #f0f4f8;
+    color: var(--hotel-text);
 }
 body.theme-hotel #hotelRoom:focus {
     border-color: var(--hotel-gold);
@@ -931,7 +964,7 @@ body.theme-hotel #hotelRoom:focus {
 
 /* 불일치 경고 메시지 */
 body.theme-hotel .mismatch-msg {
-    color: #f87171;
+    color: var(--hotel-red);
     font-size: .8rem;
 }
 
@@ -1076,9 +1109,9 @@ body.theme-hotel .hotel-svc-card:active {
 
 /* 카드 색상 테마 */
 body.theme-hotel .hotel-svc-card--primary { border-left: 3px solid var(--hotel-gold); }
-body.theme-hotel .hotel-svc-card--group   { border-left: 3px solid #4ade80; }
-body.theme-hotel .hotel-svc-card--pt      { border-left: 3px solid #60a5fa; }
-body.theme-hotel .hotel-svc-card--refresh { border-left: 3px solid #f59e0b; }
+body.theme-hotel .hotel-svc-card--group   { border-left: 3px solid var(--hotel-green); }
+body.theme-hotel .hotel-svc-card--pt      { border-left: 3px solid var(--hotel-info, #60a5fa); }
+body.theme-hotel .hotel-svc-card--refresh { border-left: 3px solid var(--hotel-amber); }
 
 body.theme-hotel .hotel-svc-card--primary:hover { background: rgba(200,168,100,.07); }
 body.theme-hotel .hotel-svc-card--group:hover   { background: rgba(74,222,128,.06); }
@@ -1115,13 +1148,13 @@ body.theme-hotel .hotel-svc-badge {
     color: var(--hotel-gold);
     text-transform: uppercase;
 }
-body.theme-hotel .hotel-svc-badge--free  { color: #4ade80; }
-body.theme-hotel .hotel-svc-badge--guest { color: #f59e0b; }
+body.theme-hotel .hotel-svc-badge--free  { color: var(--hotel-green); }
+body.theme-hotel .hotel-svc-badge--guest { color: var(--hotel-amber); }
 
 body.theme-hotel .hotel-svc-name {
     font-size: .95rem;
     font-weight: 700;
-    color: #e8eef5;
+    color: var(--hotel-text);
     line-height: 1.25;
 }
 body.theme-hotel .hotel-svc-desc {
@@ -1197,12 +1230,12 @@ body.theme-hotel .hotel-inner-badge {
 body.theme-hotel .hotel-inner-badge--free {
     background: rgba(74,222,128,.1);
     border-color: rgba(74,222,128,.4);
-    color: #4ade80;
+    color: var(--hotel-green);
 }
 body.theme-hotel .hotel-inner-badge--guest {
     background: rgba(245,158,11,.1);
     border-color: rgba(245,158,11,.4);
-    color: #f59e0b;
+    color: var(--hotel-amber);
 }
 
 body.theme-hotel .hotel-inner-title {
@@ -1245,13 +1278,13 @@ body.theme-hotel .hotel-info-label {
 }
 body.theme-hotel .hotel-info-val {
     font-size: .85rem;
-    color: #d4e0ec;
+    color: var(--hotel-text-body);
     flex: 1;
     line-height: 1.4;
 }
-body.theme-hotel .hotel-info-val strong { color: #e8eef5; }
+body.theme-hotel .hotel-info-val strong { color: var(--hotel-text); }
 body.theme-hotel .hotel-info-val small  { color: rgba(200,215,230,.5); font-size: .75rem; }
-body.theme-hotel .hotel-info-val--free  { color: #4ade80; font-weight: 700; }
+body.theme-hotel .hotel-info-val--free  { color: var(--hotel-green); font-weight: 700; }
 body.theme-hotel .hotel-info-val--price { color: var(--hotel-gold-light, #e2c97e); font-weight: 700; }
 
 /* 설명 텍스트 */
@@ -1261,7 +1294,7 @@ body.theme-hotel .hotel-inner-desc {
     line-height: 1.65;
     margin-bottom: 18px;
 }
-body.theme-hotel .hotel-inner-desc strong { color: #d4e0ec; }
+body.theme-hotel .hotel-inner-desc strong { color: var(--hotel-text-body); }
 
 /* 신청 현황 바 */
 body.theme-hotel .hotel-quota-wrap {
@@ -1288,11 +1321,11 @@ body.theme-hotel .hotel-quota-bar-wrap {
 }
 body.theme-hotel .hotel-quota-bar {
     height: 100%;
-    background: linear-gradient(90deg, #4ade80, #22c55e);
+    background: linear-gradient(90deg, var(--hotel-green), #22c55e);
     border-radius: 4px;
     transition: width .5s ease;
 }
-body.theme-hotel .hotel-quota-bar.is-full { background: linear-gradient(90deg, #f87171, #ef4444); }
+body.theme-hotel .hotel-quota-bar.is-full { background: linear-gradient(90deg, var(--hotel-red), #ef4444); }
 body.theme-hotel .hotel-quota-count {
     font-size: .8rem;
     color: rgba(200,215,230,.6);
@@ -1330,7 +1363,7 @@ body.theme-hotel .hotel-step-body {
 }
 body.theme-hotel .hotel-step-body strong {
     font-size: .88rem;
-    color: #e8eef5;
+    color: var(--hotel-text);
 }
 body.theme-hotel .hotel-step-body small {
     font-size: .75rem;
@@ -1353,7 +1386,7 @@ body.theme-hotel .hotel-inner-cta {
     transition: opacity .15s, transform .1s;
     -webkit-tap-highlight-color: transparent;
     background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
-    color: #0a1a2e;
+    color: var(--hotel-navy);
     margin-bottom: 12px;
     letter-spacing: .02em;
 }
@@ -1447,6 +1480,7 @@ body.theme-hotel .hotel-apply-service-tag {
     text-transform: uppercase;
 }
 body.theme-hotel .hotel-apply-title {
+    font-family: var(--font-display);  /* ★ 풀스크린 모달 포인트 타이틀 */
     font-size: 1rem;
     font-weight: 700;
     color: var(--hotel-gold-light, #e2c97e);
@@ -1515,9 +1549,9 @@ body.theme-hotel .hotel-apply-step--active .hotel-apply-step-label {
     color: var(--hotel-gold-light, #e2c97e);
 }
 body.theme-hotel .hotel-apply-step--done .hotel-apply-step-num {
-    border-color: #4ade80;
+    border-color: var(--hotel-green);
     background: rgba(74,222,128,.15);
-    color: #4ade80;
+    color: var(--hotel-green);
 }
 body.theme-hotel .hotel-apply-step-line {
     width: 60px;
@@ -1566,9 +1600,9 @@ body.theme-hotel .hotel-apply-modal-body .step-badge {
 body.theme-hotel .hotel-apply-modal-body input,
 body.theme-hotel .hotel-apply-modal-body select,
 body.theme-hotel .hotel-apply-modal-body textarea {
-    background: #1a3050 !important;
+    background: var(--hotel-navy-input) !important;
     border-color: rgba(200,168,100,.3) !important;
-    color: #e8eef5 !important;
+    color: var(--hotel-text) !important;
 }
 body.theme-hotel .hotel-apply-modal-body input:focus,
 body.theme-hotel .hotel-apply-modal-body select:focus,
@@ -1577,7 +1611,7 @@ body.theme-hotel .hotel-apply-modal-body textarea:focus {
     box-shadow: 0 0 0 3px rgba(200,168,100,.18) !important;
 }
 body.theme-hotel .hotel-apply-modal-body select option {
-    background: #1a3050;
+    background: var(--hotel-navy-input);
 }
 body.theme-hotel .hotel-apply-modal-body label {
     color: rgba(200,215,230,.8);
@@ -1625,7 +1659,7 @@ body.theme-hotel .hotel-apply-modal-body .terms-box {
     color: rgba(200,215,230,.7);
 }
 body.theme-hotel .hotel-apply-modal-body .terms-section strong {
-    color: #d4e0ec;
+    color: var(--hotel-text-body);
 }
 body.theme-hotel .hotel-apply-modal-body .contract-summary {
     background: rgba(200,168,100,.06);
@@ -1635,4 +1669,53 @@ body.theme-hotel .hotel-apply-modal-body .contract-summary {
 body.theme-hotel .hotel-apply-modal-body .period-notice-box {
     background: rgba(200,168,100,.07);
     border-color: rgba(200,168,100,.25);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   🌐 언어 선택 스위처 — body.theme-hotel 전용
+      위치: .hotel-brand-header 우측 끝 (flex 말단)
+   ════════════════════════════════════════════════════════════════════ */
+body.theme-hotel .hotel-lang-switcher {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;        /* brand-header flex에서 우측 밀기 */
+    flex-shrink: 0;
+}
+
+body.theme-hotel .hotel-lang-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid rgba(200,168,100,.2);
+    background: transparent;
+    color: var(--hotel-text-muted);
+    font-family: var(--font-sans);
+    font-size: .62rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+    cursor: pointer;
+    transition: background .18s, color .18s, border-color .18s;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+}
+
+body.theme-hotel .hotel-lang-btn:hover {
+    background: rgba(200,168,100,.12);
+    color: var(--hotel-gold-light);
+    border-color: rgba(200,168,100,.4);
+}
+
+body.theme-hotel .hotel-lang-btn.is-active {
+    background: var(--hotel-gold);
+    color: var(--hotel-navy);
+    border-color: var(--hotel-gold);
+    font-weight: 700;
+}
+
+body.theme-hotel .hotel-lang-btn:active {
+    transform: scale(.93);
 }
