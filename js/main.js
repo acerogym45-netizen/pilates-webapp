@@ -3628,10 +3628,18 @@ function initHotelMode() {
     if (overlay)   { overlay.setAttribute('aria-hidden', 'false'); overlay.style.display = 'block'; }
     if (quickWrap) quickWrap.style.display = 'none';
 
-    /* 2. CTA 안내 문구 개인화 */
+    /* 2. CTA 안내 문구 개인화
+     *  #hotelCtaIntro 은 안C 구조에서 <h2> 태그이므로
+     *  innerHTML 사용 시 <br> 삽입 가능하나, 단지명만 반영하는 경우
+     *  textContent 로 처리해 XSS 방지. 줄바꿈이 필요한 경우 <br> 허용. */
     const intro = document.getElementById('hotelCtaIntro');
-    if (intro && (complex?.name || complex?.complex_name)) {
-        intro.innerHTML = `${complex.name || complex.complex_name} 피트니스 서비스를<br>아래에서 바로 신청하세요.`;
+    if (intro) {
+        const cName = complex?.name || complex?.complex_name || '';
+        if (cName) {
+            /* <h2> 태그 — innerHTML 허용 (단지명은 서버 검증값) */
+            intro.innerHTML = `${cName} 피트니스에<br>어서 오세요.`;
+        }
+        /* 단지명 없을 때는 기본값("지금 바로 시작하세요") 유지 */
     }
     const lessonDesc = document.getElementById('hotelCtaLessonDesc');
     if (lessonDesc && Array.isArray(complex?.lesson_types) && complex.lesson_types.length) {
@@ -3641,9 +3649,12 @@ function initHotelMode() {
     /* 3. 폼 커스터마이징 */
     _hotelCustomizeForm();
 
-    /* 4. 헤더 서브라인 — 브랜드 헤더가 없을 때만 삽입 (fallback) */
+    /* 4. 헤더 서브라인 — 브랜드 헤더가 없을 때만 삽입 (fallback)
+     *  brandHeaderActive: style.display가 'none' 이거나 빈 문자('')가 아니면 active로 판단
+     *  (0-b 단계에서 flex 로 설정하므로 'flex' | 'block' 등 모두 active) */
     const headerEl = document.querySelector('.header');
-    const brandHeaderActive = document.getElementById('hotelBrandHeader')?.style.display !== 'none';
+    const _bhEl = document.getElementById('hotelBrandHeader');
+    const brandHeaderActive = _bhEl && _bhEl.style.display !== 'none' && _bhEl.style.display !== '';
     if (headerEl && !brandHeaderActive && !headerEl.querySelector('.hotel-header-sub')) {
         const sub = document.createElement('p');
         sub.className = 'hotel-header-sub';
