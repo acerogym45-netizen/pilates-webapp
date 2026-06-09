@@ -350,6 +350,11 @@ function goToPage2() {
         }
     }
     
+    // 호텔 모드: 풀스크린 모달 step indicator Step2 활성화
+    if (complexContext?.isHotel?.()) {
+        _hotelApplySetStep(2);
+    }
+
     // Scroll to top first, then init signature pad
     // (page2가 display:block 된 직후 offsetWidth가 0일 수 있어 rAF로 지연)
     window.scrollTo(0, 0);
@@ -377,7 +382,12 @@ function goToPage1() {
     document.getElementById('pageTitle').textContent = '필라테스 레슨 신청서';
     const subtitleElBack = document.getElementById('pageSubtitle');
     if (subtitleElBack) subtitleElBack.textContent = '커뮤니티 피트니스센터';
-    
+
+    // 호텔 모드: 풀스크린 모달 step indicator Step1 복귀
+    if (complexContext?.isHotel?.()) {
+        _hotelApplySetStep(1);
+    }
+
     // Scroll to top
     window.scrollTo(0, 0);
 }
@@ -3619,11 +3629,19 @@ function initHotelMode() {
         console.log('🏨 Brand header switched to RAMADA × ACEROGYM');
     }
 
-    /* 1. CTA 오버레이 표시 / 아파트 퀵액션 숨김 */
+    /* 1. CTA 오버레이 표시 / 아파트 퀵액션·인라인 폼 섹션 숨김
+     *  ⚠️ page1/page2는 DOM에 남겨두고 visibility만 숨김 —
+     *     기존 폼 submit·signaturePad·goToPage2 등 모든 JS 로직은
+     *     hotelApplyModal 안에서 그대로 재사용함 */
     const overlay   = document.getElementById('hotelCtaOverlay');
     const quickWrap = document.querySelector('.quick-actions-wrap');
+    const page1El   = document.getElementById('page1');
+    const page2El   = document.getElementById('page2');
     if (overlay)   { overlay.setAttribute('aria-hidden', 'false'); overlay.style.display = 'block'; }
     if (quickWrap) quickWrap.style.display = 'none';
+    /* 호텔 모드: 인라인 신청 섹션 숨김 — 풀스크린 모달로 대체 */
+    if (page1El) { page1El.setAttribute('data-hotel-hidden', '1'); page1El.style.display = 'none'; }
+    if (page2El) { page2El.setAttribute('data-hotel-hidden', '1'); page2El.style.display = 'none'; }
 
     /* 2. CTA 안내 문구 개인화 — page_settings > 단지명 > 기본값 우선순위 */
     let ps = {};
@@ -4071,24 +4089,160 @@ function closeRefreshPTModal() {
 }
 
 function applyRefreshPT() {
-    // 리프레시 PT = 투숙객 신청 폼으로 연결
-    // lessonType 셀렉트에서 'pt' 또는 '리프레시' 옵션 우선, 없으면 첫 옵션
+    // 리프레시 PT → 풀스크린 신청 모달로 진입 (refresh 타입)
     closeRefreshPTModal();
+    /* 인너 모달 close 애니메이션(transition ~.3s) 이후 풀스크린 모달 열기 */
+    setTimeout(() => openHotelApplyModal('refresh'), 320);
+}
 
+/* ════════════════════════════════════════════════════════════════════
+   🏨 풀스크린 신청 모달 — openHotelApplyModal() / closeHotelApplyModal()
+      - body.theme-hotel 스코프 전용: 아파트 단지 완전 무영향
+      - page1/page2 DOM을 #hotelApplyBody 로 이동하여 기존 JS 로직 재사용
+   ════════════════════════════════════════════════════════════════════ */
+
+/** 현재 step (1=신청정보, 2=약관·서명) */
+let _hotelApplyCurrentStep = 1;
+/** 서비스 종류: 'class' | 'pt' | 'refresh' */
+let _hotelApplyServiceType = 'class';
+/** page1/page2 원래 부모 — 모달 닫을 때 복구용 */
+let _hotelApplyPage1OrigParent = null;
+let _hotelApplyPage2OrigParent = null;
+
+/**
+ * 풀스크린 신청 모달 열기
+ * @param {string} serviceType  'class' | 'pt' | 'refresh'
+ */
+function openHotelApplyModal(serviceType) {
+    if (!complexContext?.isHotel?.()) return;
+
+    serviceType = serviceType || 'class';
+    _hotelApplyServiceType = serviceType;
+    _hotelApplyCurrentStep = 1;
+
+    const modal = document.getElementById('hotelApplyModal');
+    const body  = document.getElementById('hotelApplyBody');
+    const page1 = document.getElementById('page1');
+    const page2 = document.getElementById('page2');
+    if (!modal || !body || !page1 || !page2) return;
+
+    /* ── 헤더 서비스 태그 / 타이틀 업데이트 ── */
+    const tagMap = {
+        class:   'WELLNESS CLASS',
+        pt:      'PERSONAL TRAINING',
+        refresh: 'REFRESH PT',
+    };
+    const titleMap = {
+        class:   '헬스 클래스 등록',
+        pt:      'PT 예약',
+        refresh: '리프레시 PT 신청',
+    };
+    const tagEl   = document.getElementById('hotelApplyServiceTag');
+    const titleEl = document.getElementById('hotelApplyModalTitle');
+    if (tagEl)   tagEl.textContent   = tagMap[serviceType]   || 'WELLNESS';
+    if (titleEl) titleEl.textContent = titleMap[serviceType] || '피트니스 신청';
+
+    /* ── lessonType 셀렉트 사전 선택 ── */
     const select = document.getElementById('lessonType');
     if (select) {
-        const refreshOpt = Array.from(select.options).find(o =>
-            o.text.includes('리프레시') || o.text.toLowerCase().includes('refresh')
-        );
-        const ptOpt = Array.from(select.options).find(o =>
-            o.text.toLowerCase().includes('pt') || o.text.includes('피티')
-        );
-        if (refreshOpt) select.value = refreshOpt.value;
-        else if (ptOpt)  select.value = ptOpt.value;
+        const findOpt = (kw) => Array.from(select.options).find(o =>
+            o.text.toLowerCase().includes(kw.toLowerCase()));
+        if (serviceType === 'refresh') {
+            const opt = findOpt('리프레시') || findOpt('refresh') || findOpt('pt');
+            if (opt) select.value = opt.value;
+        } else if (serviceType === 'pt') {
+            const opt = findOpt('pt') || findOpt('피티');
+            if (opt) select.value = opt.value;
+        }
     }
 
-    document.getElementById('page1')?.scrollIntoView({ behavior: 'smooth' });
-    _showHotelToast('⚡ 리프레시 PT 예약\n아래 신청 폼을 작성해 주세요.');
+    /* ── page1/page2 원래 부모 저장 → #hotelApplyBody 로 이동 ── */
+    if (!_hotelApplyPage1OrigParent) _hotelApplyPage1OrigParent = page1.parentElement;
+    if (!_hotelApplyPage2OrigParent) _hotelApplyPage2OrigParent = page2.parentElement;
+
+    page1.style.display = 'block';
+    page2.style.display = 'none';
+    body.appendChild(page1);
+    body.appendChild(page2);
+
+    /* ── step indicator 초기화 ── */
+    _hotelApplySetStep(1);
+
+    /* ── 슬라이드업 오픈 애니메이션 ── */
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            modal.classList.add('is-open');
+        });
+    });
+    body.scrollTop = 0;
+}
+
+/** 풀스크린 신청 모달 닫기 */
+function closeHotelApplyModal() {
+    const modal = document.getElementById('hotelApplyModal');
+    if (!modal) return;
+
+    modal.classList.remove('is-open');
+
+    const onEnd = (e) => {
+        /* transform transition 이 끝날 때만 처리 */
+        if (e && e.propertyName !== 'transform') return;
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+
+        /* page1/page2 원래 위치로 복구 + 다시 숨김 */
+        const page1 = document.getElementById('page1');
+        const page2 = document.getElementById('page2');
+        if (page1 && _hotelApplyPage1OrigParent) {
+            page1.style.display = 'none';
+            _hotelApplyPage1OrigParent.appendChild(page1);
+        }
+        if (page2 && _hotelApplyPage2OrigParent) {
+            page2.style.display = 'none';
+            _hotelApplyPage2OrigParent.appendChild(page2);
+        }
+
+        modal.removeEventListener('transitionend', onEnd);
+    };
+    modal.addEventListener('transitionend', onEnd);
+}
+
+/**
+ * 모달 뒤로가기 버튼 핸들러
+ * - Step2: Step1으로 복귀 (goToPage1 재사용)
+ * - Step1: 모달 닫고 바텀시트 복귀
+ */
+function hotelApplyGoBack() {
+    if (_hotelApplyCurrentStep === 2) {
+        goToPage1(); /* goToPage1() 내부에서 _hotelApplySetStep(1) 호출됨 */
+    } else {
+        closeHotelApplyModal();
+        /* 애니메이션 끝나면 바텀시트 복귀 (350ms transition 맞춤) */
+        setTimeout(openHotelServiceSheet, 360);
+    }
+}
+
+/**
+ * 호텔 모달 step indicator 업데이트
+ * @param {number} step  1 또는 2
+ */
+function _hotelApplySetStep(step) {
+    _hotelApplyCurrentStep = step;
+    const s1 = document.getElementById('hotelApplyStep1Dot');
+    const s2 = document.getElementById('hotelApplyStep2Dot');
+    if (!s1 || !s2) return;
+    if (step === 1) {
+        s1.className = 'hotel-apply-step hotel-apply-step--active';
+        s2.className = 'hotel-apply-step';
+    } else {
+        s1.className = 'hotel-apply-step hotel-apply-step--done';
+        s2.className = 'hotel-apply-step hotel-apply-step--active';
+    }
+    /* 바디 스크롤 최상단 복귀 */
+    const bodyEl = document.getElementById('hotelApplyBody');
+    if (bodyEl) bodyEl.scrollTop = 0;
 }
 
 /* ── 공통 토스트 알림 ── */
