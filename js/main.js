@@ -3625,25 +3625,66 @@ function initHotelMode() {
     if (overlay)   { overlay.setAttribute('aria-hidden', 'false'); overlay.style.display = 'block'; }
     if (quickWrap) quickWrap.style.display = 'none';
 
-    /* 2. CTA 안내 문구 개인화
-     *  #hotelCtaIntro 은 안C 구조에서 <h2> 태그이므로
-     *  innerHTML 사용 시 <br> 삽입 가능하나, 단지명만 반영하는 경우
-     *  textContent 로 처리해 XSS 방지. 줄바꿈이 필요한 경우 <br> 허용. */
+    /* 2. CTA 안내 문구 개인화 — page_settings > 단지명 > 기본값 우선순위 */
+    let ps = {};
+    try { if (complex?.page_settings) ps = JSON.parse(complex.page_settings); } catch(e) {}
+
     const intro = document.getElementById('hotelCtaIntro');
     if (intro) {
-        const cName = complex?.name || complex?.complex_name || '';
-        if (cName) {
-            /* <h2> 태그 — innerHTML 허용 (단지명은 서버 검증값) */
-            intro.innerHTML = `${cName} 피트니스에<br>어서 오세요.`;
+        if (ps.hero_title) {
+            intro.innerHTML = ps.hero_title;
         } else {
-            /* 단지명 없을 때 호텔측 공식 상호명으로 표시 */
-            intro.innerHTML = '아세로짐 대전 라마다호텔점<br>피트니스에 어서 오세요.';
+            const cName = complex?.name || complex?.complex_name || '';
+            intro.innerHTML = cName
+                ? `${cName}에<br>어서 오세요.`
+                : '아세로짐 대전 라마다호텔점에<br>어서 오세요.';
         }
     }
+
+    /* 헬스 클래스 설명: page_settings > lesson_types > 기본값 */
     const lessonDesc = document.getElementById('hotelCtaLessonDesc');
-    if (lessonDesc && Array.isArray(complex?.lesson_types) && complex.lesson_types.length) {
-        lessonDesc.textContent = complex.lesson_types.slice(0, 3).join(' · ');
+    if (lessonDesc) {
+        if (ps.lesson_desc) {
+            lessonDesc.textContent = ps.lesson_desc;
+        } else if (Array.isArray(complex?.lesson_types) && complex.lesson_types.length) {
+            lessonDesc.textContent = complex.lesson_types.slice(0, 3).join(' · ');
+        }
     }
+
+    /* PT 타이틀/설명 */
+    const ptCard = document.getElementById('hotelCtaPT');
+    if (ptCard) {
+        if (ps.pt_title) {
+            const t = ptCard.querySelector('.hotel-cta-title');
+            if (t) t.textContent = ps.pt_title;
+        }
+        if (ps.pt_desc) {
+            const d = ptCard.querySelector('.hotel-cta-desc');
+            if (d) d.textContent = ps.pt_desc;
+        }
+    }
+
+    /* 서브 서비스 버튼 레이블 & 표시 여부 */
+    const subBtnMap = [
+        ['psInquiryLabel',  'show_inquiry',   'inquiry_label',   0],
+        ['psTimetableLabel','show_timetable',  'timetable_label', 1],
+        ['psProgramLabel',  'show_program',    'program_label',   2],
+        ['psTrainerLabel',  'show_trainer',    'trainer_label',   3],
+        ['psNoticeLabel',   'show_notice',     'notice_label',    4],
+        ['psContactLabel',  'show_contact',    'contact_label',   5],
+    ];
+    const subBtns = document.querySelectorAll('#hotelSubActions .hotel-sub-btn');
+    subBtnMap.forEach(([, showKey, labelKey, idx]) => {
+        const btn = subBtns[idx];
+        if (!btn) return;
+        if (ps[showKey] === false) {
+            btn.style.display = 'none';
+        }
+        if (ps[labelKey]) {
+            const span = btn.querySelector('span');
+            if (span) span.textContent = ps[labelKey];
+        }
+    });
 
     /* 3. 폼 커스터마이징 */
     _hotelCustomizeForm();

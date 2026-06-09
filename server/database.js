@@ -224,6 +224,19 @@ function initializeSchema() {
         database.exec(`ALTER TABLE cancellations ADD COLUMN request_type TEXT DEFAULT 'cancel'`);
     }
 
+    // ─── 마이그레이션: complexes 테이블에 page_settings JSON 컬럼 추가 ───────
+    // 입주민 페이지 화면 설정값(타이틀·섹션 텍스트 등)을 JSON 으로 저장
+    const complexCols = database.prepare("PRAGMA table_info(complexes)").all().map(c => c.name);
+    if (!complexCols.includes('page_settings')) {
+        database.exec(`ALTER TABLE complexes ADD COLUMN page_settings TEXT DEFAULT NULL`);
+    }
+    if (!complexCols.includes('venue_type')) {
+        database.exec(`ALTER TABLE complexes ADD COLUMN venue_type TEXT DEFAULT 'apartment'`);
+    }
+    if (!complexCols.includes('theme_name')) {
+        database.exec(`ALTER TABLE complexes ADD COLUMN theme_name TEXT DEFAULT 'default'`);
+    }
+
     console.log('✅ Database schema initialized');
 }
 
