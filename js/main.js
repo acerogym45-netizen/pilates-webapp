@@ -3641,7 +3641,14 @@ function initHotelMode() {
         }
     }
 
-    /* 헬스 클래스 설명: page_settings > lesson_types > 기본값 */
+    /* 헬스 클래스 타이틀/설명: page_settings 우선 */
+    const lessonCard = document.getElementById('hotelCtaLesson');
+    if (lessonCard) {
+        if (ps.lesson_title) {
+            const t = lessonCard.querySelector('.hotel-cta-title');
+            if (t) t.textContent = ps.lesson_title;
+        }
+    }
     const lessonDesc = document.getElementById('hotelCtaLessonDesc');
     if (lessonDesc) {
         if (ps.lesson_desc) {
@@ -3662,6 +3669,22 @@ function initHotelMode() {
             const d = ptCard.querySelector('.hotel-cta-desc');
             if (d) d.textContent = ps.pt_desc;
         }
+    }
+
+    /* 예약 조회·변경 타이틀 (hotel-cta-card--muted) */
+    if (ps.booking_title) {
+        const bookingCards = document.querySelectorAll('.hotel-cta-card--muted .hotel-cta-title');
+        if (bookingCards.length) bookingCards[0].textContent = ps.booking_title;
+    }
+
+    /* 아웃라인 버튼 레이블: 내 신청 내역 조회·변경 / 이용 해지 신청 */
+    if (ps.manage_label) {
+        const manageBtn = document.querySelector('.hotel-outline-btn:not(.hotel-outline-btn--cancel) span');
+        if (manageBtn) manageBtn.textContent = ps.manage_label;
+    }
+    if (ps.cancel_label) {
+        const cancelBtn = document.querySelector('.hotel-outline-btn--cancel span');
+        if (cancelBtn) cancelBtn.textContent = ps.cancel_label;
     }
 
     /* 서브 서비스 버튼 레이블 & 표시 여부 */
