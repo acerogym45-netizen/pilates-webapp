@@ -741,6 +741,11 @@ async function loadTimeSlotStatus() {
             console.warn('⚠️ Complex code not available for time slot status');
             return;
         }
+
+        // ── share_timeslot_capacity 설정 확인 ─────────────────────────────
+        // true이면 같은 days(요일)를 공유하는 프로그램끼리 시간대 정원 합산
+        const shareTimeslot = complexContext.getComplex()?.share_timeslot_capacity === true;
+        console.log('🔗 share_timeslot_capacity:', shareTimeslot);
         
         // Load programs to get group lesson programs
         const programsResponse = await fetch(`/api/programs?complexCode=${complexCode}&activeOnly=true`);
@@ -758,8 +763,18 @@ async function loadTimeSlotStatus() {
         
         console.log('📊 Loading time slot status...');
         console.log('Total contracts for complex:', contracts.length);
-        console.log('Group lesson programs:', programs.map(p => p.program_name));
+        console.log('Group lesson programs:', programs.map(p => p.name || p.program_name));
         
+        // ── preferred_time을 HH:MM 정규화 후 카운팅 ──────────────────────
+        // 정규화: '저녁 21시' / '21시' / '21:00' → '21:00'
+        function normalizeToHHMM(raw) {
+            if (!raw) return null;
+            if (/^\d{2}:\d{2}$/.test(raw)) return raw;
+            const m = raw.match(/(\d{1,2})시/);
+            if (m) return String(parseInt(m[1])).padStart(2,'0') + ':00';
+            return null;
+        }
+
         // ── 키를 HH:MM 형식으로 통일 (DB preferred_time과 동일한 형식)
         // programTimeSlots = { programName: { 'HH:MM': count, ... } }
         const programTimeSlots = {};
@@ -767,8 +782,9 @@ async function loadTimeSlotStatus() {
         const DEFAULT_SLOTS = ['09:00','10:00','11:00','12:00','13:00','14:00',
                                '15:00','16:00','17:00','18:00','19:00','20:00','21:00'];
 
+        // 각 프로그램의 빈 슬롯 맵 초기화
         programs.forEach(program => {
-            const availableSlots = program.available_time_slots || [];
+            const availableSlots = program.time_slots || program.available_time_slots || [];
             const timeSlotCounts = {};
             const slots = availableSlots.length > 0 ? availableSlots : DEFAULT_SLOTS;
             slots.forEach(t => { timeSlotCounts[t] = 0; });
@@ -776,18 +792,11 @@ async function loadTimeSlotStatus() {
             programTimeSlots[pKey] = timeSlotCounts;
         });
 
-        // ── preferred_time을 HH:MM 정규화 후 카운팅 ──────────────────────
-        // 정규화: '저녁 21시' / '21시' / '21:00' → '21:00'
-        function normalizeToHHMM(raw) {
-            if (!raw) return null;
-            // 이미 HH:MM 형식
-            if (/^\d{2}:\d{2}$/.test(raw)) return raw;
-            // '오전 09시', '저녁 21시' 등 한글 포함
-            const m = raw.match(/(\d{1,2})시/);
-            if (m) return String(parseInt(m[1])).padStart(2,'0') + ':00';
-            return null;
-        }
+        // ── 프로그램명 → program 객체 조회 헬퍼 ─────────────────────────
+        const programByName = {};
+        programs.forEach(p => { programByName[p.name || p.program_name] = p; });
 
+        // ── 계약별 카운팅 ─────────────────────────────────────────────────
         contracts.forEach(contract => {
             if (contract.status !== 'approved') return;
             const rawTime = contract.preferred_time;
@@ -809,6 +818,47 @@ async function loadTimeSlotStatus() {
                 }
             }
         });
+
+        // ── share_timeslot_capacity=true: 같은 days 그룹 내 카운트 합산 ──
+        // 예) 8회반(월수)과 24회반(월수)은 같은 요일→ 시간대 정원 공유
+        // → 두 프로그램의 각 시간대 카운트를 합산한 값을 양쪽에 모두 적용
+        if (shareTimeslot) {
+            // days 값으로 그룹화
+            const dayGroups = {}; // { 'days_value': [pKey, ...] }
+            programs.forEach(p => {
+                const pKey  = p.name || p.program_name;
+                const days  = (p.days || '').trim();
+                if (!days) return; // days 없는 프로그램은 단독 처리
+                if (!dayGroups[days]) dayGroups[days] = [];
+                dayGroups[days].push(pKey);
+            });
+
+            // 각 그룹별: 모든 슬롯 키 수집 → 합산 → 전파
+            Object.entries(dayGroups).forEach(([days, pKeys]) => {
+                if (pKeys.length <= 1) return; // 단독 그룹은 합산 불필요
+
+                // 이 그룹 내 모든 슬롯 키 수집
+                const allTimeKeys = new Set();
+                pKeys.forEach(k => {
+                    Object.keys(programTimeSlots[k] || {}).forEach(t => allTimeKeys.add(t));
+                });
+
+                // 슬롯별 합산
+                allTimeKeys.forEach(t => {
+                    const total = pKeys.reduce((sum, k) => {
+                        return sum + ((programTimeSlots[k] && programTimeSlots[k][t]) || 0);
+                    }, 0);
+                    // 그룹 내 모든 프로그램에 합산값 전파
+                    pKeys.forEach(k => {
+                        if (programTimeSlots[k] && Object.prototype.hasOwnProperty.call(programTimeSlots[k], t)) {
+                            programTimeSlots[k][t] = total;
+                        }
+                    });
+                });
+
+                console.log(`🔗 [share] days='${days}' 그룹 [${pKeys.join(', ')}] 합산 완료`);
+            });
+        }
         
         console.log('📈 Final counts by program and time:', programTimeSlots);
 
@@ -5035,8 +5085,11 @@ function _i18n(key) {
     return dict[key] !== undefined ? dict[key] : '';
 }
 
-/** data-i18n 속성으로 텍스트 일괄 교체 */
+/** data-i18n 속성으로 텍스트 일괄 교체 (호텔 모드 전용) */
 function _applyHotelI18n() {
+    /* 방어 가드: 호텔 모드가 아닌 경우 절대 실행하지 않음 */
+    if (!complexContext?.isHotel?.()) return;
+
     const dict = _hotelI18n[_hotelLang] || _hotelI18n.ko;
 
     /* textContent 교체 (HTML 마크업 포함 키는 innerHTML로) */
