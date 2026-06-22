@@ -592,6 +592,29 @@
                 </button>
             </div>
 
+            <!-- ══ 헬스장 모드 전용 2×2 퀵액션 그리드 (기본 숨김) ══
+                 내 문의 조회 | 문의하기
+                 커리큘럼     | 강사 소개
+            -->
+            <div id="quickGymGrid" class="quick-gym-grid" style="display:none">
+                <button class="quick-gym-btn quick-gym-btn--inquiry" onclick="showMyInquiryModal()">
+                    <i class="fas fa-search"></i>
+                    <span>내 문의 조회</span>
+                </button>
+                <button class="quick-gym-btn quick-gym-btn--write" onclick="showInquiryForm()">
+                    <i class="fas fa-pen-to-square"></i>
+                    <span>문의하기</span>
+                </button>
+                <button class="quick-gym-btn quick-gym-btn--curriculum" onclick="showCurriculumModal()">
+                    <i class="fas fa-calendar-alt"></i>
+                    <span>커리큘럼</span>
+                </button>
+                <button class="quick-gym-btn quick-gym-btn--instructor" onclick="openInstructorsModal()">
+                    <i class="fas fa-user-tie"></i>
+                    <span>강사 소개</span>
+                </button>
+            </div>
+
         </div>
 
         <!-- 공지사항 -->
@@ -710,86 +733,103 @@
                     </div>
                 </fieldset>
 
-                <!-- ── 헬스장 모드 전용 설문 섹션 (gym_mode=true 시 표시) ── -->
-                <fieldset class="form-fieldset" id="gymSurveySection" style="display:none">
-                    <legend><i class="fas fa-clipboard-list"></i> 운동 설문 <span style="font-size:.78rem;font-weight:400;color:#888">(선택 입력)</span></legend>
+                <!-- ── 헬스장 모드 전용 설문 섹션 (gym_mode=true 시 표시, 기본 접힘) ── -->
+                <div id="gymSurveySection" style="display:none;margin-bottom:8px">
 
-                    <div class="form-row">
+                    <!-- 토글 헤더 (클릭하면 펼침/접힘) -->
+                    <button type="button" id="gymSurveyToggle" class="survey-toggle-btn" onclick="toggleGymSurvey()" aria-expanded="false">
+                        <span class="survey-toggle-left">
+                            <i class="fas fa-clipboard-list"></i>
+                            <span class="survey-toggle-title">운동 설문</span>
+                            <span class="survey-toggle-badge">선택 입력</span>
+                        </span>
+                        <span class="survey-toggle-right">
+                            <span id="gymSurveyToggleHint" class="survey-toggle-hint">작성하면 강사가 맞춤 지도에 활용합니다</span>
+                            <i id="gymSurveyChevron" class="fas fa-chevron-down survey-toggle-chevron"></i>
+                        </span>
+                    </button>
+
+                    <!-- 접히는 본문 (기본 hidden) -->
+                    <div id="gymSurveyBody" class="survey-body" style="display:none">
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="surveyGender">성별</label>
+                                <select id="surveyGender">
+                                    <option value="">선택</option>
+                                    <option value="male">남성</option>
+                                    <option value="female">여성</option>
+                                    <option value="other">기타</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="surveyAge">나이</label>
+                                <input type="number" id="surveyAge" placeholder="예: 32" min="1" max="120" inputmode="numeric">
+                            </div>
+                        </div>
+
                         <div class="form-group">
-                            <label for="surveyGender">성별</label>
-                            <select id="surveyGender">
+                            <label>운동 목적 <span style="font-size:.78rem;color:#888">(복수 선택 가능)</span></label>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px" id="surveyGoalWrap">
+                                <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="diet"> 다이어트</label>
+                                <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="muscle"> 근육량 증가</label>
+                                <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="posture"> 체형 교정</label>
+                                <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="rehab"> 재활·통증 완화</label>
+                                <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="health"> 건강 유지</label>
+                                <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="flexibility"> 유연성 향상</label>
+                                <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="stress"> 스트레스 해소</label>
+                                <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="sport"> 스포츠 퍼포먼스</label>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="surveyCareer">운동 경력</label>
+                            <select id="surveyCareer">
                                 <option value="">선택</option>
-                                <option value="male">남성</option>
-                                <option value="female">여성</option>
-                                <option value="other">기타</option>
+                                <option value="none">없음 (완전 초보)</option>
+                                <option value="under6m">6개월 미만</option>
+                                <option value="6m1y">6개월 ~ 1년</option>
+                                <option value="1y3y">1년 ~ 3년</option>
+                                <option value="over3y">3년 이상</option>
                             </select>
                         </div>
+
                         <div class="form-group">
-                            <label for="surveyAge">나이</label>
-                            <input type="number" id="surveyAge" placeholder="예: 32" min="1" max="120" inputmode="numeric">
+                            <label for="surveyMedical">병력 / 부상 이력 <span style="font-size:.78rem;color:#888">(해당 사항 입력)</span></label>
+                            <textarea id="surveyMedical" rows="2"
+                                      placeholder="예: 허리 디스크 수술 (2022), 무릎 인대 부상, 고혈압 등&#10;없으면 비워두세요"></textarea>
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="surveyGoal">운동 목적 <span style="font-size:.78rem;color:#888">(복수 선택 가능)</span></label>
-                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px" id="surveyGoalWrap">
-                            <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="diet"> 다이어트</label>
-                            <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="muscle"> 근육량 증가</label>
-                            <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="posture"> 체형 교정</label>
-                            <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="rehab"> 재활·통증 완화</label>
-                            <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="health"> 건강 유지</label>
-                            <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="flexibility"> 유연성 향상</label>
-                            <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="stress"> 스트레스 해소</label>
-                            <label class="survey-chip"><input type="checkbox" name="surveyGoal" value="sport"> 스포츠 퍼포먼스</label>
+                        <div class="form-group">
+                            <label for="surveyPreferTime">선호 운동 시간대</label>
+                            <select id="surveyPreferTime">
+                                <option value="">선택</option>
+                                <option value="morning">오전 (06:00~12:00)</option>
+                                <option value="afternoon">오후 (12:00~18:00)</option>
+                                <option value="evening">저녁 (18:00~22:00)</option>
+                                <option value="flexible">무관</option>
+                            </select>
                         </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="surveyCareer">운동 경력</label>
-                        <select id="surveyCareer">
-                            <option value="">선택</option>
-                            <option value="none">없음 (완전 초보)</option>
-                            <option value="under6m">6개월 미만</option>
-                            <option value="6m1y">6개월 ~ 1년</option>
-                            <option value="1y3y">1년 ~ 3년</option>
-                            <option value="over3y">3년 이상</option>
-                        </select>
-                    </div>
+                        <div class="form-group">
+                            <label for="surveyFrequency">주 운동 희망 횟수</label>
+                            <select id="surveyFrequency">
+                                <option value="">선택</option>
+                                <option value="1">주 1회</option>
+                                <option value="2">주 2회</option>
+                                <option value="3">주 3회</option>
+                                <option value="4">주 4회 이상</option>
+                            </select>
+                        </div>
 
-                    <div class="form-group">
-                        <label for="surveyMedical">병력 / 부상 이력 <span style="font-size:.78rem;color:#888">(해당 사항 입력)</span></label>
-                        <textarea id="surveyMedical" rows="2"
-                                  placeholder="예: 허리 디스크 수술 (2022), 무릎 인대 부상, 고혈압 등&#10;없으면 비워두세요"></textarea>
-                    </div>
+                        <div class="form-group">
+                            <label for="surveyEtc">특이사항 / 강사에게 전달할 내용</label>
+                            <textarea id="surveyEtc" rows="2"
+                                      placeholder="임신 중, 최근 수술, 알레르기, 기타 요청사항 등"></textarea>
+                        </div>
 
-                    <div class="form-group">
-                        <label for="surveyPreferTime">선호 운동 시간대</label>
-                        <select id="surveyPreferTime">
-                            <option value="">선택</option>
-                            <option value="morning">오전 (06:00~12:00)</option>
-                            <option value="afternoon">오후 (12:00~18:00)</option>
-                            <option value="evening">저녁 (18:00~22:00)</option>
-                            <option value="flexible">무관</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="surveyFrequency">주 운동 희망 횟수</label>
-                        <select id="surveyFrequency">
-                            <option value="">선택</option>
-                            <option value="1">주 1회</option>
-                            <option value="2">주 2회</option>
-                            <option value="3">주 3회</option>
-                            <option value="4">주 4회 이상</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label for="surveyEtc">특이사항 / 강사에게 전달할 내용</label>
-                        <textarea id="surveyEtc" rows="2"
-                                  placeholder="임신 중, 최근 수술, 알레르기, 기타 요청사항 등"></textarea>
-                    </div>
-                </fieldset>
+                    </div><!-- /#gymSurveyBody -->
+                </div><!-- /#gymSurveySection -->
 
                 <!-- ── 예약금 안내 배너 (gym_mode + deposit_enabled 시 표시) ── -->
                 <div id="gymDepositBanner" style="display:none;background:linear-gradient(135deg,#fff7ed,#ffedd5);

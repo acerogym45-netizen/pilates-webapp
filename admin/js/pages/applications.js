@@ -646,6 +646,40 @@ ${(() => {
                     <label>서명</label>
                     <img src="${a.signature_data}" alt="서명" style="max-width:200px;border:1px solid #eee;border-radius:6px">
                 </div>` : ''}
+                ${(() => {
+                    const sd = a.survey_data;
+                    if (!sd || typeof sd !== 'object' || !Object.keys(sd).some(k => sd[k] && (Array.isArray(sd[k]) ? sd[k].length : true))) return '';
+
+                    // 레이블 맵
+                    const genderMap  = { male: '남성', female: '여성', other: '기타' };
+                    const careerMap  = { none: '없음(완전 초보)', under6m: '6개월 미만', '6m1y': '6개월~1년', '1y3y': '1~3년', over3y: '3년 이상' };
+                    const timeMap    = { morning: '오전(06~12시)', afternoon: '오후(12~18시)', evening: '저녁(18~22시)', flexible: '무관' };
+                    const freqMap    = { '1': '주 1회', '2': '주 2회', '3': '주 3회', '4': '주 4회 이상' };
+                    const goalMap    = { diet: '다이어트', muscle: '근육량 증가', posture: '체형 교정', rehab: '재활·통증 완화', health: '건강 유지', flexibility: '유연성 향상', stress: '스트레스 해소', sport: '스포츠 퍼포먼스' };
+
+                    const rows = [];
+                    if (sd.gender)      rows.push(`<tr><th>성별</th><td>${escHtml(genderMap[sd.gender] || sd.gender)}</td></tr>`);
+                    if (sd.age)         rows.push(`<tr><th>나이</th><td>${escHtml(String(sd.age))}세</td></tr>`);
+                    if (Array.isArray(sd.goal) && sd.goal.length)
+                                        rows.push(`<tr><th>운동 목적</th><td>${sd.goal.map(g => `<span style="display:inline-block;background:#e0e7ff;color:#3730a3;border-radius:12px;padding:2px 9px;font-size:.78rem;font-weight:600;margin:2px 2px 0 0">${escHtml(goalMap[g]||g)}</span>`).join('')}</td></tr>`);
+                    if (sd.career)      rows.push(`<tr><th>운동 경력</th><td>${escHtml(careerMap[sd.career] || sd.career)}</td></tr>`);
+                    if (sd.medical)     rows.push(`<tr><th>병력/부상</th><td style="white-space:pre-wrap">${escHtml(sd.medical)}</td></tr>`);
+                    if (sd.prefer_time) rows.push(`<tr><th>선호 시간대</th><td>${escHtml(timeMap[sd.prefer_time] || sd.prefer_time)}</td></tr>`);
+                    if (sd.frequency)   rows.push(`<tr><th>주 운동 횟수</th><td>${escHtml(freqMap[sd.frequency] || sd.frequency)}</td></tr>`);
+                    if (sd.etc)         rows.push(`<tr><th>특이사항</th><td style="white-space:pre-wrap">${escHtml(sd.etc)}</td></tr>`);
+
+                    if (!rows.length) return '';
+                    return `
+                    <div class="detail-row full" style="margin-top:6px">
+                        <label style="color:#16a34a"><i class="fas fa-clipboard-list"></i> 운동 설문</label>
+                        <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:.83rem">
+                            <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+                            <tbody>
+                                ${rows.join('')}
+                            </tbody>
+                        </table>
+                    </div>`;
+                })()}
             </div>`;
 
         const footerHtml = `
