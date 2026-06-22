@@ -553,7 +553,7 @@
             <!-- 2행: 시간표 / 커리큘럼 / 강사 소개 / 공지사항 / 문의하기 -->
             <!-- show_inquiry=false 단지는 JS에서 quick-row--four로 전환 + 문의하기 버튼 숨김 -->
             <div class="quick-row quick-row--five" id="quickRowFive">
-                <button class="quick-btn quick-btn--timetable" onclick="showTimetableModal()">
+                <button class="quick-btn quick-btn--timetable" id="quickBtnTimetable" onclick="showTimetableModal()">
                     <i class="fas fa-table"></i>
                     <span>시간표</span>
                 </button>
@@ -577,7 +577,7 @@
 
             <!-- 3행: 내 신청 조회·취소·변경 / 해지 신청 -->
             <div class="quick-row quick-row--two">
-                <button class="quick-btn quick-btn--accent" onclick="showMyManageModal()">
+                <button class="quick-btn quick-btn--accent" id="quickBtnManage" onclick="showMyManageModal()">
                     <i class="fas fa-list-check"></i>
                     <span>내 신청 조회·취소·변경</span>
                 </button>
