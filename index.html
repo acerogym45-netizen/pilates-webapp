@@ -1872,29 +1872,32 @@
                             </div>
                         </div>` : '';
 
-                    // 리뷰 토글 (gym_mode 전용)
+                    // 리뷰 토글 (gym_mode 전용 — 이미지 묶음 표시)
                     const reviewList = Array.isArray(ins.reviews) ? ins.reviews : [];
+                    // photos 배열이 있는 묶음만 필터
+                    const validReviews = reviewList.filter(rv => Array.isArray(rv.photos) && rv.photos.length > 0);
+                    // 전체 리뷰 사진 배열 (슬라이드쇼용)
+                    const allReviewPhotos = validReviews.flatMap(rv => rv.photos);
                     const reviewToggleId = `instrReview_${insIdx}`;
-                    const reviewToggleHtml = (isGymMode && reviewList.length > 0) ? `
+                    const reviewToggleHtml = (isGymMode && validReviews.length > 0) ? `
                         <button class="instr-toggle-btn" id="${reviewToggleId}_btn"
                                 onclick="toggleInstrSection('${reviewToggleId}')">
-                            <span><i class="fas fa-star" style="color:#f59e0b;margin-right:5px"></i>회원 리뷰 <span style="color:#9ca3af;font-weight:400">(${reviewList.length}건)</span></span>
+                            <span><i class="fas fa-images" style="color:#16a34a;margin-right:5px"></i>회원 리뷰 <span style="color:#9ca3af;font-weight:400">(${allReviewPhotos.length}장)</span></span>
                             <i class="fas fa-chevron-down toggle-arrow"></i>
                         </button>
                         <div class="instr-toggle-body" id="${reviewToggleId}_body">
                             <div class="instr-review-list">
-                                ${reviewList.map(rv => `
-                                    <div class="instr-review-card">
-                                        <div class="instr-review-stars">${'★'.repeat(rv.rating || 5)}</div>
-                                        <div class="instr-review-text">${escapeHtml(rv.text || '')}</div>
-                                        ${(rv.photos||[]).length > 0 ? `
-                                        <div class="instr-review-photos">
-                                            ${(rv.photos||[]).map((p,pi) => `
+                                ${validReviews.map((rv, ri) => {
+                                    // 이 묶음 사진들의 전체 배열 내 시작 인덱스
+                                    const startIdx = validReviews.slice(0, ri).reduce((acc, r) => acc + r.photos.length, 0);
+                                    return `<div class="instr-review-card">
+                                        <div class="instr-review-photos" style="flex-wrap:wrap">
+                                            ${rv.photos.map((p, pi) => `
                                                 <img src="${escapeHtml(p)}" alt="리뷰 사진"
-                                                     onclick="showInstructorImages(${JSON.stringify(rv.photos)},${pi})">`).join('')}
-                                        </div>` : ''}
-                                        ${rv.author ? `<div class="instr-review-author">— ${escapeHtml(rv.author)}</div>` : ''}
-                                    </div>`).join('')}
+                                                     onclick="showInstructorImages(${JSON.stringify(allReviewPhotos)},${startIdx + pi})">`).join('')}
+                                        </div>
+                                    </div>`;
+                                }).join('')}
                             </div>
                         </div>` : '';
 

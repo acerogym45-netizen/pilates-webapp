@@ -3674,8 +3674,8 @@ function _renderGymCurriculumTable() {
     const content = document.getElementById('curriculumContent');
     if (!content) return;
 
-    // ACERO 브랜드 로고 URL (이모지 대신 공통 로고 사용)
-    const LOGO_URL = 'https://www.genspark.ai/api/files/s/F4AGFmBo';
+    // ACERO 브랜드 로고 — SVG 인라인 base64 (외부 URL 의존성 없음)
+    const LOGO_URL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgODAiPgogIDxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iODAiIGZpbGw9IiMwZDBkMGQiLz4KICA8dGV4dCB4PSIxMDAiIHk9IjQ0IiBmb250LWZhbWlseT0iQXJpYWwgQmxhY2ssQXJpYWwsc2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjkwMCIKICAgICAgICBmb250LXNpemU9IjM2IiBmaWxsPSIjYzBjMGMwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBsZXR0ZXItc3BhY2luZz0iMiIKICAgICAgICBzdHlsZT0icGFpbnQtb3JkZXI6c3Ryb2tlIiBzdHJva2U9IiM4ODgiIHN0cm9rZS13aWR0aD0iMC41Ij5BY2VybzwvdGV4dD4KICA8dGV4dCB4PSIxMDAiIHk9IjYyIiBmb250LWZhbWlseT0iQXJpYWwsc2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjQwMCIKICAgICAgICBmb250LXNpemU9IjgiIGZpbGw9IiM3NzciIHRleHQtYW5jaG9yPSJtaWRkbGUiIGxldHRlci1zcGFjaW5nPSIyIj5UUkFJTiBESUZGRVJFTlQgwrcgTEVBRCBTVFJPTkc8L3RleHQ+Cjwvc3ZnPg==';
 
     // ─── 데이터 정의 ────────────────────────────────────────────────────────
     // 구조: { goalKey, color, label, sessions: [ { count, title, phases } ] }
