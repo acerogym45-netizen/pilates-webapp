@@ -47,6 +47,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // 3-1. 해지 신청 버튼 표시 여부 적용 (show_cancel_tab 설정)
     applyCancelTabVisibility();
+
+    // 3-2. 헬스장 모드 적용 (gym_mode=true 이면 동/호수 숨김)
+    applyGymMode();
     
     // 4. 나머지 초기화
     setupEventListeners();
@@ -102,6 +105,35 @@ function applyCancelTabVisibility() {
     if (!show) {
         if (btnCancelTab) btnCancelTab.style.display = 'none';
     }
+}
+
+// ── 헬스장 모드: 동/호수 입력 칸 숨김 ──────────────────────────────────
+// complexes.gym_mode = true 이면 동·호수 필드(+확인 필드) 전체 숨김
+// handlePage1Submit()에서도 검증 우회 처리
+function applyGymMode() {
+    const complex = complexContext?.getComplex?.();
+    const gymMode = complex?.gym_mode === true;
+    if (!gymMode) return; // false/null/undefined: 기존 표시 그대로
+
+    // 동/호수 입력 행 전체 숨기기 (dong 필드의 부모 form-row)
+    const dongEl = document.getElementById('dong');
+    const dongHoRow = dongEl?.closest('.form-row');
+    if (dongHoRow) dongHoRow.style.display = 'none';
+
+    // 동/호수 확인 행 숨기기
+    const dongHoConfirmRow = document.getElementById('dongHoConfirmRow');
+    if (dongHoConfirmRow) dongHoConfirmRow.style.display = 'none';
+
+    // required 속성 제거 (유효성 검사 통과용)
+    ['dong','dongConfirm','ho','hoConfirm'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.removeAttribute('required');
+            el.value = '-'; // 빈값 검증 통과용 기본값
+        }
+    });
+
+    console.log('🏋️ 헬스장 모드 ON: 동/호수 칸 숨김 처리 완료');
 }
 
 // Setup Event Listeners
@@ -263,11 +295,13 @@ function handlePage1Submit(e) {
 
     // Collect form data
     // 호텔 모드: 객실 번호를 dong에 매핑, ho는 '호텔' 고정
+    // 헬스장 모드: dong/ho 비어있어도 '-' 처리
     const isHotelMode = complexContext && complexContext.isHotel ? complexContext.isHotel() : false;
+    const isGymMode   = complexContext?.getComplex?.()?.gym_mode === true;
     const roomVal = isHotelMode ? (document.getElementById('hotelRoom')?.value?.trim() || '') : '';
     formData = {
-        dong: isHotelMode ? roomVal : document.getElementById('dong').value.trim(),
-        ho:   isHotelMode ? '호텔'  : document.getElementById('ho').value.trim(),
+        dong: isHotelMode ? roomVal : (isGymMode ? '-' : document.getElementById('dong').value.trim()),
+        ho:   isHotelMode ? '호텔'  : (isGymMode ? '-' : document.getElementById('ho').value.trim()),
         name: document.getElementById('name').value.trim(),
         phone: document.getElementById('phone').value.trim(),
         lesson_type: lessonType,
@@ -295,7 +329,10 @@ function handlePage1Submit(e) {
     }
     
     // 일반(아파트) 모드: 모든 필수 항목 검증
-    const requiredFields = ['dong', 'ho', 'name', 'phone', 'lesson_type', 'preferred_time'];
+    // 헬스장 모드: dong/ho 검증 제외 (이미 '-'로 채워짐)
+    const requiredFields = isGymMode
+        ? ['name', 'phone', 'lesson_type', 'preferred_time']
+        : ['dong', 'ho', 'name', 'phone', 'lesson_type', 'preferred_time'];
     for (const field of requiredFields) {
         if (!formData[field]) {
             alert('모든 필수 항목을 입력해주세요.');
@@ -304,7 +341,16 @@ function handlePage1Submit(e) {
     }
 
     // ── 동/호수/전화번호 확인 필드 일치 검증 ──────────────────────
-    if (!allConfirmFieldsMatch()) return;
+    // 헬스장 모드: 동/호수 확인 필드 검증 건너뜀
+    if (isGymMode) {
+        // 전화번호 확인만 검증
+        const phoneV1 = (document.getElementById('phone')?.value || '').trim();
+        const phoneV2 = (document.getElementById('phoneConfirm')?.value || '').trim();
+        if (!phoneV2) { alert('전화번호 확인란을 입력해 주세요.'); document.getElementById('phoneConfirm')?.focus(); return; }
+        if (phoneV1 !== phoneV2) { alert('전화번호가 일치하지 않습니다.'); document.getElementById('phoneConfirm')?.focus(); return; }
+    } else {
+        if (!allConfirmFieldsMatch()) return;
+    }
 
     // Move to page 2
     goToPage2();
