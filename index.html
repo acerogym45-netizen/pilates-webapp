@@ -1813,39 +1813,87 @@
                                          alt="${escapeHtml(ins.name)}"
                                          onclick="showInstructorImages(${JSON.stringify(photos)},0)">`;
                     } else {
-                        // 다중 사진: 슬라이더 UI
+                        // 다중 사진: 슬라이더 UI (aspect-ratio 4/3 기반 — 이미지 잘림 없음)
                         const sliderId = `instrSlider_${insIdx}`;
                         const slides = photos.map((url, si) => `
-                            <div class="instr-slide${si===0?' active':''}" data-idx="${si}">
+                            <div class="instr-slide${si===0?' active':''}" data-idx="${si}"
+                                 style="position:absolute;inset:0;display:${si===0?'block':'none'}">
                                 <img src="${escapeHtml(url)}" alt="${escapeHtml(ins.name)}"
-                                     style="width:100%;height:100%;object-fit:cover;cursor:pointer"
+                                     style="width:100%;height:100%;object-fit:contain;background:#111;cursor:pointer"
                                      onclick="showInstructorImages(${JSON.stringify(photos)},${si})">
                             </div>`).join('');
                         photoHtml = `
-                            <div class="instructor-photo-slider" id="${sliderId}" data-total="${photos.length}" data-current="0"
-                                 style="position:relative;overflow:hidden;border-radius:12px 12px 0 0;background:#000">
+                            <div class="instructor-photo-slider" id="${sliderId}"
+                                 data-total="${photos.length}" data-current="0">
                                 ${slides}
-                                <button class="instr-slide-arrow prev"
-                                        onclick="instrSlideStep('${sliderId}',-1);event.stopPropagation()"
-                                        style="position:absolute;left:6px;top:50%;transform:translateY(-50%);
-                                               background:rgba(0,0,0,.5);border:none;color:#fff;border-radius:50%;
-                                               width:32px;height:32px;font-size:1rem;cursor:pointer;z-index:2;
-                                               display:flex;align-items:center;justify-content:center">
+                                <button onclick="instrSlideStep('${sliderId}',-1);event.stopPropagation()"
+                                        style="position:absolute;left:8px;top:50%;transform:translateY(-50%);
+                                               background:rgba(0,0,0,.55);border:none;color:#fff;border-radius:50%;
+                                               width:34px;height:34px;font-size:.95rem;cursor:pointer;z-index:2;
+                                               display:flex;align-items:center;justify-content:center;
+                                               backdrop-filter:blur(4px)">
                                     <i class="fas fa-chevron-left"></i>
                                 </button>
-                                <button class="instr-slide-arrow next"
-                                        onclick="instrSlideStep('${sliderId}',1);event.stopPropagation()"
-                                        style="position:absolute;right:6px;top:50%;transform:translateY(-50%);
-                                               background:rgba(0,0,0,.5);border:none;color:#fff;border-radius:50%;
-                                               width:32px;height:32px;font-size:1rem;cursor:pointer;z-index:2;
-                                               display:flex;align-items:center;justify-content:center">
+                                <button onclick="instrSlideStep('${sliderId}',1);event.stopPropagation()"
+                                        style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                                               background:rgba(0,0,0,.55);border:none;color:#fff;border-radius:50%;
+                                               width:34px;height:34px;font-size:.95rem;cursor:pointer;z-index:2;
+                                               display:flex;align-items:center;justify-content:center;
+                                               backdrop-filter:blur(4px)">
                                     <i class="fas fa-chevron-right"></i>
                                 </button>
-                                <span style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.5);
-                                             color:#fff;font-size:.72rem;padding:2px 7px;border-radius:10px;z-index:2"
-                                      id="${sliderId}_counter">1 / ${photos.length}</span>
+                                <span id="${sliderId}_counter"
+                                      style="position:absolute;bottom:8px;right:10px;
+                                             background:rgba(0,0,0,.6);color:#fff;
+                                             font-size:.72rem;padding:3px 9px;border-radius:12px;z-index:2;
+                                             backdrop-filter:blur(4px)">
+                                    1 / ${photos.length}
+                                </span>
                             </div>`;
                     }
+
+                    // 자격증 이미지 토글
+                    const certImgs = Array.isArray(ins.cert_images) ? ins.cert_images : [];
+                    const certToggleId = `instrCert_${insIdx}`;
+                    const certToggleHtml = certImgs.length > 0 ? `
+                        <button class="instr-toggle-btn" id="${certToggleId}_btn"
+                                onclick="toggleInstrSection('${certToggleId}')">
+                            <span><i class="fas fa-certificate" style="color:#f59e0b;margin-right:5px"></i>자격 사항</span>
+                            <i class="fas fa-chevron-down toggle-arrow"></i>
+                        </button>
+                        <div class="instr-toggle-body" id="${certToggleId}_body">
+                            <div class="instr-cert-grid">
+                                ${certImgs.map((url, ci) => `
+                                    <img src="${escapeHtml(url)}" alt="자격증 ${ci+1}"
+                                         onclick="showInstructorImages(${JSON.stringify(certImgs)},${ci})">`).join('')}
+                            </div>
+                        </div>` : '';
+
+                    // 리뷰 토글
+                    const reviewList = Array.isArray(ins.reviews) ? ins.reviews : [];
+                    const reviewToggleId = `instrReview_${insIdx}`;
+                    const reviewToggleHtml = reviewList.length > 0 ? `
+                        <button class="instr-toggle-btn" id="${reviewToggleId}_btn"
+                                onclick="toggleInstrSection('${reviewToggleId}')">
+                            <span><i class="fas fa-star" style="color:#f59e0b;margin-right:5px"></i>회원 리뷰 <span style="color:#9ca3af;font-weight:400">(${reviewList.length}건)</span></span>
+                            <i class="fas fa-chevron-down toggle-arrow"></i>
+                        </button>
+                        <div class="instr-toggle-body" id="${reviewToggleId}_body">
+                            <div class="instr-review-list">
+                                ${reviewList.map(rv => `
+                                    <div class="instr-review-card">
+                                        <div class="instr-review-stars">${'★'.repeat(rv.rating || 5)}</div>
+                                        <div class="instr-review-text">${escapeHtml(rv.text || '')}</div>
+                                        ${(rv.photos||[]).length > 0 ? `
+                                        <div class="instr-review-photos">
+                                            ${(rv.photos||[]).map((p,pi) => `
+                                                <img src="${escapeHtml(p)}" alt="리뷰 사진"
+                                                     onclick="showInstructorImages(${JSON.stringify(rv.photos)},${pi})">`).join('')}
+                                        </div>` : ''}
+                                        ${rv.author ? `<div class="instr-review-author">— ${escapeHtml(rv.author)}</div>` : ''}
+                                    </div>`).join('')}
+                            </div>
+                        </div>` : '';
 
                     return `
                     <div class="instructor-card">
@@ -1861,6 +1909,8 @@
                                 ? `<div class="instructor-certs">
                                        ${certs.map(c => `<span><i class="fas fa-check-circle"></i>${escapeHtml(c)}</span>`).join('')}
                                    </div>` : ''}
+                            ${certToggleHtml}
+                            ${reviewToggleHtml}
                         </div>
                     </div>`;
                 }).join('') + '</div>';
@@ -1920,6 +1970,16 @@
         document.body.style.overflow = '';
         _imodalUrls = [];
         _imodalIdx  = 0;
+    }
+
+    // 강사 카드 자격증·리뷰 토글
+    function toggleInstrSection(toggleId) {
+        const btn  = document.getElementById(toggleId + '_btn');
+        const body = document.getElementById(toggleId + '_body');
+        if (!btn || !body) return;
+        const isOpen = body.classList.contains('open');
+        body.classList.toggle('open', !isOpen);
+        btn.classList.toggle('open', !isOpen);
     }
 
     // 강사 카드 내 슬라이더 (다중 사진)

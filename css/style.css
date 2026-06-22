@@ -1022,14 +1022,23 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
     flex-direction: column; gap: 0; padding: 0;
 }
 .instructor-card:has(.instructor-photo-slider) .instructor-info {
-    padding: 14px 16px 16px;
+    padding: 14px 16px 4px;
 }
 .instructor-photo-slider {
-    width: 100%; height: 200px; flex-shrink: 0;
+    width: 100%; aspect-ratio: 4/3; flex-shrink: 0;
     border-radius: 12px 12px 0 0; overflow: hidden; background: #111;
+    position: relative;
 }
-.instr-slide { display: none; width: 100%; height: 100%; }
+.instr-slide {
+    display: none; width: 100%; height: 100%;
+    position: absolute; inset: 0;
+}
 .instr-slide.active { display: block; }
+.instr-slide img {
+    width: 100%; height: 100%;
+    object-fit: contain; object-position: center;
+    background: #111;
+}
 .instructor-info h4 { font-size: .92rem; font-weight: 700; margin-bottom: 3px; }
 .instructor-title { font-size: .78rem; color: var(--brand); margin-bottom: 6px; font-weight: 600; }
 .instructor-bio { font-size: .8rem; color: var(--text-sub); line-height: 1.6; margin-bottom: 6px; }
@@ -1045,117 +1054,222 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 .curriculum-content-box  { padding: 16px 18px; }
 
 /* ══════════════════════════════════════════════════
-   헬스장 모드 커리큘럼 표
+   헬스장 모드 커리큘럼 — 목적별 카드 디자인
 ══════════════════════════════════════════════════ */
-.gym-curr-wrap { display: flex; flex-direction: column; gap: 14px; }
 
-/* 1차: 운동 목적 탭 */
+/* 목적 탭 스크롤 바 */
 .gym-curr-goal-tabs {
-    display: flex; flex-wrap: wrap; gap: 6px;
+    display: flex; gap: 8px; overflow-x: auto;
+    padding: 0 16px 8px; margin: 0 -16px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
 }
+.gym-curr-goal-tabs::-webkit-scrollbar { display: none; }
+
 .gym-curr-goal-tab {
-    display: flex; flex-direction: column; align-items: center; gap: 3px;
-    padding: 8px 10px; min-width: 64px;
-    background: #f9fafb; border: 1.5px solid #e5e7eb;
-    border-radius: 10px; cursor: pointer; transition: all .16s;
-    font-size: .72rem; font-weight: 600; color: #6b7280;
-    line-height: 1.2;
-}
-.gym-curr-goal-tab:hover {
-    background: var(--tab-bg, #f3f4f6);
-    border-color: var(--tab-border, #d1d5db);
-    color: var(--tab-color, #374151);
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    padding: 10px 14px; min-width: 68px; flex-shrink: 0;
+    background: #f3f4f6; border: 2px solid transparent;
+    border-radius: 14px; cursor: pointer; transition: all .18s;
+    font-size: .72rem; font-weight: 700; color: #6b7280;
 }
 .gym-curr-goal-tab.active {
     background: var(--tab-bg, #f3f4f6);
-    border-color: var(--tab-color, #6b7280);
-    color: var(--tab-color, #374151);
-    box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    border-color: var(--tab-color, #6366f1);
+    color: var(--tab-color, #6366f1);
+    box-shadow: 0 4px 12px rgba(0,0,0,.12);
+    transform: translateY(-1px);
 }
-.gym-curr-goal-icon { font-size: 1.25rem; }
-.gym-curr-goal-label { word-break: keep-all; text-align: center; }
+.gym-curr-goal-icon { font-size: 1.4rem; line-height: 1; }
+.gym-curr-goal-label { word-break: keep-all; text-align: center; line-height: 1.2; }
 
-/* 2차: 횟수 선택 바 */
-.gym-curr-count-bar {
-    display: flex; gap: 6px; flex-wrap: wrap;
+/* ── 카드 전체 래퍼 ── */
+.gym-curr-card {
+    border-radius: 16px; overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,.08);
+    border: 1.5px solid var(--card-border, #e5e7eb);
+    background: #fff;
 }
-.gym-curr-count-btn {
-    flex: 1; min-width: 48px;
-    padding: 8px 4px; border: 1.5px solid #e5e7eb;
-    border-radius: 8px; background: #f9fafb;
-    font-size: .82rem; font-weight: 700; color: #6b7280;
-    cursor: pointer; transition: all .15s; text-align: center;
+
+/* ── 카드 헤더 ── */
+.gym-curr-card-header {
+    padding: 18px 18px 14px;
+    background: var(--card-bg, #f9fafb);
+    border-bottom: 1px solid var(--card-border, #e5e7eb);
 }
-.gym-curr-count-btn:hover {
-    background: var(--cnt-bg, #f3f4f6);
-    border-color: var(--cnt-color, #9ca3af);
-    color: var(--cnt-color, #374151);
+.gym-curr-card-title-row {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
 }
-.gym-curr-count-btn.active {
-    background: var(--cnt-color, #4f46e5);
-    border-color: var(--cnt-color, #4f46e5);
-    color: #fff;
+.gym-curr-card-emoji {
+    width: 48px; height: 48px; border-radius: 14px;
+    background: var(--card-color, #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; flex-shrink: 0;
+    box-shadow: 0 4px 10px rgba(0,0,0,.15);
+}
+.gym-curr-card-label {
+    font-size: 1.05rem; font-weight: 800; color: #111827; line-height: 1.2;
+}
+.gym-curr-card-subtitle {
+    font-size: .78rem; color: var(--card-color, #6366f1); font-weight: 600; margin-top: 2px;
+}
+
+/* 횟수 선택 칩 */
+.gym-curr-count-row {
+    display: flex; gap: 6px; flex-wrap: nowrap;
+}
+.gym-curr-count-chip {
+    flex: 1; padding: 7px 4px;
+    border: 2px solid #e5e7eb; border-radius: 10px;
+    background: #fff; color: #6b7280;
+    font-size: .82rem; font-weight: 700; text-align: center;
+    cursor: pointer; transition: all .16s;
+}
+.gym-curr-count-chip.active {
+    background: var(--card-color, #6366f1);
+    border-color: var(--card-color, #6366f1);
+    color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    transform: translateY(-1px);
+}
+
+/* ── 카드 바디: 세로 회차 타임라인 ── */
+.gym-curr-card-body { padding: 16px 18px; }
+
+.gym-curr-prog-name {
+    font-size: .88rem; font-weight: 700; color: #1f2937;
+    margin-bottom: 14px; padding-bottom: 10px;
+    border-bottom: 1.5px dashed #e5e7eb;
+    display: flex; align-items: center; gap: 6px;
+}
+.gym-curr-prog-name::before {
+    content: ''; display: inline-block;
+    width: 4px; height: 16px; border-radius: 2px;
+    background: var(--card-color, #6366f1);
+    flex-shrink: 0;
+}
+
+/* 세로 타임라인 */
+.gym-curr-timeline { display: flex; flex-direction: column; gap: 0; position: relative; }
+.gym-curr-timeline::before {
+    content: ''; position: absolute; left: 17px; top: 20px;
+    bottom: 20px; width: 2px;
+    background: linear-gradient(to bottom, var(--card-color, #6366f1), transparent);
+    opacity: .25;
+}
+
+.gym-curr-step-row {
+    display: flex; gap: 12px; align-items: flex-start;
+    padding: 12px 0; position: relative;
+}
+.gym-curr-step-row:not(:last-child) {
+    border-bottom: 1px solid #f3f4f6;
+}
+
+/* 스텝 번호 동그라미 */
+.gym-curr-step-dot {
+    width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+    background: var(--card-color, #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: .72rem; font-weight: 800;
     box-shadow: 0 2px 6px rgba(0,0,0,.18);
+    margin-top: 1px; position: relative; z-index: 1;
 }
 
-/* 프로그램 헤더 */
-.gym-curr-prog-header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px 14px; border: 1.5px solid #e5e7eb;
-    border-radius: 10px; border-left-width: 4px;
+.gym-curr-step-content { flex: 1; min-width: 0; }
+.gym-curr-step-range {
+    font-size: .76rem; font-weight: 800;
+    color: var(--card-color, #6366f1); margin-bottom: 4px;
+    display: flex; align-items: center; gap: 4px;
 }
-.gym-curr-prog-icon { font-size: 1.8rem; flex-shrink: 0; }
-.gym-curr-prog-badge {
-    display: inline-block; padding: 2px 10px;
-    border-radius: 20px; color: #fff;
-    font-size: .73rem; font-weight: 700; margin-bottom: 4px;
+.gym-curr-step-range-badge {
+    background: var(--card-bg, #f0f0ff);
+    border: 1px solid var(--card-border, #c7d2fe);
+    color: var(--card-color, #6366f1);
+    padding: 2px 8px; border-radius: 20px;
+    font-size: .72rem; font-weight: 700;
 }
-.gym-curr-prog-title {
-    font-size: .92rem; font-weight: 700; color: #1f2937; line-height: 1.3;
+.gym-curr-step-desc {
+    font-size: .81rem; color: #374151; line-height: 1.7;
+}
+/* 핵심 키워드(·으로 구분) 강조 */
+.gym-curr-step-desc em {
+    font-style: normal; font-weight: 700; color: #1f2937;
 }
 
-/* 단계별 표 */
-.gym-curr-table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid #e5e7eb; }
-.gym-curr-table {
-    width: 100%; border-collapse: collapse; font-size: .84rem;
-}
-.gym-curr-table thead th {
-    padding: 9px 12px; background: #f8fafc;
-    font-size: .76rem; font-weight: 700; border-bottom: 2px solid #e5e7eb;
-    text-align: left;
-}
-.gym-curr-table thead th:first-child { width: 38%; }
-.gym-curr-table tbody tr { border-bottom: 1px solid #f0f0f0; }
-.gym-curr-table tbody tr:last-child { border-bottom: none; }
-.gym-curr-week {
-    padding: 12px 10px; vertical-align: top;
-    font-size: .78rem; font-weight: 600; line-height: 1.6;
-    border-right: 2px solid var(--tab-border, #e5e7eb);
-}
-.gym-curr-step {
-    display: inline-block; padding: 1px 7px;
-    border-radius: 12px; color: #fff;
-    font-size: .68rem; font-weight: 700;
-    margin-bottom: 4px; margin-right: 2px;
-}
-.gym-curr-desc {
-    padding: 12px 12px; color: #374151; line-height: 1.7;
-    vertical-align: top; font-size: .83rem;
-}
+/* 안내 문구 */
 .gym-curr-notice {
-    font-size: .76rem; color: #9ca3af; text-align: center;
-    margin: 0; padding-top: 4px;
+    font-size: .74rem; color: #9ca3af; text-align: center;
+    margin: 12px 0 0; padding: 10px 14px;
+    background: #f9fafb; border-radius: 10px;
+    border: 1px dashed #e5e7eb;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
 }
+
+/* ── 강사 카드 — 자격증·리뷰 토글 ── */
+.instr-toggle-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 10px 0; background: none; border: none;
+    border-top: 1px solid var(--border); cursor: pointer;
+    font-size: .82rem; font-weight: 700; color: #374151;
+    text-align: left; margin-top: 8px;
+}
+.instr-toggle-btn .toggle-arrow {
+    transition: transform .2s; font-size: .8rem; color: #9ca3af;
+}
+.instr-toggle-btn.open .toggle-arrow { transform: rotate(180deg); }
+.instr-toggle-body {
+    overflow: hidden; max-height: 0;
+    transition: max-height .3s ease, opacity .25s;
+    opacity: 0;
+}
+.instr-toggle-body.open {
+    max-height: 1200px; opacity: 1;
+}
+
+/* 자격증 이미지 그리드 */
+.instr-cert-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+    padding: 10px 0 4px;
+}
+.instr-cert-grid img {
+    width: 100%; border-radius: 10px; object-fit: cover;
+    border: 1px solid #e5e7eb; cursor: pointer;
+    transition: transform .15s;
+}
+.instr-cert-grid img:hover { transform: scale(1.02); }
+
+/* 리뷰 카드 */
+.instr-review-list { display: flex; flex-direction: column; gap: 10px; padding: 10px 0 4px; }
+.instr-review-card {
+    background: #f8fafc; border: 1px solid #e5e7eb;
+    border-radius: 12px; padding: 12px 14px;
+}
+.instr-review-stars { color: #f59e0b; font-size: .82rem; margin-bottom: 4px; }
+.instr-review-text {
+    font-size: .8rem; color: #374151; line-height: 1.7;
+    white-space: pre-wrap; word-break: keep-all;
+}
+.instr-review-author {
+    font-size: .73rem; color: #9ca3af; margin-top: 6px; text-align: right;
+}
+.instr-review-photos {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px;
+}
+.instr-review-photos img {
+    width: 80px; height: 80px; object-fit: cover;
+    border-radius: 8px; cursor: pointer;
+    border: 1px solid #e5e7eb; transition: transform .15s;
+}
+.instr-review-photos img:hover { transform: scale(1.04); }
 
 /* 모바일 반응형 */
 @media (max-width: 480px) {
-    .gym-curr-goal-tab { min-width: 56px; padding: 6px 8px; }
-    .gym-curr-goal-icon { font-size: 1.1rem; }
-    .gym-curr-goal-label { font-size: .67rem; }
-    .gym-curr-count-btn { font-size: .76rem; padding: 7px 2px; }
-    .gym-curr-prog-title { font-size: .85rem; }
-    .gym-curr-table { font-size: .78rem; }
-    .gym-curr-week { width: 40%; }
+    .gym-curr-goal-tab { min-width: 60px; padding: 8px 10px; }
+    .gym-curr-goal-icon { font-size: 1.2rem; }
+    .gym-curr-goal-label { font-size: .68rem; }
+    .gym-curr-count-chip { font-size: .76rem; padding: 6px 2px; }
+    .gym-curr-card-label { font-size: .95rem; }
+    .gym-curr-step-desc { font-size: .78rem; }
+    .instr-cert-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ── 이미지 풀스크린 ── */

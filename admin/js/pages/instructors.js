@@ -323,6 +323,38 @@ const instructors = {
                 <input type="number" id="iOrder" value="${i?.display_order||0}">
             </div>
 
+            <!-- ── 자격증 이미지 ── -->
+            <div class="form-group">
+                <label>
+                    <i class="fas fa-certificate" style="color:#f59e0b;margin-right:4px"></i>
+                    자격증 이미지 <span style="font-size:.8rem;color:#888;font-weight:400">(최대 20장)</span>
+                </label>
+                <div id="iCertGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+                    ${instructors._renderCertGrid(i)}
+                </div>
+                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:#fffbeb;border:1.5px dashed #f59e0b;border-radius:8px;padding:8px 14px;font-size:.875rem;color:#b45309;font-weight:500">
+                    <i class="fas fa-plus-circle"></i> 자격증 사진 추가
+                    <input type="file" id="iCertFile" accept="image/*" multiple style="display:none"
+                           onchange="instructors.handleCertAdd(this)">
+                </label>
+            </div>
+
+            <!-- ── 회원 리뷰 ── -->
+            <div class="form-group">
+                <label>
+                    <i class="fas fa-star" style="color:#f59e0b;margin-right:4px"></i>
+                    회원 리뷰
+                </label>
+                <div id="iReviewList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+                    ${instructors._renderReviewList(i)}
+                </div>
+                <button type="button" onclick="instructors.addReview()"
+                        style="background:#f0fdf4;border:1.5px dashed #16a34a;border-radius:8px;
+                               padding:8px 14px;font-size:.875rem;color:#16a34a;font-weight:500;cursor:pointer">
+                    <i class="fas fa-plus-circle"></i> 리뷰 추가
+                </button>
+            </div>
+
             <!-- ── 연락처 / 노무 정보 ── -->
             <div class="form-group" style="background:#f0f4ff;border:1.5px solid #aec6f8;border-radius:8px;padding:14px 16px;margin-top:4px">
                 <label style="font-weight:700;color:#333;margin-bottom:12px;display:block">
@@ -439,6 +471,8 @@ const instructors = {
             <button class="btn-secondary" onclick="closeGlobalModal()">취소</button>
             <button class="btn-primary" onclick="instructors.save('${id||''}')"><i class="fas fa-save"></i> 저장</button>`;
         openGlobalModal(i ? '강사 수정' : '강사 추가', body, footer);
+        // 리뷰 데이터 초기화
+        instructors._initReviewsData(i);
     },
     // ── 다중 사진 관련 헬퍼 ──────────────────────────────────────────────
 
@@ -551,6 +585,141 @@ const instructors = {
         // 구버전 단일 사진 미리보기 (하위 호환용 - 현재는 handlePhotoAdd로 대체됨)
         if (!input.files[0]) return;
     },
+
+    // ── 자격증 이미지 ──────────────────────────────────────────────
+    _renderCertGrid(instructor) {
+        const certs = Array.isArray(instructor?.cert_images) ? instructor.cert_images : [];
+        if (certs.length === 0) {
+            return `<div style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-certificate"></i> 등록된 자격증 사진 없음</div>`;
+        }
+        return certs.map((url, idx) => `
+            <div style="position:relative;display:inline-block" data-cert-idx="${idx}">
+                <img src="${escHtml(url)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid #f59e0b">
+                <button type="button" onclick="instructors._removeCert(${idx})"
+                    style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>`).join('');
+    },
+    _getFormCerts() {
+        const grid = document.getElementById('iCertGrid');
+        if (!grid) return [];
+        return Array.from(grid.querySelectorAll('[data-cert-idx]'))
+            .map(el => el.querySelector('img')?.src).filter(Boolean);
+    },
+    _removeCert(idx) {
+        const certs = this._getFormCerts();
+        certs.splice(idx, 1);
+        this._refreshCertGrid(certs);
+    },
+    _refreshCertGrid(certs) {
+        const grid = document.getElementById('iCertGrid');
+        if (!grid) return;
+        if (certs.length === 0) {
+            grid.innerHTML = `<div style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-certificate"></i> 등록된 자격증 사진 없음</div>`;
+        } else {
+            grid.innerHTML = certs.map((url, idx) => `
+                <div style="position:relative;display:inline-block" data-cert-idx="${idx}">
+                    <img src="${escHtml(url)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid #f59e0b">
+                    <button type="button" onclick="instructors._removeCert(${idx})"
+                        style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>`).join('');
+        }
+    },
+    async handleCertAdd(input) {
+        if (!input.files || input.files.length === 0) return;
+        const current = this._getFormCerts();
+        const remaining = 20 - current.length;
+        if (remaining <= 0) { showToast('자격증 사진은 최대 20장까지 등록할 수 있습니다', 'error'); input.value=''; return; }
+        const files = Array.from(input.files).slice(0, remaining);
+        const newUrls = [];
+        for (const file of files) {
+            try {
+                const fd = new FormData();
+                fd.append('image', file);
+                const res = await fetch(window.location.origin + '/api/upload/image', { method: 'POST', body: fd });
+                const result = await res.json().catch(() => ({ success: false }));
+                if (res.ok && result.success && result.url) newUrls.push(result.url);
+                else showToast('업로드 실패: ' + (result.error || ''), 'error');
+            } catch(e) { showToast('업로드 실패: ' + e.message, 'error'); }
+        }
+        this._refreshCertGrid([...current, ...newUrls]);
+        input.value = '';
+    },
+    _collectCertImages() {
+        return this._getFormCerts();
+    },
+
+    // ── 회원 리뷰 ──────────────────────────────────────────────────
+    _renderReviewList(instructor) {
+        const reviews = Array.isArray(instructor?.reviews) ? instructor.reviews : [];
+        if (reviews.length === 0) {
+            return `<div style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-star"></i> 등록된 리뷰 없음</div>`;
+        }
+        return reviews.map((rv, idx) => this._reviewItemHtml(rv, idx)).join('');
+    },
+    _reviewItemHtml(rv, idx) {
+        return `
+        <div data-review-idx="${idx}" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <select onchange="instructors._updateReview(${idx},'rating',parseInt(this.value))"
+                        style="padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:.85rem">
+                    ${[5,4,3,2,1].map(n => `<option value="${n}" ${(rv.rating||5)===n?'selected':''}>${'★'.repeat(n)} ${n}점</option>`).join('')}
+                </select>
+                <input type="text" placeholder="작성자 (예: 김*정)" value="${escHtml(rv.author||'')}"
+                       oninput="instructors._updateReview(${idx},'author',this.value)"
+                       style="flex:1;padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:.85rem">
+                <button type="button" onclick="instructors._removeReview(${idx})"
+                        style="background:#ef4444;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:.75rem;cursor:pointer;flex-shrink:0">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <textarea rows="3" placeholder="리뷰 내용" oninput="instructors._updateReview(${idx},'text',this.value)"
+                      style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:.82rem;resize:vertical;box-sizing:border-box">${escHtml(rv.text||'')}</textarea>
+        </div>`;
+    },
+    _reviewsData: [],
+    _initReviewsData(instructor) {
+        this._reviewsData = Array.isArray(instructor?.reviews)
+            ? JSON.parse(JSON.stringify(instructor.reviews)) : [];
+    },
+    _updateReview(idx, field, value) {
+        if (!this._reviewsData[idx]) this._reviewsData[idx] = {};
+        this._reviewsData[idx][field] = value;
+    },
+    _removeReview(idx) {
+        this._reviewsData.splice(idx, 1);
+        const list = document.getElementById('iReviewList');
+        if (list) list.innerHTML = this._reviewsData.length === 0
+            ? `<div style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-star"></i> 등록된 리뷰 없음</div>`
+            : this._reviewsData.map((rv, i) => this._reviewItemHtml(rv, i)).join('');
+    },
+    addReview() {
+        this._reviewsData.push({ rating: 5, text: '', author: '', photos: [] });
+        const idx = this._reviewsData.length - 1;
+        const list = document.getElementById('iReviewList');
+        if (!list) return;
+        const placeholder = list.querySelector('[style*="color:#aaa"]');
+        if (placeholder) placeholder.remove();
+        list.insertAdjacentHTML('beforeend', this._reviewItemHtml(this._reviewsData[idx], idx));
+    },
+    _collectReviews() {
+        // text textarea도 sync
+        const list = document.getElementById('iReviewList');
+        if (list) {
+            list.querySelectorAll('[data-review-idx]').forEach((el, idx) => {
+                const ta = el.querySelector('textarea');
+                if (ta && this._reviewsData[idx]) this._reviewsData[idx].text = ta.value;
+                const author = el.querySelector('input[type=text]');
+                if (author && this._reviewsData[idx]) this._reviewsData[idx].author = author.value;
+                const rating = el.querySelector('select');
+                if (rating && this._reviewsData[idx]) this._reviewsData[idx].rating = parseInt(rating.value);
+            });
+        }
+        return this._reviewsData.filter(rv => rv.text && rv.text.trim());
+    },
     // 이미지를 Canvas로 리사이즈 후 Blob 반환 (최대 800px, JPEG 0.85)
     _resizeImage(file, maxPx = 800) {
         return new Promise((resolve) => {
@@ -616,11 +785,18 @@ const instructors = {
                 duet:    parseInt(document.getElementById('iRateDuet')?.value)    || 0,
             };
 
+            // 자격증 이미지 수집
+            const certImages = instructors._collectCertImages();
+            // 리뷰 수집
+            const reviews = instructors._collectReviews();
+
             const data = {
                 name, title: document.getElementById('iTitle').value,
                 bio: document.getElementById('iBio').value,
                 photo_url: photoUrl,
                 photo_urls: photoUrls,
+                cert_images: certImages,
+                reviews,
                 display_order: parseInt(document.getElementById('iOrder').value)||0,
                 hourly_rates: hourlyRates,
                 assigned_programs: assignedPrograms,

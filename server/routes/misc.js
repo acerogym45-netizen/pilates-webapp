@@ -360,12 +360,16 @@ router.get('/instructors', async (req, res) => {
 router.post('/instructors', async (req, res) => {
     try {
         const { complex_id, name, title, bio, photo_url, photo_urls, display_order, hourly_rates, assigned_programs,
-                phone, bank_account, rrn, contract_start, contract_end } = req.body;
+                phone, bank_account, rrn, contract_start, contract_end,
+                cert_images, reviews } = req.body;
         if (!complex_id || !name) return res.status(400).json({ success: false, error: '필수 항목 누락' });
         // photo_urls 배열 정규화 (최대 10장)
         const safePhotoUrls = Array.isArray(photo_urls) ? photo_urls.slice(0, 10) : [];
         // photo_url: 배열 첫 번째 또는 기존 단일 값
         const safePhotoUrl = photo_url || safePhotoUrls[0] || '';
+        // cert_images / reviews 정규화
+        const safeCertImages = Array.isArray(cert_images) ? cert_images.slice(0, 20) : [];
+        const safeReviews    = Array.isArray(reviews)     ? reviews.slice(0, 50)     : [];
         const sb = getSupabase();
         const insertPayload = {
             complex_id, name,
@@ -381,7 +385,9 @@ router.post('/instructors', async (req, res) => {
             contract_end:   contract_end   || null,
         };
         // photo_urls 컬럼은 마이그레이션 완료 후 저장 (미완시 무시)
-        if (safePhotoUrls.length > 0) insertPayload.photo_urls = safePhotoUrls;
+        if (safePhotoUrls.length > 0)  insertPayload.photo_urls  = safePhotoUrls;
+        if (safeCertImages.length > 0) insertPayload.cert_images = safeCertImages;
+        if (safeReviews.length > 0)    insertPayload.reviews     = safeReviews;
         const { data, error } = await sb
             .from('instructors')
             .insert(insertPayload)
@@ -395,11 +401,15 @@ router.post('/instructors', async (req, res) => {
 router.put('/instructors/:id', async (req, res) => {
     try {
         const { name, title, bio, photo_url, photo_urls, display_order, is_active, hourly_rates, assigned_programs,
-                phone, bank_account, rrn, contract_start, contract_end } = req.body;
+                phone, bank_account, rrn, contract_start, contract_end,
+                cert_images, reviews } = req.body;
         // photo_urls 배열 정규화 (최대 10장)
         const safePhotoUrls = Array.isArray(photo_urls) ? photo_urls.slice(0, 10) : null;
         // photo_url: 배열 첫 번째 또는 기존 단일 값
         const safePhotoUrl = photo_url || (safePhotoUrls && safePhotoUrls[0]) || '';
+        // cert_images / reviews 정규화
+        const safeCertImages = Array.isArray(cert_images) ? cert_images.slice(0, 20) : null;
+        const safeReviews    = Array.isArray(reviews)     ? reviews.slice(0, 50)     : null;
         const sb = getSupabase();
         const updatePayload = {
             name, title, bio,
@@ -415,8 +425,10 @@ router.put('/instructors/:id', async (req, res) => {
         if (rrn            !== undefined) updatePayload.rrn            = rrn;
         if (contract_start !== undefined) updatePayload.contract_start = contract_start || null;
         if (contract_end   !== undefined) updatePayload.contract_end   = contract_end   || null;
-        // photo_urls 컬럼은 마이그레이션 완료 후 저장 (미완시 무시)
-        if (safePhotoUrls !== null) updatePayload.photo_urls = safePhotoUrls;
+        // photo_urls / cert_images / reviews — 마이그레이션 완료 후 반영
+        if (safePhotoUrls  !== null) updatePayload.photo_urls  = safePhotoUrls;
+        if (safeCertImages !== null) updatePayload.cert_images = safeCertImages;
+        if (safeReviews    !== null) updatePayload.reviews     = safeReviews;
 
         const { data, error } = await sb
             .from('instructors')
