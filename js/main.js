@@ -141,11 +141,17 @@ function applyGymMode() {
         }
     });
 
-    // ── 3. 퀵액션 버튼 숨기기 — 시간표, 내 신청 조회·취소·변경 ────────
-    const timetableBtn = document.getElementById('quickBtnTimetable');
-    if (timetableBtn) timetableBtn.style.display = 'none';
-    const manageBtn = document.getElementById('quickBtnManage');
-    if (manageBtn) manageBtn.style.display = 'none';
+    // ── 3. 퀵액션 — 기존 행 모두 숨기고 헬스장 전용 2×2 그리드 표시 ────
+    // 기존 3개 행 숨김
+    const rowInquiry = document.getElementById('quickRowInquiryMain');
+    const rowFive    = document.getElementById('quickRowFive');
+    const rowThreeWrap = document.querySelector('.quick-row.quick-row--two');
+    if (rowInquiry)    rowInquiry.style.display   = 'none';
+    if (rowFive)       rowFive.style.display       = 'none';
+    if (rowThreeWrap)  rowThreeWrap.style.display  = 'none';
+    // 헬스장 전용 2×2 그리드 표시
+    const gymGrid = document.getElementById('quickGymGrid');
+    if (gymGrid) gymGrid.style.display = 'grid';
 
     // ── 4. 커리큘럼 모달 제목 변경 + 월 선택 토글 숨김 ─────────────────
     const currHeader = document.querySelector('#curriculumModal .modal-header h2');
@@ -204,6 +210,30 @@ function gymModeLoadCurrentCurriculum() {
 }
 
 // 예약금 배너 업데이트 (헬스장 모드 + 프로그램 선택 변경 시)
+// 운동 설문 섹션 토글 (접기 / 펼치기)
+function toggleGymSurvey() {
+    const body    = document.getElementById('gymSurveyBody');
+    const btn     = document.getElementById('gymSurveyToggle');
+    const chevron = document.getElementById('gymSurveyChevron');
+    const hint    = document.getElementById('gymSurveyToggleHint');
+    if (!body) return;
+
+    const isOpen = body.style.display !== 'none';
+    if (isOpen) {
+        body.style.display = 'none';
+        btn?.setAttribute('aria-expanded', 'false');
+        btn?.classList.remove('survey-toggle-btn--open');
+        if (chevron) chevron.style.transform = '';
+        if (hint)    hint.textContent = '작성하면 강사가 맞춤 지도에 활용합니다';
+    } else {
+        body.style.display = 'block';
+        btn?.setAttribute('aria-expanded', 'true');
+        btn?.classList.add('survey-toggle-btn--open');
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
+        if (hint)    hint.textContent = '접으려면 다시 클릭하세요';
+    }
+}
+
 function _updateGymDepositBanner() {
     const banner = document.getElementById('gymDepositBanner');
     const text   = document.getElementById('gymDepositText');

@@ -312,6 +312,113 @@ input:focus, textarea:focus, select:focus {
 }
 textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 
+/* ══════════════════════════════════════════════════
+   헬스장 모드 전용 2×2 퀵액션 그리드
+══════════════════════════════════════════════════ */
+.quick-gym-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 6px;
+    padding: 2px 0 2px;
+}
+.quick-gym-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 7px; padding: 16px 8px;
+    border: none; border-radius: 14px; cursor: pointer;
+    font-size: .85rem; font-weight: 700; letter-spacing: .01em;
+    transition: filter .16s, transform .1s;
+    line-height: 1.2; word-break: keep-all; text-align: center;
+}
+.quick-gym-btn:active { transform: scale(.96); }
+.quick-gym-btn i { font-size: 1.4rem; }
+
+/* 내 문의 조회 — 남색 계열 */
+.quick-gym-btn--inquiry {
+    background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+    color: #3730a3;
+    border: 1.5px solid #c7d2fe;
+    box-shadow: 0 2px 8px rgba(79,70,229,.12);
+}
+.quick-gym-btn--inquiry:hover { filter: brightness(.95); }
+
+/* 문의하기 — 청록 계열 */
+.quick-gym-btn--write {
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+    color: #065f46;
+    border: 1.5px solid #6ee7b7;
+    box-shadow: 0 2px 8px rgba(16,185,129,.12);
+}
+.quick-gym-btn--write:hover { filter: brightness(.95); }
+
+/* 커리큘럼 — 주황 계열 */
+.quick-gym-btn--curriculum {
+    background: linear-gradient(135deg, #fff7ed, #ffedd5);
+    color: #9a3412;
+    border: 1.5px solid #fdba74;
+    box-shadow: 0 2px 8px rgba(249,115,22,.12);
+}
+.quick-gym-btn--curriculum:hover { filter: brightness(.95); }
+
+/* 강사 소개 — 보라 계열 */
+.quick-gym-btn--instructor {
+    background: linear-gradient(135deg, #faf5ff, #f3e8ff);
+    color: #6b21a8;
+    border: 1.5px solid #d8b4fe;
+    box-shadow: 0 2px 8px rgba(168,85,247,.12);
+}
+.quick-gym-btn--instructor:hover { filter: brightness(.95); }
+
+/* ── 헬스장 모드 설문 토글 버튼 ── */
+.survey-toggle-btn {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; padding: 11px 14px;
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    border: 1.5px solid #86efac;
+    border-radius: 10px; cursor: pointer;
+    transition: background .18s, border-color .18s;
+    text-align: left;
+}
+.survey-toggle-btn:hover,
+.survey-toggle-btn--open {
+    background: linear-gradient(135deg, #dcfce7, #bbf7d0);
+    border-color: #4ade80;
+}
+.survey-toggle-left {
+    display: flex; align-items: center; gap: 8px;
+}
+.survey-toggle-left i {
+    font-size: 1rem; color: #16a34a;
+}
+.survey-toggle-title {
+    font-size: .9rem; font-weight: 700; color: #15803d;
+}
+.survey-toggle-badge {
+    font-size: .72rem; font-weight: 600; color: #166534;
+    background: #bbf7d0; border-radius: 20px;
+    padding: 2px 8px; letter-spacing: .01em;
+}
+.survey-toggle-right {
+    display: flex; align-items: center; gap: 8px;
+}
+.survey-toggle-hint {
+    font-size: .73rem; color: #4b7c59; font-weight: 400;
+    line-height: 1.3; text-align: right;
+}
+.survey-toggle-chevron {
+    font-size: .8rem; color: #16a34a;
+    transition: transform .22s ease;
+    flex-shrink: 0;
+}
+/* 설문 본문 */
+.survey-body {
+    background: #f9fafb;
+    border: 1.5px solid #86efac;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    padding: 14px 14px 8px;
+}
+
 /* ── 헬스장 모드 설문 칩 ── */
 .survey-chip {
     display: inline-flex; align-items: center; gap: 5px;
