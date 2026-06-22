@@ -115,9 +115,7 @@ function applyGymMode() {
     const gymMode = complex?.gym_mode === true;
     if (!gymMode) return; // false/null/undefined: 기존 표시 그대로
 
-    // ── 1. 신청서 page1 / 계약서 page2 섹션 숨김 ─────────────────────
-    const page1 = document.getElementById('page1');
-    if (page1) page1.style.display = 'none';
+    // ── 1. 계약서 page2 섹션만 숨김 (신청서 page1은 그대로 표시) ────────
     const page2 = document.getElementById('page2');
     if (page2) page2.style.display = 'none';
 
@@ -401,6 +399,12 @@ function handlePage1Submit(e) {
         if (phoneV1 !== phoneV2) { alert('전화번호가 일치하지 않습니다.'); document.getElementById('phoneConfirm')?.focus(); return; }
     } else {
         if (!allConfirmFieldsMatch()) return;
+    }
+
+    // 헬스장 모드: 계약서(page2) 없이 바로 제출
+    if (complexContext?.getComplex?.()?.gym_mode === true) {
+        submitContract();
+        return;
     }
 
     // Move to page 2
