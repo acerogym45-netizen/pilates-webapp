@@ -133,7 +133,13 @@ function applyGymMode() {
         }
     });
 
-    console.log('🏋️ 헬스장 모드 ON: 동/호수 칸 숨김 처리 완료');
+    // 퀵액션 버튼 숨기기 — 시간표, 내 신청 조회·취소·변경
+    const timetableBtn = document.getElementById('quickBtnTimetable');
+    if (timetableBtn) timetableBtn.style.display = 'none';
+    const manageBtn = document.getElementById('quickBtnManage');
+    if (manageBtn) manageBtn.style.display = 'none';
+
+    console.log('🏋️ 헬스장 모드 ON: 동/호수 칸 + 시간표/내 신청 버튼 숨김 처리 완료');
 }
 
 // Setup Event Listeners
