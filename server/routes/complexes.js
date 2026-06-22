@@ -457,7 +457,7 @@ router.delete('/:id', async (req, res) => {
 router.patch('/:id/flags', async (req, res) => {
     try {
         const sb = getSupabase();
-        const boolFlags = ['show_inquiry', 'share_timeslot_capacity', 'show_cancel_tab']; // boolean 플래그
+        const boolFlags = ['show_inquiry', 'share_timeslot_capacity', 'show_cancel_tab', 'gym_mode']; // boolean 플래그
         const VALID_THEMES = ['default','hotel','modern','nature','minimal','ocean','sunset','cherry','dark','royal','zen'];
         const VALID_VENUES = ['apartment','hotel'];
         const patch = {};

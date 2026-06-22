@@ -93,7 +93,7 @@ const instructors = {
 
             return `
             <div class="list-item" style="flex-wrap:wrap;gap:4px">
-                ${i.photo_url ? `<img src="${i.photo_url}" class="item-thumb" alt="${i.name}">` : '<div class="item-thumb-placeholder"><i class="fas fa-user"></i></div>'}
+                ${(i.photo_urls?.[0] || i.photo_url) ? `<img src="${escHtml(i.photo_urls?.[0] || i.photo_url)}" class="item-thumb" alt="${escHtml(i.name)}">` : '<div class="item-thumb-placeholder"><i class="fas fa-user"></i></div>'}
                 <div class="item-main" style="flex:1;min-width:0">
                     <strong>${i.name}</strong>${dDayBadge}
                     <p style="margin:2px 0">${i.title || '-'}${phoneStr}</p>
@@ -306,12 +306,17 @@ const instructors = {
                 <textarea id="iBio" rows="3">${i ? escHtml(i.bio||'') : ''}</textarea>
             </div>
             <div class="form-group">
-                <label>사진 URL</label>
-                <input type="text" id="iPhoto" value="${i ? escHtml(i.photo_url||'') : ''}" placeholder="https://... 또는 /uploads/파일명">
-                <small style="color:#999">또는 파일 직접 업로드:</small>
-                <input type="file" id="iPhotoFile" accept="image/*" onchange="instructors.previewPhoto(this)">
-                <div id="iPhotoPreview" style="margin-top:8px">
-                    ${i?.photo_url ? `<img src="${i.photo_url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px">` : ''}
+                <label>사진 <span style="font-size:.8rem;color:#888;font-weight:400">(최대 10장, 첫 번째가 대표 사진)</span></label>
+                <div id="iPhotoGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+                    ${instructors._renderPhotoGrid(i)}
+                </div>
+                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;background:#f0f4ff;border:1.5px dashed #6366f1;border-radius:8px;padding:8px 14px;font-size:.875rem;color:#6366f1;font-weight:500">
+                    <i class="fas fa-plus-circle"></i> 사진 추가 (최대 10장)
+                    <input type="file" id="iPhotoFile" accept="image/*" multiple style="display:none"
+                           onchange="instructors.handlePhotoAdd(this)">
+                </label>
+                <div id="iPhotoCount" style="margin-top:6px;font-size:.78rem;color:#888">
+                    ${instructors._getPhotoCount(i)}장 / 10장
                 </div>
             </div>
             <div class="form-group"><label>표시 순서</label>
@@ -435,22 +440,116 @@ const instructors = {
             <button class="btn-primary" onclick="instructors.save('${id||''}')"><i class="fas fa-save"></i> 저장</button>`;
         openGlobalModal(i ? '강사 수정' : '강사 추가', body, footer);
     },
-    previewPhoto(input) {
-        if (!input.files[0]) return;
-        const file = input.files[0];
-        const reader = new FileReader();
-        reader.onload = e => {
-            const preview = document.getElementById('iPhotoPreview');
-            if (preview) {
-                preview.innerHTML = `
-                    <img src="${e.target.result}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid #27ae60">
-                    <div style="font-size:.75rem;color:#27ae60;margin-top:4px"><i class="fas fa-check-circle"></i> 파일 선택됨: ${escHtml(file.name)}</div>`;
+    // ── 다중 사진 관련 헬퍼 ──────────────────────────────────────────────
+
+    // 기존 사진 목록 반환 (photo_urls 배열 우선, photo_url 단일 fallback)
+    _getPhotos(instructor) {
+        if (!instructor) return [];
+        const urls = Array.isArray(instructor.photo_urls) ? instructor.photo_urls : [];
+        if (urls.length > 0) return urls;
+        if (instructor.photo_url) return [instructor.photo_url];
+        return [];
+    },
+
+    _getPhotoCount(instructor) {
+        return this._getPhotos(instructor).length;
+    },
+
+    // 사진 그리드 HTML 렌더링
+    _renderPhotoGrid(instructor) {
+        const photos = this._getPhotos(instructor);
+        if (photos.length === 0) {
+            return `<div style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-image"></i> 등록된 사진 없음</div>`;
+        }
+        return photos.map((url, idx) => `
+            <div style="position:relative;display:inline-block" data-photo-idx="${idx}">
+                <img src="${escHtml(url)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid ${idx===0?'#6366f1':'#e5e7eb'}">
+                ${idx===0 ? `<span style="position:absolute;bottom:2px;left:2px;background:#6366f1;color:#fff;font-size:.6rem;padding:1px 4px;border-radius:4px">대표</span>` : ''}
+                <button type="button" onclick="instructors._removePhoto(${idx})"
+                    style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>`).join('');
+    },
+
+    // 현재 폼에 있는 사진 URL 목록 (data attribute 기반)
+    _getFormPhotos() {
+        const grid = document.getElementById('iPhotoGrid');
+        if (!grid) return [];
+        return Array.from(grid.querySelectorAll('[data-photo-idx]'))
+            .map(el => el.querySelector('img')?.src)
+            .filter(Boolean);
+    },
+
+    // 사진 삭제
+    _removePhoto(idx) {
+        const photos = this._getFormPhotos();
+        photos.splice(idx, 1);
+        this._refreshPhotoGrid(photos);
+    },
+
+    // 그리드 새로 그리기
+    _refreshPhotoGrid(photos) {
+        const grid = document.getElementById('iPhotoGrid');
+        const countEl = document.getElementById('iPhotoCount');
+        if (!grid) return;
+        if (photos.length === 0) {
+            grid.innerHTML = `<div style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-image"></i> 등록된 사진 없음</div>`;
+        } else {
+            grid.innerHTML = photos.map((url, idx) => `
+                <div style="position:relative;display:inline-block" data-photo-idx="${idx}">
+                    <img src="${escHtml(url)}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:2px solid ${idx===0?'#6366f1':'#e5e7eb'}">
+                    ${idx===0 ? `<span style="position:absolute;bottom:2px;left:2px;background:#6366f1;color:#fff;font-size:.6rem;padding:1px 4px;border-radius:4px">대표</span>` : ''}
+                    <button type="button" onclick="instructors._removePhoto(${idx})"
+                        style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>`).join('');
+        }
+        if (countEl) countEl.textContent = `${photos.length}장 / 10장`;
+    },
+
+    // 파일 선택 → 업로드 → 그리드에 추가
+    async handlePhotoAdd(input) {
+        if (!input.files || input.files.length === 0) return;
+        const current = this._getFormPhotos();
+        const remaining = 10 - current.length;
+        if (remaining <= 0) { showToast('사진은 최대 10장까지 등록할 수 있습니다', 'error'); input.value=''; return; }
+
+        const files = Array.from(input.files).slice(0, remaining);
+        if (files.length < input.files.length) {
+            showToast(`10장 초과분(${input.files.length - files.length}장)은 제외됩니다`, 'error');
+        }
+
+        const countEl = document.getElementById('iPhotoCount');
+        if (countEl) countEl.textContent = '업로드 중...';
+
+        const newUrls = [];
+        for (const file of files) {
+            try {
+                const blob = await this._resizeImage(file);
+                const uploadFile = blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
+                const fd = new FormData();
+                fd.append('image', uploadFile);
+                const res = await fetch(window.location.origin + '/api/upload/image', { method: 'POST', body: fd });
+                const result = await res.json().catch(() => ({ success: false, error: 'HTTP ' + res.status }));
+                if (res.ok && result.success && result.url) {
+                    newUrls.push(result.url);
+                } else {
+                    showToast('업로드 실패: ' + (result.error || '알 수 없는 오류'), 'error');
+                }
+            } catch(e) {
+                showToast('업로드 실패: ' + e.message, 'error');
             }
-            // iPhoto URL 필드는 비워두기 (파일 우선 사용 명확히 표시)
-            const iPhoto = document.getElementById('iPhoto');
-            if (iPhoto) iPhoto.placeholder = '파일 업로드 선택됨 (저장 시 자동 처리)';
-        };
-        reader.readAsDataURL(file);
+        }
+
+        this._refreshPhotoGrid([...current, ...newUrls]);
+        input.value = ''; // 같은 파일 재선택 허용
+    },
+
+    previewPhoto(input) {
+        // 구버전 단일 사진 미리보기 (하위 호환용 - 현재는 handlePhotoAdd로 대체됨)
+        if (!input.files[0]) return;
     },
     // 이미지를 Canvas로 리사이즈 후 Blob 반환 (최대 800px, JPEG 0.85)
     _resizeImage(file, maxPx = 800) {
@@ -481,38 +580,11 @@ const instructors = {
         const saveBtn = document.querySelector('#globalModal .btn-primary');
         if (saveBtn) { saveBtn.disabled = true; saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 저장 중...'; }
 
-        let photoUrl = document.getElementById('iPhoto').value.trim();
-        const fileInput = document.getElementById('iPhotoFile');
-
-        // 파일 업로드 처리 (Canvas 리사이즈 → JPEG → FormData)
-        if (fileInput && fileInput.files && fileInput.files[0]) {
-            try {
-                const origFile = fileInput.files[0];
-                // Canvas로 리사이즈 (최대 800px, JPEG 변환) → multipart 오류 방지
-                const blob = await this._resizeImage(origFile);
-                const uploadFile = blob
-                    ? new File([blob], 'photo.jpg', { type: 'image/jpeg' })
-                    : origFile;
-
-                const formData = new FormData();
-                formData.append('image', uploadFile);
-                const uploadUrl = window.location.origin + '/api/upload/image';
-                const res = await fetch(uploadUrl, { method: 'POST', body: formData });
-                // 에러 응답 body도 읽어서 정확한 메시지 표시
-                const result = await res.json().catch(() => ({ success: false, error: 'HTTP ' + res.status }));
-                if (res.ok && result.success && result.url) {
-                    photoUrl = result.url;
-                    console.log('[instructor] 이미지 업로드 성공:', photoUrl);
-                } else {
-                    throw new Error(result.error || 'HTTP ' + res.status);
-                }
-            } catch(e) {
-                console.error('[instructor] 이미지 업로드 실패:', e);
-                if (saveBtn) { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> 저장'; }
-                showToast('이미지 업로드 실패: ' + e.message, 'error');
-                return;
-            }
-        }
+        // ── 다중 사진: 폼 그리드에서 현재 URL 목록 수집 ─────────────────────
+        // handlePhotoAdd()에서 이미 업로드 완료된 URL들이 그리드에 있음
+        const photoUrls = this._getFormPhotos();
+        const photoUrl  = photoUrls[0] || ''; // 대표 사진 = 첫 번째
+        console.log('[instructor] 저장할 사진 목록:', photoUrls);
 
         try {
             // 담당 타임 체크박스 수집 → 객체 배열로 변환
@@ -548,6 +620,7 @@ const instructors = {
                 name, title: document.getElementById('iTitle').value,
                 bio: document.getElementById('iBio').value,
                 photo_url: photoUrl,
+                photo_urls: photoUrls,
                 display_order: parseInt(document.getElementById('iOrder').value)||0,
                 hourly_rates: hourlyRates,
                 assigned_programs: assignedPrograms,

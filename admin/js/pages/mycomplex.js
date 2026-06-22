@@ -594,6 +594,48 @@ const mycomplex = {
                 </div>
             </div>
 
+            <!-- 헬스장 모드 설정 카드 -->
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <i class="fas fa-dumbbell"></i> 헬스장 모드
+                </div>
+                <div class="settings-card-body">
+                    <p style="font-size:.875rem;color:#666;margin-bottom:16px;line-height:1.6">
+                        <i class="fas fa-info-circle" style="color:#3498db"></i>
+                        <strong>켜기</strong>: 입주민 신청 폼에서 <strong>동/호수 입력 칸이 숨겨집니다.</strong><br>
+                        헬스장처럼 아파트 단지가 아닌 시설에서 사용할 때 활성화하세요.<br>
+                        <strong>끄기</strong>: 기존 방식 — 동/호수 입력 필드가 표시됩니다 (아파트 기본).
+                    </p>
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:#f8f9fa;border-radius:10px;border:1px solid #e9ecef">
+                        <div>
+                            <div style="font-weight:600;font-size:.95rem;color:#2c3e50">
+                                <i class="fas fa-dumbbell" style="color:#f97316;margin-right:6px"></i>
+                                헬스장 모드 (동/호수 숨김)
+                            </div>
+                            <div style="font-size:.8rem;color:#888;margin-top:3px">
+                                신청 폼에서 동·호수 입력 칸 제거
+                            </div>
+                        </div>
+                        <label style="position:relative;display:inline-block;width:52px;height:28px;cursor:pointer;flex-shrink:0">
+                            <input type="checkbox" id="gymModeToggle"
+                                   ${cx.gym_mode ? 'checked' : ''}
+                                   style="opacity:0;width:0;height:0"
+                                   onchange="mycomplex._saveGymMode(this.checked)">
+                            <span style="position:absolute;inset:0;background:${cx.gym_mode ? '#f97316' : '#ccc'};border-radius:28px;transition:.3s"
+                                  id="gymModeTrack">
+                                <span style="position:absolute;top:3px;left:${cx.gym_mode ? '27px' : '3px'};width:22px;height:22px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,.2)"
+                                      id="gymModeThumb"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <p id="gymModeHint" style="margin-top:10px;font-size:.8rem;color:${cx.gym_mode ? '#f97316' : '#6b7280'}">
+                        ${cx.gym_mode
+                            ? '<i class="fas fa-check-circle"></i> 헬스장 모드 ON — 동/호수 입력 칸이 숨겨집니다'
+                            : '<i class="fas fa-times-circle"></i> 헬스장 모드 OFF — 동/호수 입력 칸이 표시됩니다 (기본)'}
+                    </p>
+                </div>
+            </div>
+
             <!-- SMS 알림 설정 카드 -->
             <div class="settings-card" id="smsSettingsCard">
                 <div class="settings-card-header">
@@ -1119,6 +1161,35 @@ const mycomplex = {
             const toggle = document.getElementById('showCancelTabToggle');
             if (toggle) toggle.checked = !checked;
             if (track) track.style.background = !checked ? '#10b981' : '#ccc';
+            if (thumb) thumb.style.left = !checked ? '27px' : '3px';
+            showToast('저장 실패: ' + e.message, 'error');
+        }
+    },
+
+    async _saveGymMode(checked) {
+        // 토글 UI 즉시 반영
+        const track = document.getElementById('gymModeTrack');
+        const thumb = document.getElementById('gymModeThumb');
+        const hint  = document.getElementById('gymModeHint');
+        if (track) track.style.background = checked ? '#f97316' : '#ccc';
+        if (thumb) thumb.style.left = checked ? '27px' : '3px';
+        if (hint) {
+            hint.style.color = checked ? '#f97316' : '#6b7280';
+            hint.innerHTML = checked
+                ? '<i class="fas fa-check-circle"></i> 헬스장 모드 ON — 동/호수 입력 칸이 숨겨집니다'
+                : '<i class="fas fa-times-circle"></i> 헬스장 모드 OFF — 동/호수 입력 칸이 표시됩니다 (기본)';
+        }
+
+        try {
+            const res = await API.complexes.patchFlags(Admin.complex.id, { gym_mode: checked });
+            Admin.complex = res.data;
+            sessionStorage.setItem('adminComplex', JSON.stringify(Admin.complex));
+            showToast(checked ? '헬스장 모드가 활성화되었습니다 (동/호수 숨김)' : '헬스장 모드가 비활성화되었습니다 (동/호수 표시)');
+        } catch(e) {
+            // 실패 시 토글 되돌리기
+            const toggle = document.getElementById('gymModeToggle');
+            if (toggle) toggle.checked = !checked;
+            if (track) track.style.background = !checked ? '#f97316' : '#ccc';
             if (thumb) thumb.style.left = !checked ? '27px' : '3px';
             showToast('저장 실패: ' + e.message, 'error');
         }
