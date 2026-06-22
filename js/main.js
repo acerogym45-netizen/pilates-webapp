@@ -3969,17 +3969,17 @@ function _renderGymCurriculumTable() {
     ];
 
     // ─── 현재 선택 상태 관리 ────────────────────────────────────────────────
-    const activeGoal    = window._gymCurrGoal    || GOALS[0].key;
-    const activeCount   = window._gymCurrCount   || 10;
+    const activeGoal  = window._gymCurrGoal  || GOALS[0].key;
+    const activeCount = window._gymCurrCount || 10;
 
     const currentGoal = GOALS.find(g => g.key === activeGoal) || GOALS[0];
     const currentSess = currentGoal.sessions.find(s => s.count === activeCount) || currentGoal.sessions[0];
 
-    // ─── HTML 렌더링 ────────────────────────────────────────────────────────
+    // ─── HTML 렌더링 — 목적별 카드 디자인 ────────────────────────────────
     content.innerHTML = `
-<div class="gym-curr-wrap">
+<div style="display:flex;flex-direction:column;gap:16px;padding-bottom:4px">
 
-    <!-- 1차: 운동 목적 탭 -->
+    <!-- 1차: 운동 목적 탭 (가로 스크롤) -->
     <div class="gym-curr-goal-tabs" role="tablist">
         ${GOALS.map(g => `
         <button class="gym-curr-goal-tab${g.key === currentGoal.key ? ' active' : ''}"
@@ -3991,45 +3991,54 @@ function _renderGymCurriculumTable() {
         </button>`).join('')}
     </div>
 
-    <!-- 2차: 횟수 선택 -->
-    <div class="gym-curr-count-bar">
-        ${currentGoal.sessions.map(s => `
-        <button class="gym-curr-count-btn${s.count === currentSess.count ? ' active' : ''}"
-                style="--cnt-color:${currentGoal.color};--cnt-bg:${currentGoal.bg}"
-                onclick="selectGymCurrCount(${s.count})">
-            ${s.count}회
-        </button>`).join('')}
-    </div>
+    <!-- 카드 -->
+    <div class="gym-curr-card"
+         style="--card-color:${currentGoal.color};--card-bg:${currentGoal.bg};--card-border:${currentGoal.border}">
 
-    <!-- 프로그램 헤더 -->
-    <div class="gym-curr-prog-header" style="border-color:${currentGoal.border};background:${currentGoal.bg}">
-        <span class="gym-curr-prog-icon">${currentGoal.icon}</span>
-        <div>
-            <div class="gym-curr-prog-badge" style="background:${currentGoal.color}">${currentGoal.label} · ${currentSess.count}회 과정</div>
-            <div class="gym-curr-prog-title">${currentSess.title}</div>
+        <!-- 카드 헤더: 목적 아이콘 + 타이틀 + 횟수 선택 칩 -->
+        <div class="gym-curr-card-header">
+            <div class="gym-curr-card-title-row">
+                <div class="gym-curr-card-emoji">${currentGoal.icon}</div>
+                <div>
+                    <div class="gym-curr-card-label">${currentGoal.label}</div>
+                    <div class="gym-curr-card-subtitle">PT 프로그램 커리큘럼</div>
+                </div>
+            </div>
+            <!-- 횟수 선택 -->
+            <div class="gym-curr-count-row">
+                ${currentGoal.sessions.map(s => `
+                <button class="gym-curr-count-chip${s.count === currentSess.count ? ' active' : ''}"
+                        style="--card-color:${currentGoal.color};--card-bg:${currentGoal.bg}"
+                        onclick="selectGymCurrCount(${s.count})">
+                    ${s.count}회
+                </button>`).join('')}
+            </div>
         </div>
-    </div>
 
-    <!-- 단계별 커리큘럼 표 -->
-    <div class="gym-curr-table-wrap">
-        <table class="gym-curr-table">
-            <thead>
-                <tr>
-                    <th style="color:${currentGoal.color}">구간</th>
-                    <th style="color:${currentGoal.color}">주요 내용</th>
-                </tr>
-            </thead>
-            <tbody>
+        <!-- 카드 바디: 세로 타임라인 -->
+        <div class="gym-curr-card-body">
+            <div class="gym-curr-prog-name"
+                 style="--card-color:${currentGoal.color}">
+                ${currentSess.title}
+            </div>
+            <div class="gym-curr-timeline"
+                 style="--card-color:${currentGoal.color};--card-bg:${currentGoal.bg};--card-border:${currentGoal.border}">
                 ${currentSess.phases.map((p, i) => `
-                <tr>
-                    <td class="gym-curr-week" style="color:${currentGoal.color};border-color:${currentGoal.border}">
-                        <span class="gym-curr-step" style="background:${currentGoal.color}">${i + 1}단계</span>
-                        ${p.week}
-                    </td>
-                    <td class="gym-curr-desc">${p.desc}</td>
-                </tr>`).join('')}
-            </tbody>
-        </table>
+                <div class="gym-curr-step-row">
+                    <div class="gym-curr-step-dot"
+                         style="background:${currentGoal.color}">${i + 1}</div>
+                    <div class="gym-curr-step-content">
+                        <div class="gym-curr-step-range">
+                            <span class="gym-curr-step-range-badge"
+                                  style="background:${currentGoal.bg};border-color:${currentGoal.border};color:${currentGoal.color}">
+                                ${p.week}
+                            </span>
+                        </div>
+                        <div class="gym-curr-step-desc">${p.desc.replace(/·/g, '<span style="color:'+currentGoal.color+';font-weight:700"> · </span>')}</div>
+                    </div>
+                </div>`).join('')}
+            </div>
+        </div>
     </div>
 
     <p class="gym-curr-notice">
