@@ -170,7 +170,21 @@ function applyGymMode() {
             .replace(/동호수,?\s*/g, '');
     }
 
-    console.log('🏋️ 헬스장 모드 ON: 계약서·동호수·시간표/내신청·커리큘럼월선택·문의동호수 처리 완료');
+    // ── 7. 전화번호 불일치 안내 메시지에서 '관리비 부과' 제거 ────────────
+    document.querySelectorAll('.mismatch-msg').forEach(el => {
+        el.innerHTML = el.innerHTML
+            .replace(/관리비 부과 및\s*/g, '');
+    });
+
+    // ── 8. 설문 섹션 표시 ────────────────────────────────────────────────
+    const surveySection = document.getElementById('gymSurveySection');
+    if (surveySection) surveySection.style.display = '';
+
+    // ── 9. 예약금 배너: 선택한 프로그램에 deposit_enabled 있으면 표시 ────
+    // lessonType change 시 업데이트 (아래 _updateGymDepositBanner 참조)
+    document.getElementById('lessonType')?.addEventListener('change', _updateGymDepositBanner);
+
+    console.log('🏋️ 헬스장 모드 ON: 계약서·동호수·시간표/내신청·커리큘럼월선택·문의동호수·설문 처리 완료');
 }
 
 // 헬스장 모드: 커리큘럼 로드 시 현재 월 자동 선택 (월 선택 토글 숨김 상태)
@@ -187,6 +201,28 @@ function gymModeLoadCurrentCurriculum() {
         select.appendChild(opt);
     }
     select.value = val;
+}
+
+// 예약금 배너 업데이트 (헬스장 모드 + 프로그램 선택 변경 시)
+function _updateGymDepositBanner() {
+    const banner = document.getElementById('gymDepositBanner');
+    const text   = document.getElementById('gymDepositText');
+    if (!banner || !text) return;
+
+    const select = document.getElementById('lessonType');
+    const opt    = select?.options[select.selectedIndex];
+    if (!opt || !opt.value) { banner.style.display = 'none'; return; }
+
+    // option에 저장된 data-deposit 값 확인 (populateProgramOptions에서 세팅)
+    const depositEnabled = opt.dataset.depositEnabled === 'true';
+    const depositAmount  = parseInt(opt.dataset.depositAmount || '0');
+
+    if (depositEnabled && depositAmount > 0) {
+        text.textContent = `이 프로그램은 노쇼 방지를 위해 예약금 ${depositAmount.toLocaleString()}원이 필요합니다. 신청 후 안내된 계좌로 납부해 주세요. 정상 참여 시 전액 환급됩니다.`;
+        banner.style.display = '';
+    } else {
+        banner.style.display = 'none';
+    }
 }
 
 // Setup Event Listeners
@@ -281,6 +317,12 @@ function checkConfirmMatch(id1, id2, wrapId) {
 
 // 확인 필드 전체 일치 여부 반환 (제출 시 최종 검증용)
 function allConfirmFieldsMatch() {
+    const isGymMode = complexContext?.getComplex?.()?.gym_mode === true;
+    // 헬스장 모드: "관리비 부과" 없이 SMS 발송만 언급
+    const mismatchSuffix = isGymMode
+        ? 'SMS 발송을 위하여 반드시 정확하게 입력해 주세요.'
+        : '관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.';
+
     const pairs = [
         { id1: 'dong',  id2: 'dongConfirm',  label: '동' },
         { id1: 'ho',    id2: 'hoConfirm',    label: '호수' },
@@ -290,12 +332,12 @@ function allConfirmFieldsMatch() {
         const v1 = (document.getElementById(id1)?.value  || '').trim();
         const v2 = (document.getElementById(id2)?.value  || '').trim();
         if (!v2) {
-            alert(`${label} 확인란을 입력해 주세요.\n\n관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.`);
+            alert(`${label} 확인란을 입력해 주세요.\n\n${mismatchSuffix}`);
             document.getElementById(id2)?.focus();
             return false;
         }
         if (v1 !== v2) {
-            alert(`${label}이(가) 일치하지 않습니다.\n\n관리비 부과 및 SMS 발송을 위하여 반드시 정확하게 입력해 주세요.`);
+            alert(`${label}이(가) 일치하지 않습니다.\n\n${mismatchSuffix}`);
             document.getElementById(id2)?.focus();
             return false;
         }
@@ -352,6 +394,18 @@ function handlePage1Submit(e) {
     const isHotelMode = complexContext && complexContext.isHotel ? complexContext.isHotel() : false;
     const isGymMode   = complexContext?.getComplex?.()?.gym_mode === true;
     const roomVal = isHotelMode ? (document.getElementById('hotelRoom')?.value?.trim() || '') : '';
+    // 헬스장 모드 설문 데이터 수집
+    const surveyData = isGymMode ? {
+        gender:      document.getElementById('surveyGender')?.value || '',
+        age:         document.getElementById('surveyAge')?.value || '',
+        goal:        Array.from(document.querySelectorAll('input[name="surveyGoal"]:checked')).map(el => el.value),
+        career:      document.getElementById('surveyCareer')?.value || '',
+        medical:     document.getElementById('surveyMedical')?.value || '',
+        prefer_time: document.getElementById('surveyPreferTime')?.value || '',
+        frequency:   document.getElementById('surveyFrequency')?.value || '',
+        etc:         document.getElementById('surveyEtc')?.value || '',
+    } : null;
+
     formData = {
         dong: isHotelMode ? roomVal : (isGymMode ? '-' : document.getElementById('dong').value.trim()),
         ho:   isHotelMode ? '호텔'  : (isGymMode ? '-' : document.getElementById('ho').value.trim()),
@@ -362,6 +416,7 @@ function handlePage1Submit(e) {
         preferred_time: preferredTime,
         agreement: document.getElementById('agreement').checked,
         instructor_id: selectedInstructorId || null,
+        ...(surveyData ? { survey_data: surveyData } : {}),
     };
     
     // Validation
@@ -3385,6 +3440,8 @@ function populateProgramOptions(programs, newApplyIsOpen = null) {
         option.dataset.availableTimeSlots = JSON.stringify(program.time_slots || program.available_time_slots || []);
         option.dataset.isActive           = isActive;
         option.dataset.alwaysOpenLesson   = program.always_open_lesson ? 'true' : 'false';
+        option.dataset.depositEnabled     = program.deposit_enabled ? 'true' : 'false';
+        option.dataset.depositAmount      = program.deposit_amount || 0;
 
         lessonTypeSelect.appendChild(option);
     });

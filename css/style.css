@@ -312,6 +312,20 @@ input:focus, textarea:focus, select:focus {
 }
 textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
 
+/* ── 헬스장 모드 설문 칩 ── */
+.survey-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 11px; border: 1.5px solid #d1d5db;
+    border-radius: 20px; font-size: .82rem; font-weight: 500;
+    cursor: pointer; transition: all .18s; color: #374151;
+    background: #f9fafb; user-select: none;
+}
+.survey-chip:has(input:checked) {
+    background: var(--brand-light); border-color: var(--brand);
+    color: var(--brand); font-weight: 700;
+}
+.survey-chip input { display: none; }
+
 /* ── 개인정보 동의 ── */
 .consent-group { margin: 14px 0; }
 .checkbox-label {
