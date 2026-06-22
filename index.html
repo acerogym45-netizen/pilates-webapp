@@ -1852,10 +1852,13 @@
                             </div>`;
                     }
 
-                    // 자격증 이미지 토글
+                    // ── gym_mode일 때만 자격증·리뷰 토글 표시 ──
+                    const isGymMode = window.complexContext?.getComplex?.()?.gym_mode === true;
+
+                    // 자격증 이미지 토글 (gym_mode 전용)
                     const certImgs = Array.isArray(ins.cert_images) ? ins.cert_images : [];
                     const certToggleId = `instrCert_${insIdx}`;
-                    const certToggleHtml = certImgs.length > 0 ? `
+                    const certToggleHtml = (isGymMode && certImgs.length > 0) ? `
                         <button class="instr-toggle-btn" id="${certToggleId}_btn"
                                 onclick="toggleInstrSection('${certToggleId}')">
                             <span><i class="fas fa-certificate" style="color:#f59e0b;margin-right:5px"></i>자격 사항</span>
@@ -1869,10 +1872,10 @@
                             </div>
                         </div>` : '';
 
-                    // 리뷰 토글
+                    // 리뷰 토글 (gym_mode 전용)
                     const reviewList = Array.isArray(ins.reviews) ? ins.reviews : [];
                     const reviewToggleId = `instrReview_${insIdx}`;
-                    const reviewToggleHtml = reviewList.length > 0 ? `
+                    const reviewToggleHtml = (isGymMode && reviewList.length > 0) ? `
                         <button class="instr-toggle-btn" id="${reviewToggleId}_btn"
                                 onclick="toggleInstrSection('${reviewToggleId}')">
                             <span><i class="fas fa-star" style="color:#f59e0b;margin-right:5px"></i>회원 리뷰 <span style="color:#9ca3af;font-weight:400">(${reviewList.length}건)</span></span>

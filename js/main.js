@@ -3674,12 +3674,15 @@ function _renderGymCurriculumTable() {
     const content = document.getElementById('curriculumContent');
     if (!content) return;
 
+    // ACERO 브랜드 로고 URL (이모지 대신 공통 로고 사용)
+    const LOGO_URL = 'https://www.genspark.ai/api/files/s/F4AGFmBo';
+
     // ─── 데이터 정의 ────────────────────────────────────────────────────────
-    // 구조: { goalKey, icon, color, label, sessions: [ { count, title, phases } ] }
+    // 구조: { goalKey, color, label, sessions: [ { count, title, phases } ] }
     // phases: [ { week, desc } ]
     const GOALS = [
         {
-            key: 'diet', icon: '🔥', label: '다이어트',
+            key: 'diet', label: '다이어트',
             color: '#ef4444', bg: '#fef2f2', border: '#fecaca',
             sessions: [
                 { count: 10, title: '입문 체지방 감소 프로그램',
@@ -3715,7 +3718,7 @@ function _renderGymCurriculumTable() {
             ]
         },
         {
-            key: 'muscle', icon: '💪', label: '근육량 증가',
+            key: 'muscle', label: '근육량 증가',
             color: '#7c3aed', bg: '#faf5ff', border: '#d8b4fe',
             sessions: [
                 { count: 10, title: '근력 입문 프로그램',
@@ -3751,7 +3754,7 @@ function _renderGymCurriculumTable() {
             ]
         },
         {
-            key: 'posture', icon: '🧍', label: '체형 교정',
+            key: 'posture', label: '체형 교정',
             color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc',
             sessions: [
                 { count: 10, title: '자세 평가 & 단기 교정',
@@ -3787,7 +3790,7 @@ function _renderGymCurriculumTable() {
             ]
         },
         {
-            key: 'rehab', icon: '🩺', label: '재활·통증 완화',
+            key: 'rehab', label: '재활·통증 완화',
             color: '#d97706', bg: '#fffbeb', border: '#fcd34d',
             sessions: [
                 { count: 10, title: '통증 완화 입문 과정',
@@ -3823,7 +3826,7 @@ function _renderGymCurriculumTable() {
             ]
         },
         {
-            key: 'health', icon: '❤️', label: '건강 유지',
+            key: 'health', label: '건강 유지',
             color: '#16a34a', bg: '#f0fdf4', border: '#86efac',
             sessions: [
                 { count: 10, title: '건강 생활 입문',
@@ -3859,7 +3862,7 @@ function _renderGymCurriculumTable() {
             ]
         },
         {
-            key: 'flexibility', icon: '🤸', label: '유연성 향상',
+            key: 'flexibility', label: '유연성 향상',
             color: '#0284c7', bg: '#f0f9ff', border: '#7dd3fc',
             sessions: [
                 { count: 10, title: '유연성 집중 입문',
@@ -3895,7 +3898,7 @@ function _renderGymCurriculumTable() {
             ]
         },
         {
-            key: 'stress', icon: '🧘', label: '스트레스 해소',
+            key: 'stress', label: '스트레스 해소',
             color: '#9333ea', bg: '#fdf4ff', border: '#e9d5ff',
             sessions: [
                 { count: 10, title: '마음챙김 운동 입문',
@@ -3931,7 +3934,7 @@ function _renderGymCurriculumTable() {
             ]
         },
         {
-            key: 'sport', icon: '🏅', label: '스포츠 퍼포먼스',
+            key: 'sport', label: '스포츠 퍼포먼스',
             color: '#b45309', bg: '#fefce8', border: '#fde68a',
             sessions: [
                 { count: 10, title: '스포츠 기초 체력 강화',
@@ -3975,18 +3978,17 @@ function _renderGymCurriculumTable() {
     const currentGoal = GOALS.find(g => g.key === activeGoal) || GOALS[0];
     const currentSess = currentGoal.sessions.find(s => s.count === activeCount) || currentGoal.sessions[0];
 
-    // ─── HTML 렌더링 — 목적별 카드 디자인 ────────────────────────────────
+    // ─── HTML 렌더링 — 목적별 카드 디자인 (ACERO 로고 기반) ──────────────
     content.innerHTML = `
 <div style="display:flex;flex-direction:column;gap:16px;padding-bottom:4px">
 
-    <!-- 1차: 운동 목적 탭 (가로 스크롤) -->
+    <!-- 1차: 운동 목적 탭 (가로 스크롤) — 이모지 없이 텍스트만 -->
     <div class="gym-curr-goal-tabs" role="tablist">
         ${GOALS.map(g => `
         <button class="gym-curr-goal-tab${g.key === currentGoal.key ? ' active' : ''}"
                 style="--tab-color:${g.color};--tab-bg:${g.bg};--tab-border:${g.border}"
                 onclick="selectGymCurrGoal('${g.key}')"
                 role="tab" aria-selected="${g.key === currentGoal.key}">
-            <span class="gym-curr-goal-icon">${g.icon}</span>
             <span class="gym-curr-goal-label">${g.label}</span>
         </button>`).join('')}
     </div>
@@ -3995,13 +3997,15 @@ function _renderGymCurriculumTable() {
     <div class="gym-curr-card"
          style="--card-color:${currentGoal.color};--card-bg:${currentGoal.bg};--card-border:${currentGoal.border}">
 
-        <!-- 카드 헤더: 목적 아이콘 + 타이틀 + 횟수 선택 칩 -->
+        <!-- 카드 헤더: ACERO 로고 + 목적명 + 횟수 선택 칩 -->
         <div class="gym-curr-card-header">
             <div class="gym-curr-card-title-row">
-                <div class="gym-curr-card-emoji">${currentGoal.icon}</div>
+                <div class="gym-curr-card-logo-box" style="border-color:${currentGoal.color}">
+                    <img src="${LOGO_URL}" alt="ACERO" class="gym-curr-card-logo-img">
+                </div>
                 <div>
                     <div class="gym-curr-card-label">${currentGoal.label}</div>
-                    <div class="gym-curr-card-subtitle">PT 프로그램 커리큘럼</div>
+                    <div class="gym-curr-card-subtitle">ACERO PT 커리큘럼</div>
                 </div>
             </div>
             <!-- 횟수 선택 -->
