@@ -187,10 +187,23 @@ function applyGymMode() {
     if (surveySection) surveySection.style.display = '';
 
     // ── 9. 예약금 배너: 선택한 프로그램에 deposit_enabled 있으면 표시 ────
-    // lessonType change 시 업데이트 (아래 _updateGymDepositBanner 참조)
     document.getElementById('lessonType')?.addEventListener('change', _updateGymDepositBanner);
 
-    console.log('🏋️ 헬스장 모드 ON: 계약서·동호수·시간표/내신청·커리큘럼월선택·문의동호수·설문 처리 완료');
+    // ── 10. 내 문의 조회 모달 동/호수 숨김 ──────────────────────────────
+    const myInqDongWrap  = document.getElementById('myInqDongWrap');
+    const myInqHoWrap    = document.getElementById('myInqHoWrap');
+    const myInqPhone4Wrap = document.getElementById('myInqPhone4Wrap');
+    if (myInqDongWrap)   myInqDongWrap.style.display  = 'none';
+    if (myInqHoWrap)     myInqHoWrap.style.display    = 'none';
+    // 전화번호 필드 전체 너비로 확장
+    if (myInqPhone4Wrap) myInqPhone4Wrap.style.flex   = 'unset';
+    // 안내 문구 변경
+    const myInqInfoText = document.getElementById('myInqInfoText');
+    if (myInqInfoText) {
+        myInqInfoText.innerHTML = '<strong>전화번호 끝 4자리</strong>를 입력하면 내가 등록한 문의와 답변을 확인할 수 있습니다.';
+    }
+
+    console.log('🏋️ 헬스장 모드 ON: 계약서·동호수·시간표/내신청·커리큘럼월선택·문의동호수·설문·내문의동호수 처리 완료');
 }
 
 // 헬스장 모드: 커리큘럼 로드 시 현재 월 자동 선택 (월 선택 토글 숨김 상태)
@@ -1373,8 +1386,11 @@ function showMyInquiryModal() {
     modal.style.alignItems = 'flex-start';
     document.body.style.overflow = 'hidden';
     modal.scrollTop = 0;
-    // 첫 번째 입력 필드 포커스
-    setTimeout(() => document.getElementById('myInqDong')?.focus(), 100);
+    // 헬스장 모드: 전화번호 필드로 포커스, 일반: 동 필드로 포커스
+    const isGymMode = complexContext?.getComplex?.()?.gym_mode === true;
+    setTimeout(() => {
+        document.getElementById(isGymMode ? 'myInqPhone4' : 'myInqDong')?.focus();
+    }, 100);
 }
 
 function closeMyInquiryModal() {
@@ -3578,6 +3594,15 @@ function closeCurriculumModal() {
 
 // Load curriculum for selected month
 async function loadCurriculum() {
+    const isGymMode = complexContext?.getComplex?.()?.gym_mode === true;
+
+    // ── 헬스장 모드: 운동 목적별 × 횟수별 커리큘럼 표 렌더링 ────────────
+    if (isGymMode) {
+        _renderGymCurriculumTable();
+        return;
+    }
+
+    // ── 일반 모드: 기존 이미지/텍스트 방식 ────────────────────────────────
     try {
         const selectValue = document.getElementById('curriculumMonthSelect').value;
         const content = document.getElementById('curriculumContent');
@@ -3592,7 +3617,6 @@ async function loadCurriculum() {
         
         console.log(`📅 Loading curriculum for ${year}-${month}, complex: ${complexCode}`);
         
-        // year, month 서버 필터링 — is_active 컬럼 없음, 클라이언트 필터 제거
         const currParams = new URLSearchParams({ complexCode, year, month });
         const response = await fetch(`/api/curricula?${currParams}`);
         const result = await response.json();
@@ -3600,7 +3624,6 @@ async function loadCurriculum() {
         
         console.log(`✅ Fetched ${curriculums.length} total curriculums`);
         
-        // 서버에서 이미 필터링됨 — 첫 번째 항목 사용
         const targetCurriculum = curriculums[0] || null;
         
         console.log('🎯 Target curriculum found:', targetCurriculum?.id ?? 'none');
@@ -3615,7 +3638,6 @@ async function loadCurriculum() {
             return;
         }
         
-        // Display curriculum
         content.innerHTML = `
             <div style="background: white; padding: 20px; border-radius: 8px;">
                 <h4 style="color: #2c3e50; margin-bottom: 15px;">
@@ -3645,6 +3667,391 @@ async function loadCurriculum() {
             </div>
         `;
     }
+}
+
+// ── 헬스장 모드 전용: 운동 목적별 × 횟수별 커리큘럼 표 ─────────────────────
+function _renderGymCurriculumTable() {
+    const content = document.getElementById('curriculumContent');
+    if (!content) return;
+
+    // ─── 데이터 정의 ────────────────────────────────────────────────────────
+    // 구조: { goalKey, icon, color, label, sessions: [ { count, title, phases } ] }
+    // phases: [ { week, desc } ]
+    const GOALS = [
+        {
+            key: 'diet', icon: '🔥', label: '다이어트',
+            color: '#ef4444', bg: '#fef2f2', border: '#fecaca',
+            sessions: [
+                { count: 10, title: '입문 체지방 감소 프로그램',
+                  phases: [
+                    { week: '1~3회', desc: '유산소 위주 기초 체력 형성 · 전신 순환 운동 · 식습관 점검' },
+                    { week: '4~7회', desc: '인터벌 트레이닝 도입 · 하체·코어 복합 운동 · 식단 병행 지도' },
+                    { week: '8~10회', desc: '고강도 인터벌(HIIT) · 전신 서킷 · 체성분 재측정 및 피드백' },
+                  ]},
+                { count: 20, title: '중급 체지방 감소 + 근육 유지',
+                  phases: [
+                    { week: '1~5회', desc: '유산소 기반 체력 강화 · 저항 운동 병행 · 체성분 첫 측정' },
+                    { week: '6~12회', desc: '분할 저항 운동 + 인터벌 강화 · 복부·허벅지 집중 · 식단 정밀 조정' },
+                    { week: '13~20회', desc: '지방 연소 극대화 루틴 · 유연성 향상 · 유지 전략 수립' },
+                  ]},
+                { count: 30, title: '체계적 3개월 다이어트',
+                  phases: [
+                    { week: '1~8회', desc: '기초 대사량 높이기 · 전신 지방 연소 운동 · 식습관 교정' },
+                    { week: '9~20회', desc: '고강도 복합 운동 · 부위별 집중 지방 감량 · 체성분 중간 점검' },
+                    { week: '21~30회', desc: '요요 방지 근력 유지 · 생활 습관 고착 · 목표 체중 도달 피드백' },
+                  ]},
+                { count: 40, title: '체형 변화 집중 프로그램',
+                  phases: [
+                    { week: '1~10회', desc: '신체 기능 평가 · 맞춤 식단·운동 계획 수립 · 기초 대사 개선' },
+                    { week: '11~25회', desc: '분할 근력 + 유산소 병행 · 문제 부위 집중 · 체성분 비교' },
+                    { week: '26~40회', desc: '자율 운동 전환 준비 · 유지 루틴 설계 · 최종 체형 비교' },
+                  ]},
+                { count: 50, title: '6개월 바디 리컴프',
+                  phases: [
+                    { week: '1~12회', desc: '정밀 체성분 분석 · 영양 계획 수립 · 기초 체력 강화' },
+                    { week: '13~30회', desc: '주기화 트레이닝 · 지방 감량 + 근육 증가 동시 추진' },
+                    { week: '31~50회', desc: '피크 컨디셔닝 · 유지 식단 정착 · 자기 관리 역량 완성' },
+                  ]},
+            ]
+        },
+        {
+            key: 'muscle', icon: '💪', label: '근육량 증가',
+            color: '#7c3aed', bg: '#faf5ff', border: '#d8b4fe',
+            sessions: [
+                { count: 10, title: '근력 입문 프로그램',
+                  phases: [
+                    { week: '1~3회', desc: '자세 교정 · 맨몸 기초 동작(스쿼트·푸시업·힙힌지) · 관절 안정화' },
+                    { week: '4~7회', desc: '바벨·덤벨 기초 3대 운동 입문 · 세트·반복 개념 습득' },
+                    { week: '8~10회', desc: '전신 복합 운동 루틴 완성 · 무게 증량 기준 안내' },
+                  ]},
+                { count: 20, title: '중급 근비대 프로그램',
+                  phases: [
+                    { week: '1~6회', desc: '분할 루틴 설계 · 상체·하체 교대 · 영양 섭취 가이드' },
+                    { week: '7~14회', desc: '점진적 과부하 적용 · 가슴·등·어깨·하체 집중 분할' },
+                    { week: '15~20회', desc: '슈퍼세트 도입 · 약점 부위 보완 · 1RM 재측정' },
+                  ]},
+                { count: 30, title: '3분할 근비대 집중',
+                  phases: [
+                    { week: '1~8회', desc: '상체 밀기·당기기·하체 3분할 설계 · 기초 볼륨 확보' },
+                    { week: '9~20회', desc: '고볼륨 훈련(8~12회) · 체계적 식단 병행 · 중간 사진 비교' },
+                    { week: '21~30회', desc: '디로딩 주기 포함 · 근육 회복 최적화 · 자율 루틴 이행' },
+                  ]},
+                { count: 40, title: '전문 근비대 과정',
+                  phases: [
+                    { week: '1~10회', desc: '개인 약점 분석 · 맞춤 4분할 설계 · 보충제 상담' },
+                    { week: '11~25회', desc: '파워 복합 운동 + 고립 운동 병행 · 최대 근비대 구간' },
+                    { week: '26~40회', desc: '근력 유지 + 체형 대칭 마무리 · 자율 관리 전환' },
+                  ]},
+                { count: 50, title: '퍼포먼스 근력 완성',
+                  phases: [
+                    { week: '1~15회', desc: '1RM 기반 훈련 계획 · 5×5 파워 리프팅 기초' },
+                    { week: '16~35회', desc: '주기화 훈련(선형→파동) · 식단 사이클링 · 체력 피크' },
+                    { week: '36~50회', desc: '마무리 증량 사이클 · 장기 자율 훈련 설계 완성' },
+                  ]},
+            ]
+        },
+        {
+            key: 'posture', icon: '🧍', label: '체형 교정',
+            color: '#0891b2', bg: '#ecfeff', border: '#a5f3fc',
+            sessions: [
+                { count: 10, title: '자세 평가 & 단기 교정',
+                  phases: [
+                    { week: '1~3회', desc: '전신 자세 스크리닝 · 굳은 근육 이완(폼롤러·스트레칭)' },
+                    { week: '4~7회', desc: '약화 근육 활성화 · 골반·어깨 균형 운동' },
+                    { week: '8~10회', desc: '일상 자세 교정 루틴 제시 · 재평가 비교' },
+                  ]},
+                { count: 20, title: '체형 균형 회복 과정',
+                  phases: [
+                    { week: '1~6회', desc: '체형 불균형 원인 분석 · 근막 이완 + 관절 가동성 훈련' },
+                    { week: '7~14회', desc: '코어 안정화 · 어깨·골반·척추 정렬 집중 운동' },
+                    { week: '15~20회', desc: '기능적 동작 패턴 통합 · 일상 적용 훈련' },
+                  ]},
+                { count: 30, title: '체형 교정 3개월 집중',
+                  phases: [
+                    { week: '1~8회', desc: '7가지 기능적 동작 평가(FMS) · 맞춤 교정 운동 설계' },
+                    { week: '9~20회', desc: '분절별 안정화 → 강화 단계 · 거북목·라운드숄더·골반 전방경사 집중' },
+                    { week: '21~30회', desc: '통합 동작 패턴 완성 · 재발 방지 자율 루틴' },
+                  ]},
+                { count: 40, title: '체형 재건 심화 과정',
+                  phases: [
+                    { week: '1~12회', desc: '심층 자세 분석 · 단계별 교정 프로토콜 수립' },
+                    { week: '13~28회', desc: '약화 근육 점진 강화 · 일상 생활 동작 패턴 재교육' },
+                    { week: '29~40회', desc: '전신 통합 운동 · 자율 관리 역량 완성' },
+                  ]},
+                { count: 50, title: '체형 완성 장기 프로그램',
+                  phases: [
+                    { week: '1~15회', desc: '정밀 체형 분석 · 6개월 로드맵 수립 · 이완 단계' },
+                    { week: '16~35회', desc: '복합 안정화 + 근력 강화 · 체형 중간 촬영 비교' },
+                    { week: '36~50회', desc: '기능적 움직임 완성 · 스포츠·일상 퍼포먼스 향상' },
+                  ]},
+            ]
+        },
+        {
+            key: 'rehab', icon: '🩺', label: '재활·통증 완화',
+            color: '#d97706', bg: '#fffbeb', border: '#fcd34d',
+            sessions: [
+                { count: 10, title: '통증 완화 입문 과정',
+                  phases: [
+                    { week: '1~3회', desc: '통증 부위 평가 · 과긴장 근육 이완 · 온열 치료 연동 스트레칭' },
+                    { week: '4~7회', desc: '약화 근육 저강도 활성화 · 관절 가동 범위 회복' },
+                    { week: '8~10회', desc: '기능 회복 동작 패턴 훈련 · 일상 생활 적용 가이드' },
+                  ]},
+                { count: 20, title: '근골격계 재활 기초',
+                  phases: [
+                    { week: '1~6회', desc: '재활 운동 원칙 교육 · 통증 없는 범위 내 운동 설정' },
+                    { week: '7~14회', desc: '목표 부위 강화(허리·무릎·어깨) · 자세 교정 병행' },
+                    { week: '15~20회', desc: '기능적 복귀 훈련 · 재발 방지 운동 루틴 완성' },
+                  ]},
+                { count: 30, title: '3개월 통증 탈출 프로그램',
+                  phases: [
+                    { week: '1~8회', desc: '통증 원인 분석 · 이완 & 신경근 조절 · 저부하 안정화' },
+                    { week: '9~20회', desc: '점진적 부하 증가 · 일상 복귀 동작 훈련 · 보조 스트레칭' },
+                    { week: '21~30회', desc: '완전 기능 회복 · 스포츠 복귀 준비 · 자율 관리 교육' },
+                  ]},
+                { count: 40, title: '재활 심화 & 기능 강화',
+                  phases: [
+                    { week: '1~12회', desc: '전문 재활 평가 · 맞춤 회복 프로토콜 · 이완 집중' },
+                    { week: '13~28회', desc: '근력·안정성 강화 · 보상 동작 교정 · 기능 복귀 운동' },
+                    { week: '29~40회', desc: '최대 기능 회복 · 재발 방지 강화 · 유지 루틴 완성' },
+                  ]},
+                { count: 50, title: '만성 통증 완전 관리',
+                  phases: [
+                    { week: '1~15회', desc: '심층 근골격 평가 · 6개월 재활 계획 · 심리적 동기 부여' },
+                    { week: '16~35회', desc: '단계별 부하 증가 · 일상·직업 복귀 기능 훈련' },
+                    { week: '36~50회', desc: '스포츠 복귀 / 고강도 활동 준비 · 자율 관리 완성' },
+                  ]},
+            ]
+        },
+        {
+            key: 'health', icon: '❤️', label: '건강 유지',
+            color: '#16a34a', bg: '#f0fdf4', border: '#86efac',
+            sessions: [
+                { count: 10, title: '건강 생활 입문',
+                  phases: [
+                    { week: '1~3회', desc: '기초 체력 측정 · 유산소 + 가벼운 저항 운동 습관 형성' },
+                    { week: '4~7회', desc: '전신 균형 루틴 · 일상 활동량 증가 전략 · 수면·스트레스 관리' },
+                    { week: '8~10회', desc: '지속 가능한 운동 습관 정착 · 맞춤 주간 루틴 완성' },
+                  ]},
+                { count: 20, title: '건강 증진 중기 과정',
+                  phases: [
+                    { week: '1~6회', desc: '심폐 지구력 강화 · 근력 유지 운동 · 유연성 훈련 병행' },
+                    { week: '7~14회', desc: '생활 습관 최적화 · 스트레스 해소 운동 · 균형 잡힌 루틴' },
+                    { week: '15~20회', desc: '장기 건강 관리 설계 · 계절별 운동 조정 방법' },
+                  ]},
+                { count: 30, title: '3개월 웰니스 루틴',
+                  phases: [
+                    { week: '1~8회', desc: '체력 기저 강화 · 심폐 + 근육 균형 발달' },
+                    { week: '9~20회', desc: '기능 향상 운동 · 마음챙김 운동(요가·스트레칭) 병행' },
+                    { week: '21~30회', desc: '독립적 운동 역량 완성 · 자율 건강 관리 계획 수립' },
+                  ]},
+                { count: 40, title: '종합 건강 관리 과정',
+                  phases: [
+                    { week: '1~12회', desc: '건강 검진 결과 연동 운동 설계 · 만성 질환 예방 루틴' },
+                    { week: '13~28회', desc: '기능적 체력 향상 · 부상 예방 중심 운동 · 영양 상담' },
+                    { week: '29~40회', desc: '장기 건강 지표 관리 · 가족·사회 활동 연계 운동' },
+                  ]},
+                { count: 50, title: '평생 건강 설계 과정',
+                  phases: [
+                    { week: '1~15회', desc: '생애 주기별 건강 목표 설정 · 맞춤 장기 플랜' },
+                    { week: '16~35회', desc: '다양한 운동 종목 체험 · 사회적 활동성 향상 프로그램' },
+                    { week: '36~50회', desc: '자기 주도 건강 관리 역량 완성 · 가정 운동 루틴 확립' },
+                  ]},
+            ]
+        },
+        {
+            key: 'flexibility', icon: '🤸', label: '유연성 향상',
+            color: '#0284c7', bg: '#f0f9ff', border: '#7dd3fc',
+            sessions: [
+                { count: 10, title: '유연성 집중 입문',
+                  phases: [
+                    { week: '1~3회', desc: '유연성 측정 · 주요 타깃 근육군 파악 · 정적 스트레칭 기초' },
+                    { week: '4~7회', desc: 'PNF 스트레칭 도입 · 고관절·어깨·척추 집중 이완' },
+                    { week: '8~10회', desc: '동적 스트레칭 루틴 완성 · 일상 적용 가이드' },
+                  ]},
+                { count: 20, title: '근막 이완 & 가동성 향상',
+                  phases: [
+                    { week: '1~6회', desc: '폼롤러 근막 이완 · 전신 가동성 테스트 · 호흡 연동 스트레칭' },
+                    { week: '7~14회', desc: '부위별 집중 스트레칭 프로그램 · 요가 자세 기초 도입' },
+                    { week: '15~20회', desc: '동적·정적 복합 루틴 · 자율 스트레칭 역량 완성' },
+                  ]},
+                { count: 30, title: '3개월 유연성 마스터',
+                  phases: [
+                    { week: '1~8회', desc: '전신 가동 범위 기초 확보 · 근막 이완 집중' },
+                    { week: '9~20회', desc: '고급 스트레칭(스플릿·다리 찢기 준비) · 코어 안정화 병행' },
+                    { week: '21~30회', desc: '목표 자세 달성 · 유연성 유지 루틴 완성' },
+                  ]},
+                { count: 40, title: '기능적 가동성 완성',
+                  phases: [
+                    { week: '1~12회', desc: '관절별 가동 범위 체계적 측정 · 맞춤 스트레칭 설계' },
+                    { week: '13~28회', desc: '필라테스·요가 동작 통합 · 근력과 유연성 균형 발달' },
+                    { week: '29~40회', desc: '고난도 동작 달성 · 자율 루틴 확립' },
+                  ]},
+                { count: 50, title: '유연성 × 균형 종합 과정',
+                  phases: [
+                    { week: '1~15회', desc: '유연성·균형·코어 동시 개선 프로그램 · 정밀 가동성 측정' },
+                    { week: '16~35회', desc: '고급 자세 훈련(무용·무술 동작 응용) · 신체 인식 향상' },
+                    { week: '36~50회', desc: '스포츠 퍼포먼스 가동성 완성 · 자기 지도 능력 확보' },
+                  ]},
+            ]
+        },
+        {
+            key: 'stress', icon: '🧘', label: '스트레스 해소',
+            color: '#9333ea', bg: '#fdf4ff', border: '#e9d5ff',
+            sessions: [
+                { count: 10, title: '마음챙김 운동 입문',
+                  phases: [
+                    { week: '1~3회', desc: '호흡 명상 · 몸 스캔 이완 · 가벼운 전신 스트레칭' },
+                    { week: '4~7회', desc: '요가 기초 자세 · 부교감 신경 활성화 운동 · 감사 일지' },
+                    { week: '8~10회', desc: '일상 스트레스 해소 루틴 완성 · 수면 질 개선 전략' },
+                  ]},
+                { count: 20, title: '심신 균형 케어 과정',
+                  phases: [
+                    { week: '1~6회', desc: '스트레스 지수 측정 · 호흡 + 이완 운동 기초 · 수면 위생 교육' },
+                    { week: '7~14회', desc: '유산소 + 마음챙김 복합 루틴 · 긍정적 자기 대화 훈련' },
+                    { week: '15~20회', desc: '자율 신경 균형 운동 완성 · 지속 가능한 이완 루틴' },
+                  ]},
+                { count: 30, title: '3개월 번아웃 회복',
+                  phases: [
+                    { week: '1~8회', desc: '번아웃 평가 · 회복 중심 저강도 운동 · 수면·식이 교정' },
+                    { week: '9~20회', desc: '점진적 활동량 증가 · 사회적 운동 참여 · 자존감 회복 훈련' },
+                    { week: '21~30회', desc: '활력 회복 확인 · 장기 웰니스 루틴 완성' },
+                  ]},
+                { count: 40, title: '종합 심신 회복 과정',
+                  phases: [
+                    { week: '1~12회', desc: '스트레스 원인 분석 · 신체·정신 동시 접근 회복 설계' },
+                    { week: '13~28회', desc: '마음챙김 기반 유산소 · 창의적 움직임 · 사회적 참여 확대' },
+                    { week: '29~40회', desc: '생활 속 스트레스 관리 자율화 · 회복 탄력성 강화' },
+                  ]},
+                { count: 50, title: '장기 회복 탄력성 완성',
+                  phases: [
+                    { week: '1~15회', desc: '심리·신체 통합 평가 · 개인화 회복 로드맵 수립' },
+                    { week: '16~35회', desc: '자연 노출 운동 · 창의 활동 병행 · 대인 관계 회복 지원' },
+                    { week: '36~50회', desc: '회복 탄력성 자기 관리 완성 · 삶의 질 재평가' },
+                  ]},
+            ]
+        },
+        {
+            key: 'sport', icon: '🏅', label: '스포츠 퍼포먼스',
+            color: '#b45309', bg: '#fefce8', border: '#fde68a',
+            sessions: [
+                { count: 10, title: '스포츠 기초 체력 강화',
+                  phases: [
+                    { week: '1~3회', desc: '스포츠별 요구 체력 분석 · 폭발력·민첩성 기초 테스트' },
+                    { week: '4~7회', desc: '근력 + 순발력 복합 훈련 · 방향 전환 드릴' },
+                    { week: '8~10회', desc: '경기력 향상 지표 재측정 · 맞춤 훈련 계획 수립' },
+                  ]},
+                { count: 20, title: '경기력 향상 중기 과정',
+                  phases: [
+                    { week: '1~6회', desc: '스포츠 특화 동작 패턴 훈련 · 체력 기저 강화' },
+                    { week: '7~14회', desc: '스피드·파워·지구력 복합 개발 · 부상 예방 훈련 병행' },
+                    { week: '15~20회', desc: '실전 퍼포먼스 적용 · 시즌 전 컨디셔닝 계획' },
+                  ]},
+                { count: 30, title: '3개월 퍼포먼스 강화',
+                  phases: [
+                    { week: '1~8회', desc: '종목별 체력 요구 분석 · 주기화 훈련 입문 · 영양 전략' },
+                    { week: '9~20회', desc: '파워 리프팅 + 플라이오메트릭 · 전술 체력 훈련' },
+                    { week: '21~30회', desc: '피크 퍼포먼스 도달 · 시즌 관리 계획 완성' },
+                  ]},
+                { count: 40, title: '엘리트 체력 완성 과정',
+                  phases: [
+                    { week: '1~12회', desc: '정밀 체력 진단 · 개인 최대 능력 분석 · 전문 훈련 설계' },
+                    { week: '13~28회', desc: '종목 특화 고강도 훈련 · 회복 주기 최적화' },
+                    { week: '29~40회', desc: '최대 퍼포먼스 발휘 · 장기 선수 관리 계획' },
+                  ]},
+                { count: 50, title: '장기 경기력 극대화',
+                  phases: [
+                    { week: '1~15회', desc: '연간 훈련 주기화 설계 · 체력·기술·전술 통합 분석' },
+                    { week: '16~35회', desc: '고강도 집중 사이클 · 경쟁 상황 시뮬레이션' },
+                    { week: '36~50회', desc: '피크 시즌 완성 · 부상 없는 장기 선수 생활 설계' },
+                  ]},
+            ]
+        },
+    ];
+
+    // ─── 현재 선택 상태 관리 ────────────────────────────────────────────────
+    const activeGoal    = window._gymCurrGoal    || GOALS[0].key;
+    const activeCount   = window._gymCurrCount   || 10;
+
+    const currentGoal = GOALS.find(g => g.key === activeGoal) || GOALS[0];
+    const currentSess = currentGoal.sessions.find(s => s.count === activeCount) || currentGoal.sessions[0];
+
+    // ─── HTML 렌더링 ────────────────────────────────────────────────────────
+    content.innerHTML = `
+<div class="gym-curr-wrap">
+
+    <!-- 1차: 운동 목적 탭 -->
+    <div class="gym-curr-goal-tabs" role="tablist">
+        ${GOALS.map(g => `
+        <button class="gym-curr-goal-tab${g.key === currentGoal.key ? ' active' : ''}"
+                style="--tab-color:${g.color};--tab-bg:${g.bg};--tab-border:${g.border}"
+                onclick="selectGymCurrGoal('${g.key}')"
+                role="tab" aria-selected="${g.key === currentGoal.key}">
+            <span class="gym-curr-goal-icon">${g.icon}</span>
+            <span class="gym-curr-goal-label">${g.label}</span>
+        </button>`).join('')}
+    </div>
+
+    <!-- 2차: 횟수 선택 -->
+    <div class="gym-curr-count-bar">
+        ${currentGoal.sessions.map(s => `
+        <button class="gym-curr-count-btn${s.count === currentSess.count ? ' active' : ''}"
+                style="--cnt-color:${currentGoal.color};--cnt-bg:${currentGoal.bg}"
+                onclick="selectGymCurrCount(${s.count})">
+            ${s.count}회
+        </button>`).join('')}
+    </div>
+
+    <!-- 프로그램 헤더 -->
+    <div class="gym-curr-prog-header" style="border-color:${currentGoal.border};background:${currentGoal.bg}">
+        <span class="gym-curr-prog-icon">${currentGoal.icon}</span>
+        <div>
+            <div class="gym-curr-prog-badge" style="background:${currentGoal.color}">${currentGoal.label} · ${currentSess.count}회 과정</div>
+            <div class="gym-curr-prog-title">${currentSess.title}</div>
+        </div>
+    </div>
+
+    <!-- 단계별 커리큘럼 표 -->
+    <div class="gym-curr-table-wrap">
+        <table class="gym-curr-table">
+            <thead>
+                <tr>
+                    <th style="color:${currentGoal.color}">구간</th>
+                    <th style="color:${currentGoal.color}">주요 내용</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${currentSess.phases.map((p, i) => `
+                <tr>
+                    <td class="gym-curr-week" style="color:${currentGoal.color};border-color:${currentGoal.border}">
+                        <span class="gym-curr-step" style="background:${currentGoal.color}">${i + 1}단계</span>
+                        ${p.week}
+                    </td>
+                    <td class="gym-curr-desc">${p.desc}</td>
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>
+
+    <p class="gym-curr-notice">
+        <i class="fas fa-info-circle"></i>
+        커리큘럼은 회원의 상태와 진도에 따라 강사 재량으로 조정될 수 있습니다.
+    </p>
+
+</div>
+    `;
+}
+
+// 운동 목적 탭 선택
+function selectGymCurrGoal(key) {
+    window._gymCurrGoal  = key;
+    window._gymCurrCount = 10; // 목적 바꾸면 횟수 초기화
+    _renderGymCurriculumTable();
+}
+
+// 횟수 버튼 선택
+function selectGymCurrCount(count) {
+    window._gymCurrCount = count;
+    _renderGymCurriculumTable();
 }
 
 
