@@ -237,10 +237,16 @@ function handlePage1Submit(e) {
         if (slots && selectedOption) {
             const currentCount = slots[preferredTime] || 0;
             const maxCapacity = parseInt(selectedOption.dataset.maxCapacity) || 6;
-            
+
             if (currentCount >= maxCapacity) {
-                alert(`❌ 선택하신 시간대는 정원이 마감되었습니다.\n\n프로그램: ${lessonType}\n시간대: ${preferredTime}\n현재 인원: ${currentCount}/${maxCapacity}명\n\n다른 시간대를 선택해주세요.`);
-                return;
+                // 대기 접수 활성 단지: 마감이어도 대기 신청으로 통과
+                const waitingEnabledCheck = complexContext.getComplex()?.waiting_enabled === true;
+                if (!waitingEnabledCheck) {
+                    alert(`❌ 선택하신 시간대는 정원이 마감되었습니다.\n\n프로그램: ${lessonType}\n시간대: ${preferredTime}\n현재 인원: ${currentCount}/${maxCapacity}명\n\n다른 시간대를 선택해주세요.`);
+                    return;
+                }
+                // waiting_enabled=true: 서버에서 대기 처리 — 통과
+                console.log(`⏳ 정원 마감이지만 대기 접수 활성 단지 → 서버에서 대기 처리 예정 (${currentCount}/${maxCapacity}명)`);
             }
         }
     }
@@ -514,8 +520,17 @@ async function submitContract() {
 
         // 정원 마감 오류 (400 + is_full)
         if (response.status === 400 && result.is_full) {
-            console.warn('⛔ 정원 마감으로 신청 차단');
-            showFullCapacityModal(contractData, result.error);
+            // 대기 접수 활성 단지: 서버가 대기 처리하지 않고 400을 반환한 경우
+            // (waiting_enabled=false인 단지는 기존대로 마감 모달)
+            const waitingEnabledSubmit = complexContext.getComplex()?.waiting_enabled === true;
+            if (waitingEnabledSubmit) {
+                // 대기 활성 단지에서는 정원 마감 안내 대신 대기 불가 안내
+                showFullCapacityModal(contractData,
+                    result.error || '대기 접수 처리 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 관리사무소에 문의해주세요.');
+            } else {
+                console.warn('⛔ 정원 마감으로 신청 차단');
+                showFullCapacityModal(contractData, result.error);
+            }
             return;
         }
 
@@ -523,9 +538,14 @@ async function submitContract() {
             console.log('✅ Application submitted:', result);
             contractData.status = result.data?.status || 'approved';
             contractData.waiting_order = result.data?.waiting_order;
-            
-            // 대기 시스템 폐기: status가 waiting이어도 일반 성공으로 처리
-            showSuccessNotificationModal(contractData);
+
+            // waiting_enabled 단지에서 대기 접수 성공 시 → 대기 전용 안내 모달
+            if (contractData.status === 'waiting' && contractData.waiting_order) {
+                console.log(`⏳ 대기 접수 완료 (순번: ${contractData.waiting_order}번)`);
+                showWaitingListModal(contractData);
+            } else {
+                showSuccessNotificationModal(contractData);
+            }
         } else {
             const errorMsg = result.error || `Failed: ${response.status} ${response.statusText}`;
             console.error('❌ Submit failed:', errorMsg);
@@ -1073,6 +1093,11 @@ function updateTimeSlotOptions() {
     const overrideMap = (window.programDisplayOverride && window.programDisplayOverride[selectedProgram])
         || null;
 
+    // ── 대기 접수 가능 여부 — 이 단지에서만 적용 ──────────────────────────
+    // complexes.waiting_enabled=true 인 단지: 정원 마감 슬롯도 '🟡 대기접수'로 선택 가능
+    // false/미설정 단지(청주SK·라마다호텔 등): 기존과 동일하게 disabled
+    const waitingEnabled = complexContext.getComplex()?.waiting_enabled === true;
+
     availableTimeSlots.forEach(timeCode => {
         // slots 키가 HH:MM 이므로 바로 조회
         const realCount = (slots && slots[timeCode] != null) ? slots[timeCode] : 0;
@@ -1085,11 +1110,18 @@ function updateTimeSlotOptions() {
         const timeDisplay = timeDisplayMap[timeCode] || timeCode;
 
         let status = '모집중';
-        if (isFull) status = '🔴 마감';
-        else if (isAlmostFull) status = '⚠️ 마감임박';
+        if (isFull) {
+            // 대기 접수 활성 단지: 마감이어도 선택 가능 + 대기 안내 표시
+            status = waitingEnabled ? '🟡 대기접수' : '🔴 마감';
+        } else if (isAlmostFull) {
+            status = '⚠️ 마감임박';
+        }
 
-        const disabled = isFull ? 'disabled' : '';
-        const style   = isFull ? 'style="color:#999"' : '';
+        // 대기 활성 단지에서 마감 슬롯은 disabled 해제, 스타일만 구분
+        const disabled = (isFull && !waitingEnabled) ? 'disabled' : '';
+        const style    = isFull
+            ? (waitingEnabled ? 'style="color:#b45309"' : 'style="color:#999"')
+            : '';
         // value는 HH:MM으로 저장 (DB와 일치)
         optionsHTML += `<option value="${timeCode}" ${disabled} ${style}>${timeDisplay} [${displayCount}/${maxCapacity}명] ${status}</option>`;
     });
