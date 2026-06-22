@@ -128,6 +128,27 @@ const programs = {
             </div>
             <div class="form-group"><label>설명</label><textarea id="pDesc" rows="3">${p ? escHtml(p.description||'') : ''}</textarea></div>
             <div class="form-group"><label>표시 순서</label><input type="number" id="pOrder" value="${p?.display_order||0}"></div>
+            <!-- 헬스장 모드 전용: 예약금(보증금) 설정 -->
+            <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);border:1.5px solid #fed7aa;border-radius:10px;padding:14px 16px;margin-top:4px">
+                <div style="font-weight:700;font-size:.88rem;color:#c2410c;margin-bottom:10px">
+                    <i class="fas fa-shield-alt"></i> 예약금(노쇼 방지 보증금) — 헬스장 모드 전용
+                </div>
+                <label class="checkbox-label" style="margin-bottom:8px">
+                    <input type="checkbox" id="pDepositEnabled" ${p?.deposit_enabled ? 'checked' : ''}
+                           onchange="programs._onDepositToggle(this.checked)">
+                    <span style="font-weight:600;color:#c2410c">예약금 ON
+                        <small style="color:#666;font-weight:normal;display:block;margin-top:1px">
+                            체크 시: 신청 완료 화면에 예약금 납부 안내 표시
+                        </small>
+                    </span>
+                </label>
+                <div id="pDepositAmountWrap" style="${p?.deposit_enabled ? '' : 'display:none'};display:${p?.deposit_enabled ? 'flex' : 'none'};align-items:center;gap:8px;margin-top:6px">
+                    <label style="font-size:.85rem;font-weight:600;color:#374151;white-space:nowrap">예약금 금액</label>
+                    <input type="number" id="pDepositAmount" value="${p?.deposit_amount||0}" min="0" step="1000"
+                           style="width:130px;padding:7px 10px;border:1.5px solid #fed7aa;border-radius:7px;font-size:.88rem">
+                    <span style="font-size:.85rem;color:#888">원</span>
+                </div>
+            </div>
             ${isPersonal ? `
             <div class="form-group" id="pAlwaysOpenLessonWrap" style="padding:12px 14px;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px">
                 <label class="checkbox-label">
@@ -241,6 +262,10 @@ const programs = {
         lbl.innerHTML = `<input type="checkbox" name="pTimeCheck" value="${escHtml(val)}" ${checked?'checked':''}><span>${escHtml(val)}</span>`;
         wrap.appendChild(lbl);
     },
+    _onDepositToggle(checked) {
+        const wrap = document.getElementById('pDepositAmountWrap');
+        if (wrap) wrap.style.display = checked ? 'flex' : 'none';
+    },
     async save(id) {
         const name = document.getElementById('pName').value.trim();
         if (!name) { showToast('프로그램명을 입력하세요', 'error'); return; }
@@ -264,6 +289,12 @@ const programs = {
             // always_open_lesson: 개인/듀엣 상시접수 (체크박스가 있을 때만 포함)
             const alwaysOpenEl = document.getElementById('pAlwaysOpenLesson');
             if (alwaysOpenEl) data.always_open_lesson = alwaysOpenEl.checked;
+
+            // 예약금(보증금) 설정
+            const depositEnabledEl = document.getElementById('pDepositEnabled');
+            const depositAmountEl  = document.getElementById('pDepositAmount');
+            if (depositEnabledEl) data.deposit_enabled = depositEnabledEl.checked;
+            if (depositAmountEl)  data.deposit_amount  = parseInt(depositAmountEl.value) || 0;
 
             if (id) {
                 const activeEl = document.getElementById('pActive');

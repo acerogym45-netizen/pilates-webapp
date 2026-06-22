@@ -436,7 +436,8 @@ router.post('/', async (req, res) => {
             complex_id, dong, ho, name, phone, program_id, program_name, preferred_time,
             signature_name, signature_data, signature_date, agreement, terms_agreement, notes,
             admin_bypass,   // 관리자가 중복 차단을 우회하여 복수 프로그램 신청 시 true
-            instructor_id   // 개인/듀엣 레슨: 희망 강사 ID
+            instructor_id,  // 개인/듀엣 레슨: 희망 강사 ID
+            survey_data     // 헬스장 모드 설문 데이터 (JSONB)
         } = req.body;
 
         if (!complex_id || !dong || !ho || !name || !phone || !program_name) {
@@ -822,6 +823,10 @@ router.post('/', async (req, res) => {
         // instructor_id / lesson_confirm_token: 컬럼이 없으면 무시되도록 조건부 추가
         if (instructor_id) insertPayload.instructor_id         = instructor_id;
         if (lessonToken)   insertPayload.lesson_confirm_token  = lessonToken;
+        // 헬스장 모드 설문 데이터
+        if (survey_data && typeof survey_data === 'object') {
+            insertPayload.survey_data = survey_data;
+        }
 
         const { data: created, error } = await sb
             .from('applications')
