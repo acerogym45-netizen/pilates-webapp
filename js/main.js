@@ -115,7 +115,13 @@ function applyGymMode() {
     const gymMode = complex?.gym_mode === true;
     if (!gymMode) return; // false/null/undefined: 기존 표시 그대로
 
-    // 동/호수 입력 행 전체 숨기기 (dong 필드의 부모 form-row)
+    // ── 1. 신청서 page1 / 계약서 page2 섹션 숨김 ─────────────────────
+    const page1 = document.getElementById('page1');
+    if (page1) page1.style.display = 'none';
+    const page2 = document.getElementById('page2');
+    if (page2) page2.style.display = 'none';
+
+    // ── 2. 동/호수 입력 행 전체 숨기기 (신청서 내 form-row) ──────────
     const dongEl = document.getElementById('dong');
     const dongHoRow = dongEl?.closest('.form-row');
     if (dongHoRow) dongHoRow.style.display = 'none';
@@ -133,13 +139,52 @@ function applyGymMode() {
         }
     });
 
-    // 퀵액션 버튼 숨기기 — 시간표, 내 신청 조회·취소·변경
+    // ── 3. 퀵액션 버튼 숨기기 — 시간표, 내 신청 조회·취소·변경 ────────
     const timetableBtn = document.getElementById('quickBtnTimetable');
     if (timetableBtn) timetableBtn.style.display = 'none';
     const manageBtn = document.getElementById('quickBtnManage');
     if (manageBtn) manageBtn.style.display = 'none';
 
-    console.log('🏋️ 헬스장 모드 ON: 동/호수 칸 + 시간표/내 신청 버튼 숨김 처리 완료');
+    // ── 4. 커리큘럼 모달 제목 변경 + 월 선택 토글 숨김 ─────────────────
+    const currHeader = document.querySelector('#curriculumModal .modal-header h2');
+    if (currHeader) currHeader.innerHTML = '<i class="fas fa-calendar-alt"></i> 커리큘럼';
+    const currMonthWrap = document.querySelector('.curriculum-month-select');
+    if (currMonthWrap) currMonthWrap.style.display = 'none';
+
+    // ── 5. 문의하기 모달 동/호수 행 숨김 ────────────────────────────────
+    const inquiryDongEl = document.getElementById('inquiryDong');
+    const inquiryDongRow = inquiryDongEl?.closest('.form-row');
+    if (inquiryDongRow) inquiryDongRow.style.display = 'none';
+    // 동/호수 안내 문구도 숨김
+    const inquiryDongNotice = inquiryDongRow?.nextElementSibling;
+    if (inquiryDongNotice && inquiryDongNotice.tagName === 'P') {
+        inquiryDongNotice.style.display = 'none';
+    }
+
+    // ── 6. 수집항목 안내에서 '동호수,' 숨김 ─────────────────────────────
+    const consentDetail = document.querySelector('.consent-detail');
+    if (consentDetail) {
+        consentDetail.innerHTML = consentDetail.innerHTML
+            .replace(/동호수,?\s*/g, '');
+    }
+
+    console.log('🏋️ 헬스장 모드 ON: 계약서·동호수·시간표/내신청·커리큘럼월선택·문의동호수 처리 완료');
+}
+
+// 헬스장 모드: 커리큘럼 로드 시 현재 월 자동 선택 (월 선택 토글 숨김 상태)
+function gymModeLoadCurrentCurriculum() {
+    const now = new Date();
+    const select = document.getElementById('curriculumMonthSelect');
+    if (!select) return;
+    const val = `${now.getFullYear()}-${now.getMonth() + 1}`;
+    // 해당 option이 없으면 추가
+    if (!Array.from(select.options).some(o => o.value === val)) {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월`;
+        select.appendChild(opt);
+    }
+    select.value = val;
 }
 
 // Setup Event Listeners
@@ -3302,7 +3347,8 @@ function populateProgramOptions(programs, newApplyIsOpen = null) {
             displayText += ` (${program.days})`;
         }
         if (program.price) {
-            displayText += ` - ${formatPrice(program.price)}원/월`;
+            const priceUnit = complexContext?.getComplex?.()?.gym_mode === true ? '회' : '월';
+            displayText += ` - ${formatPrice(program.price)}원/${priceUnit}`;
         }
 
         // Add "별도 문의" for personal lessons instead of capacity
@@ -3397,28 +3443,34 @@ function closeTimetableModal() {
 async function showCurriculumModal() {
     const modal = document.getElementById('curriculumModal');
     modal.classList.add('active');
-    
-    // Populate month select (current month and future 2 months)
+
+    const isGymMode = complexContext?.getComplex?.()?.gym_mode === true;
     const now = new Date();
     const select = document.getElementById('curriculumMonthSelect');
-    select.innerHTML = '<option value="">선택하세요</option>';
-    
-    for (let i = -1; i <= 2; i++) {
-        const targetDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
-        const year = targetDate.getFullYear();
-        const month = targetDate.getMonth() + 1;
-        
-        const option = document.createElement('option');
-        option.value = `${year}-${month}`;
-        option.textContent = `${year}년 ${month}월`;
-        
-        if (i === 0) {
-            option.selected = true;
+
+    if (isGymMode) {
+        // 헬스장 모드: 현재 달만 설정, 월 선택 토글은 applyGymMode()에서 숨김
+        select.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = `${now.getFullYear()}-${now.getMonth() + 1}`;
+        opt.textContent = `${now.getFullYear()}년 ${now.getMonth() + 1}월`;
+        opt.selected = true;
+        select.appendChild(opt);
+    } else {
+        // 일반 모드: 이전 1개월 ~ 이후 2개월 선택 가능
+        select.innerHTML = '<option value="">선택하세요</option>';
+        for (let i = -1; i <= 2; i++) {
+            const targetDate = new Date(now.getFullYear(), now.getMonth() + i, 1);
+            const year = targetDate.getFullYear();
+            const month = targetDate.getMonth() + 1;
+            const option = document.createElement('option');
+            option.value = `${year}-${month}`;
+            option.textContent = `${year}년 ${month}월`;
+            if (i === 0) option.selected = true;
+            select.appendChild(option);
         }
-        
-        select.appendChild(option);
     }
-    
+
     // Load current month curriculum
     await loadCurriculum();
 }

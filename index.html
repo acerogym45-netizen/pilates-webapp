@@ -1662,17 +1662,62 @@
                 return;
             }
             content.innerHTML = '<div class="instructor-card-list">' +
-                list.map(ins => {
+                list.map((ins, insIdx) => {
                     const certs = Array.isArray(ins.certifications)
                         ? ins.certifications
                         : (ins.certifications || '').split(',').map(c => c.trim()).filter(Boolean);
+
+                    // photo_urls 배열 우선, 없으면 photo_url 단일 사진
+                    const photos = (Array.isArray(ins.photo_urls) && ins.photo_urls.length > 0)
+                        ? ins.photo_urls
+                        : (ins.photo_url ? [ins.photo_url] : []);
+
+                    let photoHtml;
+                    if (photos.length === 0) {
+                        photoHtml = `<div class="instructor-photo-placeholder"><i class="fas fa-user"></i></div>`;
+                    } else if (photos.length === 1) {
+                        const safeUrl = photos[0].replace(/'/g, "\\'");
+                        photoHtml = `<img class="instructor-photo" src="${escapeHtml(photos[0])}"
+                                         alt="${escapeHtml(ins.name)}"
+                                         onclick="showInstructorImages(${JSON.stringify(photos)},0)">`;
+                    } else {
+                        // 다중 사진: 슬라이더 UI
+                        const sliderId = `instrSlider_${insIdx}`;
+                        const slides = photos.map((url, si) => `
+                            <div class="instr-slide${si===0?' active':''}" data-idx="${si}">
+                                <img src="${escapeHtml(url)}" alt="${escapeHtml(ins.name)}"
+                                     style="width:100%;height:100%;object-fit:cover;cursor:pointer"
+                                     onclick="showInstructorImages(${JSON.stringify(photos)},${si})">
+                            </div>`).join('');
+                        photoHtml = `
+                            <div class="instructor-photo-slider" id="${sliderId}" data-total="${photos.length}" data-current="0"
+                                 style="position:relative;overflow:hidden;border-radius:12px 12px 0 0;background:#000">
+                                ${slides}
+                                <button class="instr-slide-arrow prev"
+                                        onclick="instrSlideStep('${sliderId}',-1);event.stopPropagation()"
+                                        style="position:absolute;left:6px;top:50%;transform:translateY(-50%);
+                                               background:rgba(0,0,0,.5);border:none;color:#fff;border-radius:50%;
+                                               width:32px;height:32px;font-size:1rem;cursor:pointer;z-index:2;
+                                               display:flex;align-items:center;justify-content:center">
+                                    <i class="fas fa-chevron-left"></i>
+                                </button>
+                                <button class="instr-slide-arrow next"
+                                        onclick="instrSlideStep('${sliderId}',1);event.stopPropagation()"
+                                        style="position:absolute;right:6px;top:50%;transform:translateY(-50%);
+                                               background:rgba(0,0,0,.5);border:none;color:#fff;border-radius:50%;
+                                               width:32px;height:32px;font-size:1rem;cursor:pointer;z-index:2;
+                                               display:flex;align-items:center;justify-content:center">
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                                <span style="position:absolute;bottom:6px;right:8px;background:rgba(0,0,0,.5);
+                                             color:#fff;font-size:.72rem;padding:2px 7px;border-radius:10px;z-index:2"
+                                      id="${sliderId}_counter">1 / ${photos.length}</span>
+                            </div>`;
+                    }
+
                     return `
                     <div class="instructor-card">
-                        ${ins.photo_url
-                            ? `<img class="instructor-photo" src="${escapeHtml(ins.photo_url)}"
-                                    alt="${escapeHtml(ins.name)}"
-                                    onclick="showInstructorImage('${ins.photo_url.replace(/'/g,"\\'")}','${escapeHtml(ins.name)}')">`
-                            : `<div class="instructor-photo-placeholder"><i class="fas fa-user"></i></div>`}
+                        ${photoHtml}
                         <div class="instructor-info">
                             <h4>${escapeHtml(ins.name)}</h4>
                             <div class="instructor-title">${escapeHtml(ins.position || '')}</div>
@@ -1696,17 +1741,69 @@
         document.getElementById('instructorsModal').classList.remove('active');
     }
 
-    function showInstructorImage(url) {
+    // 이미지 모달 전역 상태
+    let _imodalUrls = [];
+    let _imodalIdx  = 0;
+
+    function showInstructorImages(urls, startIdx) {
+        _imodalUrls = Array.isArray(urls) ? urls : [urls];
+        _imodalIdx  = startIdx || 0;
+        _imodalRender();
         const modal = document.getElementById('imageModal');
-        document.getElementById('modalImage').src = url;
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
+    }
+
+    // 하위호환: 단일 URL 호출도 지원
+    function showInstructorImage(url) {
+        showInstructorImages([url], 0);
+    }
+
+    function _imodalRender() {
+        const img     = document.getElementById('modalImage');
+        const counter = document.getElementById('imodalCounter');
+        const prev    = document.getElementById('imodalPrev');
+        const next    = document.getElementById('imodalNext');
+        if (!img) return;
+        img.src = _imodalUrls[_imodalIdx] || '';
+        if (counter) {
+            counter.textContent = _imodalUrls.length > 1
+                ? `${_imodalIdx + 1} / ${_imodalUrls.length}` : '';
+        }
+        // 사진 1장이면 화살표 숨김
+        const show = _imodalUrls.length > 1;
+        if (prev) prev.style.display = show ? '' : 'none';
+        if (next) next.style.display = show ? '' : 'none';
+    }
+
+    function imodalStep(dir) {
+        if (!_imodalUrls.length) return;
+        _imodalIdx = (_imodalIdx + dir + _imodalUrls.length) % _imodalUrls.length;
+        _imodalRender();
     }
 
     function closeImageModal(e) {
         if (e && e.target && e.target.id === 'modalImage') return;
         document.getElementById('imageModal').classList.remove('active');
         document.body.style.overflow = '';
+        _imodalUrls = [];
+        _imodalIdx  = 0;
+    }
+
+    // 강사 카드 내 슬라이더 (다중 사진)
+    function instrSlideStep(sliderId, dir) {
+        const slider = document.getElementById(sliderId);
+        if (!slider) return;
+        const total   = parseInt(slider.dataset.total || '1');
+        const current = parseInt(slider.dataset.current || '0');
+        const next    = (current + dir + total) % total;
+        slider.dataset.current = next;
+        slider.querySelectorAll('.instr-slide').forEach((el, i) => {
+            el.style.display = i === next ? 'block' : 'none';
+            el.classList.toggle('active', i === next);
+        });
+        const counter = document.getElementById(`${sliderId}_counter`);
+        if (counter) counter.textContent = `${next + 1} / ${total}`;
     }
 
     document.addEventListener('keydown', function(e) {

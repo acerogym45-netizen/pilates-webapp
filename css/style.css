@@ -896,6 +896,19 @@ textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
     align-items: center; justify-content: center;
     font-size: 1.8rem; color: var(--brand); flex-shrink: 0;
 }
+/* 다중 사진 슬라이더 — 카드를 세로 배치로 전환 */
+.instructor-card:has(.instructor-photo-slider) {
+    flex-direction: column; gap: 0; padding: 0;
+}
+.instructor-card:has(.instructor-photo-slider) .instructor-info {
+    padding: 14px 16px 16px;
+}
+.instructor-photo-slider {
+    width: 100%; height: 200px; flex-shrink: 0;
+    border-radius: 12px 12px 0 0; overflow: hidden; background: #111;
+}
+.instr-slide { display: none; width: 100%; height: 100%; }
+.instr-slide.active { display: block; }
 .instructor-info h4 { font-size: .92rem; font-weight: 700; margin-bottom: 3px; }
 .instructor-title { font-size: .78rem; color: var(--brand); margin-bottom: 6px; font-weight: 600; }
 .instructor-bio { font-size: .8rem; color: var(--text-sub); line-height: 1.6; margin-bottom: 6px; }
