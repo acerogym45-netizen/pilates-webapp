@@ -41,7 +41,7 @@ const API = (() => {
             patchFlags:     (id, d)  => req('PATCH', `/complexes/${id}/flags`, d),
             savePageSettings: (id, page_settings, auth) =>
                 req('PATCH', `/complexes/${id}/page-settings`, { page_settings, ...auth }),
-            delete:         (id)     => req('DELETE',`/complexes/${id}`),
+            delete:         (id, masterPassword) => req('DELETE',`/complexes/${id}`, { masterPassword }),
             verifyPassword:   (code, pw) => req('POST', '/complexes/verify-password', { complexCode: code, password: pw }),
             updateTimetable:  (id, d)   => req('PUT',  `/complexes/${id}/timetable`, d),
         },
