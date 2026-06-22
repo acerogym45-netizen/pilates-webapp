@@ -351,7 +351,7 @@ const instructors = {
                 <button type="button" onclick="instructors.addReview()"
                         style="background:#f0fdf4;border:1.5px dashed #16a34a;border-radius:8px;
                                padding:8px 14px;font-size:.875rem;color:#16a34a;font-weight:500;cursor:pointer">
-                    <i class="fas fa-plus-circle"></i> 리뷰 추가
+                    <i class="fas fa-images"></i> 리뷰 이미지 묶음 추가
                 </button>
             </div>
 
@@ -652,73 +652,139 @@ const instructors = {
         return this._getFormCerts();
     },
 
-    // ── 회원 리뷰 ──────────────────────────────────────────────────
+    // ── 회원 리뷰 (이미지 첨부 전용) ───────────────────────────────
+    // reviews 구조: [ { photos: ["url1","url2",...] }, ... ]
+    // 텍스트/별점/작성자 없음 — 이미지만 관리
     _renderReviewList(instructor) {
         const reviews = Array.isArray(instructor?.reviews) ? instructor.reviews : [];
         if (reviews.length === 0) {
-            return `<div style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-star"></i> 등록된 리뷰 없음</div>`;
+            return `<div id="iReviewEmpty" style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-star"></i> 등록된 리뷰 이미지 없음</div>`;
         }
         return reviews.map((rv, idx) => this._reviewItemHtml(rv, idx)).join('');
     },
+
+    // 리뷰 1건 = 이미지 묶음 카드
     _reviewItemHtml(rv, idx) {
-        return `
-        <div data-review-idx="${idx}" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-                <select onchange="instructors._updateReview(${idx},'rating',parseInt(this.value))"
-                        style="padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:.85rem">
-                    ${[5,4,3,2,1].map(n => `<option value="${n}" ${(rv.rating||5)===n?'selected':''}>${'★'.repeat(n)} ${n}점</option>`).join('')}
-                </select>
-                <input type="text" placeholder="작성자 (예: 김*정)" value="${escHtml(rv.author||'')}"
-                       oninput="instructors._updateReview(${idx},'author',this.value)"
-                       style="flex:1;padding:4px 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:.85rem">
-                <button type="button" onclick="instructors._removeReview(${idx})"
-                        style="background:#ef4444;color:#fff;border:none;border-radius:50%;width:22px;height:22px;font-size:.75rem;cursor:pointer;flex-shrink:0">
+        const photos = Array.isArray(rv.photos) ? rv.photos : [];
+        const thumbs = photos.map((url, pi) => `
+            <div style="position:relative;display:inline-block" data-review-photo-idx="${pi}">
+                <img src="${escHtml(url)}"
+                     style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1.5px solid #e5e7eb;cursor:pointer"
+                     onclick="window.open('${escHtml(url)}','_blank')">
+                <button type="button" onclick="instructors._removeReviewPhoto(${idx},${pi})"
+                        style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;
+                               border:none;border-radius:50%;width:18px;height:18px;font-size:.7rem;
+                               cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">
                     <i class="fas fa-times"></i>
                 </button>
+            </div>`).join('');
+
+        return `
+        <div data-review-idx="${idx}"
+             style="background:#f8fafc;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 14px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <span style="font-size:.82rem;font-weight:700;color:#374151">
+                    <i class="fas fa-images" style="color:#16a34a;margin-right:5px"></i>
+                    리뷰 이미지 묶음 ${idx + 1}
+                    <span style="font-weight:400;color:#9ca3af;margin-left:4px">(${photos.length}장)</span>
+                </span>
+                <button type="button" onclick="instructors._removeReview(${idx})"
+                        style="background:#ef4444;color:#fff;border:none;border-radius:6px;
+                               padding:3px 10px;font-size:.75rem;cursor:pointer">
+                    삭제
+                </button>
             </div>
-            <textarea rows="3" placeholder="리뷰 내용" oninput="instructors._updateReview(${idx},'text',this.value)"
-                      style="width:100%;padding:8px;border:1px solid #e5e7eb;border-radius:6px;font-size:.82rem;resize:vertical;box-sizing:border-box">${escHtml(rv.text||'')}</textarea>
+            <div id="iReviewPhotos_${idx}"
+                 style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+                ${thumbs || `<div style="color:#aaa;font-size:.8rem">이미지를 추가해주세요</div>`}
+            </div>
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;
+                          background:#f0fdf4;border:1.5px dashed #16a34a;border-radius:8px;
+                          padding:7px 12px;font-size:.82rem;color:#16a34a;font-weight:500">
+                <i class="fas fa-plus-circle"></i> 이미지 추가
+                <input type="file" accept="image/*" multiple style="display:none"
+                       onchange="instructors.handleReviewPhotoAdd(this,${idx})">
+            </label>
         </div>`;
     },
+
     _reviewsData: [],
     _initReviewsData(instructor) {
-        this._reviewsData = Array.isArray(instructor?.reviews)
-            ? JSON.parse(JSON.stringify(instructor.reviews)) : [];
+        // 기존 데이터: { photos:[...] } 구조로 정규화
+        const raw = Array.isArray(instructor?.reviews) ? instructor.reviews : [];
+        this._reviewsData = raw.map(rv => ({
+            photos: Array.isArray(rv.photos) ? [...rv.photos]
+                  : (rv.image_url ? [rv.image_url] : [])   // 레거시 호환
+        }));
     },
-    _updateReview(idx, field, value) {
-        if (!this._reviewsData[idx]) this._reviewsData[idx] = {};
-        this._reviewsData[idx][field] = value;
+
+    // 리뷰 이미지 삭제
+    _removeReviewPhoto(reviewIdx, photoIdx) {
+        if (!this._reviewsData[reviewIdx]) return;
+        this._reviewsData[reviewIdx].photos.splice(photoIdx, 1);
+        this._refreshReviewItem(reviewIdx);
     },
+
+    // 리뷰 묶음 카드 새로 그리기
+    _refreshReviewItem(idx) {
+        const list = document.getElementById('iReviewList');
+        if (!list) return;
+        const el = list.querySelector(`[data-review-idx="${idx}"]`);
+        if (!el) return;
+        el.outerHTML = this._reviewItemHtml(this._reviewsData[idx], idx);
+    },
+
+    // 리뷰 묶음 전체 삭제
     _removeReview(idx) {
         this._reviewsData.splice(idx, 1);
         const list = document.getElementById('iReviewList');
-        if (list) list.innerHTML = this._reviewsData.length === 0
-            ? `<div style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-star"></i> 등록된 리뷰 없음</div>`
+        if (!list) return;
+        list.innerHTML = this._reviewsData.length === 0
+            ? `<div id="iReviewEmpty" style="color:#aaa;font-size:.85rem;padding:8px 0"><i class="fas fa-star"></i> 등록된 리뷰 이미지 없음</div>`
             : this._reviewsData.map((rv, i) => this._reviewItemHtml(rv, i)).join('');
     },
+
+    // 새 리뷰 묶음 카드 추가
     addReview() {
-        this._reviewsData.push({ rating: 5, text: '', author: '', photos: [] });
+        this._reviewsData.push({ photos: [] });
         const idx = this._reviewsData.length - 1;
         const list = document.getElementById('iReviewList');
         if (!list) return;
-        const placeholder = list.querySelector('[style*="color:#aaa"]');
-        if (placeholder) placeholder.remove();
+        const empty = document.getElementById('iReviewEmpty');
+        if (empty) empty.remove();
         list.insertAdjacentHTML('beforeend', this._reviewItemHtml(this._reviewsData[idx], idx));
     },
-    _collectReviews() {
-        // text textarea도 sync
-        const list = document.getElementById('iReviewList');
-        if (list) {
-            list.querySelectorAll('[data-review-idx]').forEach((el, idx) => {
-                const ta = el.querySelector('textarea');
-                if (ta && this._reviewsData[idx]) this._reviewsData[idx].text = ta.value;
-                const author = el.querySelector('input[type=text]');
-                if (author && this._reviewsData[idx]) this._reviewsData[idx].author = author.value;
-                const rating = el.querySelector('select');
-                if (rating && this._reviewsData[idx]) this._reviewsData[idx].rating = parseInt(rating.value);
-            });
+
+    // 리뷰 이미지 업로드 처리
+    async handleReviewPhotoAdd(input, reviewIdx) {
+        if (!input.files || input.files.length === 0) return;
+        if (!this._reviewsData[reviewIdx]) this._reviewsData[reviewIdx] = { photos: [] };
+        const current = this._reviewsData[reviewIdx].photos;
+        const remaining = 10 - current.length;
+        if (remaining <= 0) {
+            showToast('리뷰 이미지는 묶음당 최대 10장입니다', 'error');
+            input.value = ''; return;
         }
-        return this._reviewsData.filter(rv => rv.text && rv.text.trim());
+        const files = Array.from(input.files).slice(0, remaining);
+        const newUrls = [];
+        for (const file of files) {
+            try {
+                const fd = new FormData();
+                fd.append('image', file);
+                const res = await fetch(window.location.origin + '/api/upload/image', { method: 'POST', body: fd });
+                const result = await res.json().catch(() => ({ success: false }));
+                if (res.ok && result.success && result.url) newUrls.push(result.url);
+                else showToast('업로드 실패: ' + (result.error || ''), 'error');
+            } catch(e) { showToast('업로드 실패: ' + e.message, 'error'); }
+        }
+        this._reviewsData[reviewIdx].photos = [...current, ...newUrls];
+        this._refreshReviewItem(reviewIdx);
+        input.value = '';
+    },
+
+    // 저장 시 reviews 수집 (photos 배열이 1장 이상인 묶음만)
+    _collectReviews() {
+        return this._reviewsData.filter(rv => rv.photos && rv.photos.length > 0);
     },
     // 이미지를 Canvas로 리사이즈 후 Blob 반환 (최대 800px, JPEG 0.85)
     _resizeImage(file, maxPx = 800) {
