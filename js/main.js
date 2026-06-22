@@ -119,6 +119,10 @@ function applyGymMode() {
     const page2 = document.getElementById('page2');
     if (page2) page2.style.display = 'none';
 
+    // ── 1-1. 신청서 제출 버튼 텍스트 변경 ───────────────────────────────
+    const submitBtn = document.getElementById('page1SubmitBtn');
+    if (submitBtn) submitBtn.innerHTML = '<i class="fas fa-check-circle"></i> 접수하기';
+
     // ── 2. 동/호수 입력 행 전체 숨기기 (신청서 내 form-row) ──────────
     const dongEl = document.getElementById('dong');
     const dongHoRow = dongEl?.closest('.form-row');
