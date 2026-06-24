@@ -355,6 +355,59 @@ async function sendPaymentPendingSms({
 }
 
 /**
+ * 보강 수업 정상 접수 완료 SMS — 입주민에게 발송
+ * 보강(makeup) 프로그램 신청 즉시 자동 발송 (무료 수업 — 입금 안내 없음)
+ *
+ * @param {Object} p
+ * @param {string} p.phone          - 수신 전화번호 (신청자)
+ * @param {string} p.name           - 신청자 이름
+ * @param {string} p.complexName    - 단지명
+ * @param {string} p.programName    - 프로그램명
+ * @param {string} p.preferredTime  - 수강 희망 시간 (선택)
+ * @param {string} p.sender         - 발신번호 (단지 DB)
+ * @param {boolean} p.smsEnabled    - 단지 SMS 활성 여부
+ */
+async function sendMakeupConfirmedSms({
+    phone, name, complexName, programName, preferredTime,
+    sender, smsEnabled
+}) {
+    if (!isSmsEnabled()) return { success: false, skipped: true, reason: 'SMS 전역 비활성화' };
+    if (smsEnabled === false) return { success: false, skipped: true, reason: '해당 단지 SMS 비활성화' };
+
+    const normalizedPhone = normalizePhone(phone);
+    if (!normalizedPhone) return { success: false, error: '유효하지 않은 전화번호' };
+
+    const service = getSolapiService();
+    if (!service) return { success: false, error: '솔라피 서비스 초기화 실패' };
+
+    const fromNumber = (sender && sender.trim()) || process.env.SOLAPI_SENDER;
+    if (!fromNumber) return { success: false, error: '발신번호가 설정되지 않았습니다' };
+
+    const complex   = complexName ? `[${complexName}] ` : '';
+    const timeLine  = preferredTime ? `\n■ 수강 시간: ${preferredTime}` : '';
+
+    const text = `${complex}${name}님, 보강 수업이 정상 접수되었습니다. ✅\n\n` +
+        `■ 프로그램: ${programName || ''}${timeLine}\n\n` +
+        `즐거운 수업 되세요!`;
+
+    try {
+        console.log(`[SMS][보강접수] 발송 시도: ${normalizedPhone} (${name})`);
+        const result = await service.send({ to: normalizedPhone, from: fromNumber, text });
+        const failed = result?.failedMessageList?.length || 0;
+        if (failed > 0) {
+            const reason = result.failedMessageList[0]?.reason || '알 수 없는 오류';
+            console.error(`[SMS][보강접수] 발송 실패: ${reason}`);
+            return { success: false, error: reason };
+        }
+        console.log(`[SMS][보강접수] 발송 성공: groupId=${result?.groupInfo?.id || 'sent'}`);
+        return { success: true, messageId: result?.groupInfo?.id || 'sent' };
+    } catch (err) {
+        console.error('[SMS][보강접수] 발송 실패:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
+/**
  * 관리자 승인 완료 안내 SMS — 입주민에게 발송
  * 관리자가 입금 확인 후 approved 처리 시 수강 기간 안내
  *
@@ -419,6 +472,7 @@ module.exports = {
     sendLessonRequestSms,
     sendPaymentPendingSms,
     sendApprovalConfirmedSms,
+    sendMakeupConfirmedSms,
     isSmsEnabled,
     isSmsConfigured,
     getSmsStatus,

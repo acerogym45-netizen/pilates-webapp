@@ -86,6 +86,7 @@ const programs = {
 
         const resolvedType = _resolveType(p);
         const isPersonal = resolvedType === 'personal' || resolvedType === 'duet';
+        const isMakeup   = resolvedType === 'makeup';
         const body = `
             ${complexName ? `<p style="font-size:.85rem;color:#888;margin-bottom:8px"><i class="fas fa-building"></i> ${escHtml(complexName)}</p>` : ''}
             <input type="hidden" id="programComplexId" value="${complexId || ''}">
@@ -96,7 +97,12 @@ const programs = {
                     <option value="group"    ${resolvedType==='group'   ?'selected':''}>그룹</option>
                     <option value="duet"     ${resolvedType==='duet'    ?'selected':''}>듀엣</option>
                     <option value="personal" ${resolvedType==='personal'?'selected':''}>개인</option>
+                    <option value="makeup"   ${resolvedType==='makeup'  ?'selected':''}>보강</option>
                 </select>
+                ${isMakeup ? `<div style="margin-top:6px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;font-size:.8rem;color:#92400e">
+                    <i class="fas fa-info-circle" style="color:#f59e0b"></i>
+                    <b>보강</b> 유형: 중복 수강 허용 · 자동 승인 · 접수 완료 문자 발송 (입금 안내 없음)
+                </div>` : ''}
             </div>
             <div class="form-group">
                 <label>운영 요일</label>
@@ -202,12 +208,26 @@ const programs = {
     /** 유형 변경 시 시간대 섹션 토글 */
     _onTypeChange(val) {
         const isPersonalType = val === 'personal' || val === 'duet';
+        const isMakeupType   = val === 'makeup';
 
-        // 시간대 섹션 토글
+        // 보강 유형 안내 배지 동적 삽입/제거
+        const typeSelect = document.getElementById('pType');
+        let makeupNotice = document.getElementById('pMakeupNotice');
+        if (isMakeupType && !makeupNotice) {
+            makeupNotice = document.createElement('div');
+            makeupNotice.id = 'pMakeupNotice';
+            makeupNotice.style.cssText = 'margin-top:6px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;font-size:.8rem;color:#92400e';
+            makeupNotice.innerHTML = '<i class="fas fa-info-circle" style="color:#f59e0b"></i> <b>보강</b> 유형: 중복 수강 허용 · 자동 승인 · 접수 완료 문자 발송 (입금 안내 없음)';
+            typeSelect?.closest('.form-group')?.appendChild(makeupNotice);
+        } else if (!isMakeupType && makeupNotice) {
+            makeupNotice.remove();
+        }
+
+        // 시간대 섹션 토글 (보강도 그룹처럼 시간대 선택 가능)
         const g = document.getElementById('pSlotsGroup');
         if (g) g.style.display = isPersonalType ? 'none' : '';
 
-        // 상시 접수 체크박스: 개인/듀엣이면 표시, 그룹이면 제거
+        // 상시 접수 체크박스: 개인/듀엣이면 표시, 그룹/보강이면 제거
         const alwaysOpenWrap = document.getElementById('pAlwaysOpenLessonWrap');
         if (isPersonalType && !alwaysOpenWrap) {
             // 체크박스 동적 삽입 (활성화 체크박스 바로 위)
@@ -340,7 +360,7 @@ const programs = {
 };
 
 function typeLabel(t) {
-    return { group:'그룹', duet:'듀엣', personal:'개인' }[t] || t;
+    return { group:'그룹', duet:'듀엣', personal:'개인', makeup:'보강' }[t] || t;
 }
 
 /**
@@ -350,9 +370,10 @@ function typeLabel(t) {
 function _resolveType(p) {
     if (!p) return 'group';
     const t = (p.type || '').toLowerCase();
-    if (t === 'personal' || t === 'duet') return t;
+    if (t === 'personal' || t === 'duet' || t === 'makeup') return t;
     const n = (p.name || '').toLowerCase();
     if (/1:1|개인/.test(n)) return 'personal';
     if (/2:1|듀엣/.test(n)) return 'duet';
+    if (/보강/.test(n)) return 'makeup';
     return t || 'group';
 }
