@@ -603,46 +603,53 @@ function goToPage1() {
 
 // Submit contract
 async function submitContract() {
+    // 헬스장 모드 여부 — gym_mode=true 이면 계약서 검증 전체 스킵
+    const isGymMode = complexContext?.getComplex?.()?.gym_mode === true;
+
     const refundAgreement  = document.getElementById('refundAgreement')?.checked;
-    const termsAgreement   = document.getElementById('termsAgreement').checked;
-    const signatureName    = document.getElementById('signatureName').value.trim();
-    const signatureDate    = document.getElementById('signatureDate').value;
-    
-    // Validation
-    if (!refundAgreement) {
-        alert('환불 규정에 동의해주세요.');
-        document.getElementById('refundAgreement')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        return;
-    }
-    if (!termsAgreement) {
-        alert('이용약관에 동의해주세요.');
-        return;
-    }
-    
-    if (!signatureName) {
-        alert('성명을 입력해주세요.');
-        return;
+    const termsAgreement   = document.getElementById('termsAgreement')?.checked;
+    const signatureName    = document.getElementById('signatureName')?.value.trim() ?? '';
+    const signatureDate    = document.getElementById('signatureDate')?.value ?? '';
+
+    // Validation — 헬스장 모드에서는 계약서 검증 전체 스킵
+    if (!isGymMode) {
+        if (!refundAgreement) {
+            alert('환불 규정에 동의해주세요.');
+            document.getElementById('refundAgreement')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        if (!termsAgreement) {
+            alert('이용약관에 동의해주세요.');
+            return;
+        }
+
+        if (!signatureName) {
+            alert('성명을 입력해주세요.');
+            return;
+        }
+
+        // 서명 미작성 체크
+        if (signaturePad.isEmpty()) {
+            alert('서명란에 서명해주세요.\n미작성 또는 부실한 서명은 승인되지 않으며 자동 거부됩니다.');
+            document.querySelector('.signature-canvas-wrapper').style.borderColor = '#e53e3e';
+            return;
+        }
+
+        // 부실 서명 감지: SignaturePad 데이터 포인트 수가 너무 적으면 거부
+        const sigData = signaturePad.toData();
+        const totalPoints = sigData.reduce((sum, stroke) => sum + (stroke.points?.length || stroke.length || 0), 0);
+        if (totalPoints < 20) {
+            alert('서명이 너무 간단합니다.\n반드시 본인 서명을 직접 작성해주세요.\n부실한 서명(점, 선 하나 등)은 승인되지 않으며 자동 거부됩니다.');
+            document.querySelector('.signature-canvas-wrapper').style.borderColor = '#e53e3e';
+            return;
+        }
+        document.querySelector('.signature-canvas-wrapper').style.borderColor = '';
     }
 
-    // 서명 미작성 체크
-    if (signaturePad.isEmpty()) {
-        alert('서명란에 서명해주세요.\n미작성 또는 부실한 서명은 승인되지 않으며 자동 거부됩니다.');
-        document.querySelector('.signature-canvas-wrapper').style.borderColor = '#e53e3e';
-        return;
-    }
-
-    // 부실 서명 감지: SignaturePad 데이터 포인트 수가 너무 적으면 거부
-    const sigData = signaturePad.toData();
-    const totalPoints = sigData.reduce((sum, stroke) => sum + (stroke.points?.length || stroke.length || 0), 0);
-    if (totalPoints < 20) {
-        alert('서명이 너무 간단합니다.\n반드시 본인 서명을 직접 작성해주세요.\n부실한 서명(점, 선 하나 등)은 승인되지 않으며 자동 거부됩니다.');
-        document.querySelector('.signature-canvas-wrapper').style.borderColor = '#e53e3e';
-        return;
-    }
-    document.querySelector('.signature-canvas-wrapper').style.borderColor = '';
-
-    // Get signature as base64 image
-    const signatureImage = signaturePad.toDataURL();
+    // Get signature as base64 image (헬스장 모드에서는 빈 값)
+    const signatureImage = (!isGymMode && signaturePad && !signaturePad.isEmpty())
+        ? signaturePad.toDataURL()
+        : '';
     
     // Prepare final data
     const contractData = {
