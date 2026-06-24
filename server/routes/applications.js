@@ -10,7 +10,7 @@ const crypto  = require('crypto');
 const router  = express.Router();
 const { getSupabase, sbErr } = require('../db-supabase');
 const { triggerWaitingQueue, checkApplyTypeSetting } = require('../utils/waiting');
-const { sendLessonRequestSms, sendPaymentPendingSms, sendApprovalConfirmedSms } = require('../utils/sms');
+const { sendLessonRequestSms, sendPaymentPendingSms, sendApprovalConfirmedSms, sendMakeupConfirmedSms } = require('../utils/sms');
 
 // ── 목록 조회 ────────────────────────────────────────────────
 router.get('/', async (req, res) => {
@@ -464,9 +464,30 @@ router.post('/', async (req, res) => {
         }
         // ── 중흥S클래스 예외 헬퍼 끝 ─────────────────────────────────────────────
 
+        // ── 보강 프로그램 여부 사전 확인 ──────────────────────────────────────────
+        // type='makeup' 인 프로그램은 중복 수강 허용 + 자동 승인 처리
+        let _isMakeupProgram = false;
+        if (program_id || (program_name && complex_id)) {
+            try {
+                let mpData = null;
+                if (program_id) {
+                    const { data: mp } = await sb.from('programs').select('type, name').eq('id', program_id).single();
+                    mpData = mp;
+                } else {
+                    const { data: mps } = await sb.from('programs').select('type, name')
+                        .eq('complex_id', complex_id).ilike('name', program_name).limit(1);
+                    mpData = mps?.[0] || null;
+                }
+                if (mpData) {
+                    _isMakeupProgram = mpData.type === 'makeup'
+                        || /보강/.test(mpData.name || '');
+                }
+            } catch (_) {}
+        }
+
         // ── 중복 신청 체크 ─────────────────────────────────────────
-        // admin_bypass=true 이면 관리자가 직접 추가하는 경우이므로 중복 체크 생략
-        if (!admin_bypass) {
+        // admin_bypass=true 또는 보강 프로그램은 중복 체크 생략
+        if (!admin_bypass && !_isMakeupProgram) {
             // ── [중흥S클래스 예외] 무료체험 ↔ 정규 수업 교차 중복 허용 ──────────
             // 조건: ① 중흥S클래스 단지  AND  ② 신청/기존 중 하나라도 무료체험
             //       (무료체험+무료체험, 정규+정규는 기존 로직 그대로 차단)
@@ -686,10 +707,13 @@ router.post('/', async (req, res) => {
         // 정원 확인 + 대기 처리
         // 계좌이체/현금결제 단지는 payment_mode로 감지 — 입금 확인 전까지 강제 waiting
         const PAYMENT_PENDING_MODES = ['bank_transfer', 'cash', 'direct'];
-        const isPaymentPending = PAYMENT_PENDING_MODES.includes(complexSettings.payment_mode);
+        // 보강 프로그램은 무료이므로 payment_mode 와 무관하게 입금 대기 없음
+        const isPaymentPending = !_isMakeupProgram && PAYMENT_PENDING_MODES.includes(complexSettings.payment_mode);
         let status = complexSettings.auto_approve !== false ? 'approved' : 'received';
         // 계좌이체/현금 단지는 auto_approve 여부와 무관하게 무조건 waiting으로 시작
         if (isPaymentPending) status = 'waiting';
+        // 보강 프로그램: 항상 즉시 자동 승인 (무료 수업, 결제 불필요)
+        if (_isMakeupProgram) status = 'approved';
         let waitingOrder = null;
         let applyType = 'new';
 
@@ -837,6 +861,7 @@ router.post('/', async (req, res) => {
         if (error) throw sbErr(error, 'POST /applications');
 
         // ── 계좌이체/현금결제: 입금 계좌 안내 SMS 발송 ────────────────────
+        // (보강 프로그램은 isPaymentPending=false 이므로 이 블록 진입 안 함)
         let paymentSmsSent = false;
         if (isPaymentPending && created) {
             try {
@@ -856,6 +881,27 @@ router.post('/', async (req, res) => {
                 paymentSmsSent = smsResult.success;
             } catch (smsErr) {
                 console.error('[신규접수] SMS 발송 중 오류 (신청은 정상 완료):', smsErr.message);
+            }
+        }
+
+        // ── 보강 수업: 정상 접수 완료 SMS 발송 ───────────────────────────────
+        let makeupSmsSent = false;
+        if (_isMakeupProgram && created) {
+            try {
+                const smsResult = await sendMakeupConfirmedSms({
+                    phone:        phone,
+                    name:         name,
+                    complexName:  complexSettings.name || '',
+                    programName:  program_name || '',
+                    preferredTime: preferred_time || '',
+                    sender:       complexSettings.sms_sender || null,
+                    smsEnabled:   complexSettings.sms_enabled != null
+                                      ? Boolean(complexSettings.sms_enabled) : null,
+                });
+                console.log('[보강접수] 정상접수 SMS 발송 결과:', smsResult);
+                makeupSmsSent = smsResult.success;
+            } catch (smsErr) {
+                console.error('[보강접수] SMS 발송 중 오류 (신청은 정상 완료):', smsErr.message);
             }
         }
 
@@ -906,8 +952,10 @@ router.post('/', async (req, res) => {
         res.status(201).json({
             success: true, data: created, status, waitingOrder,
             isLessonAlwaysOpen,
+            isMakeupProgram: _isMakeupProgram,
             instructorSmsSent: !!smsSentAt,
             paymentSmsSent,
+            makeupSmsSent,
         });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
