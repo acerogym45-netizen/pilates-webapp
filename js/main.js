@@ -706,7 +706,8 @@ async function submitContract() {
             signature_date: contractData.signature_date,
             terms_agreement: contractData.terms_agreement,
             agreement: contractData.terms_agreement,
-            instructor_id: contractData.instructor_id || null  // 개인/듀엣 희망 강사
+            instructor_id: contractData.instructor_id || null,  // 개인/듀엣 희망 강사
+            ...(contractData.survey_data ? { survey_data: contractData.survey_data } : {})  // 헬스장 모드 운동 설문
         };
         
         console.log('🚀 Sending POST request to: /api/applications');
@@ -1579,10 +1580,16 @@ function showDuplicateWarningModal(contractData, existing) {
 
     const statusLabel = existing?.status === 'waiting' ? '대기 중' : '승인 완료';
     const progName = existing?.program_name || contractData.lesson_type || '-';
+    const isGymMode = complexContext?.getComplex?.()?.gym_mode === true;
+
+    // 헬스장 모드: 동/호수 행 숨김
+    const dongHoRow = isGymMode
+        ? ''
+        : `<p style="margin:0 0 6px"><strong>동/호:</strong> ${contractData.dong}동 ${contractData.ho}호</p>`;
 
     content.innerHTML = `
         <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;margin-bottom:4px">
-            <p style="margin:0 0 6px"><strong>동/호:</strong> ${contractData.dong}동 ${contractData.ho}호</p>
+            ${dongHoRow}
             <p style="margin:0 0 6px"><strong>성명:</strong> ${contractData.name}</p>
             <p style="margin:0 0 6px"><strong>연락처:</strong> ${contractData.phone}</p>
             <p style="margin:0"><strong>기존 신청:</strong> ${progName} <span style="color:#d97706">(${statusLabel})</span></p>
