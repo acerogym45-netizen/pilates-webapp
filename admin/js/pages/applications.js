@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.26 신청종류별설정+대기시스템 */
+/** 신청 관리 페이지 - v3.27 수강기간필터+미재등록TM */
 const applications = {
     data: [],
     filtered: [],
@@ -7,6 +7,8 @@ const applications = {
     filterProgram: '',   // 프로그램 필터
     filterTime: '',      // 시간대 필터
     filterDong: '',      // 동 필터
+    filterExpiryFrom: '', // 수강 만료일 시작
+    filterExpiryTo: '',   // 수강 만료일 종료
 
     async render() {
         document.getElementById('pageContent').innerHTML = `
@@ -92,9 +94,28 @@ const applications = {
                         <option value="">전체</option>
                     </select>
                 </div>
-                <button class="btn-ghost btn-sm" onclick="applications.clearDetailFilters()" style="align-self:flex-end">
-                    <i class="fas fa-times"></i> 초기화
-                </button>
+                <div class="detail-filter-group" style="flex-direction:column;gap:4px">
+                    <label><i class="fas fa-calendar-alt"></i> 수강 만료일</label>
+                    <div style="display:flex;align-items:center;gap:6px">
+                        <input type="date" id="filterExpiryFrom"
+                               style="font-size:.8rem;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px"
+                               onchange="applications.setDetailFilter('expiryFrom', this.value)">
+                        <span style="color:#9ca3af;font-size:.8rem">~</span>
+                        <input type="date" id="filterExpiryTo"
+                               style="font-size:.8rem;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px"
+                               onchange="applications.setDetailFilter('expiryTo', this.value)">
+                    </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
+                    <button class="btn-ghost btn-sm" onclick="applications.clearDetailFilters()">
+                        <i class="fas fa-times"></i> 초기화
+                    </button>
+                    <button class="btn-sm" id="bulkRenewalTmBtn"
+                            onclick="applications.sendBulkRenewalTm()"
+                            style="background:#7c3aed;color:#fff;border:none;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:.78rem;display:none">
+                        <i class="fas fa-paper-plane"></i> 미재등록 TM 일괄 발송
+                    </button>
+                </div>
             </div>
 
             <div id="appList" class="data-list">
@@ -367,17 +388,21 @@ const applications = {
     },
 
     setDetailFilter(type, value) {
-        if (type === 'program') this.filterProgram = value;
-        else if (type === 'time') this.filterTime   = value;
-        else if (type === 'dong')  this.filterDong  = value;
+        if (type === 'program')    this.filterProgram   = value;
+        else if (type === 'time')  this.filterTime      = value;
+        else if (type === 'dong')  this.filterDong      = value;
+        else if (type === 'expiryFrom') this.filterExpiryFrom = value;
+        else if (type === 'expiryTo')   this.filterExpiryTo   = value;
         this.applyFilters();
     },
 
     clearDetailFilters() {
-        this.filterProgram = '';
-        this.filterTime    = '';
-        this.filterDong    = '';
-        ['filterProgram','filterTime','filterDong'].forEach(id => {
+        this.filterProgram   = '';
+        this.filterTime      = '';
+        this.filterDong      = '';
+        this.filterExpiryFrom = '';
+        this.filterExpiryTo   = '';
+        ['filterProgram','filterTime','filterDong','filterExpiryFrom','filterExpiryTo'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
@@ -428,7 +453,30 @@ const applications = {
         if (this.filterProgram) list = list.filter(a => a.program_name === this.filterProgram);
         if (this.filterTime)    list = list.filter(a => a.preferred_time === this.filterTime);
         if (this.filterDong)    list = list.filter(a => a.dong === this.filterDong);
+        // 수강 만료일 기간 필터
+        if (this.filterExpiryFrom) {
+            list = list.filter(a => a.expiry_date && a.expiry_date >= this.filterExpiryFrom);
+        }
+        if (this.filterExpiryTo) {
+            list = list.filter(a => a.expiry_date && a.expiry_date <= this.filterExpiryTo);
+        }
         this.filtered = list;
+
+        // 수강 만료일 필터가 활성화되었을 때 미재등록 TM 버튼 표시
+        const expiryFilterActive = !!(this.filterExpiryFrom || this.filterExpiryTo);
+        const bulkBtn = document.getElementById('bulkRenewalTmBtn');
+        if (bulkBtn) {
+            // 미재등록자: 현재 필터 목록 중 approved 상태이고 renewal_status가 없는 회원
+            const notRenewedCount = list.filter(a =>
+                a.status === 'approved' &&
+                (!a.renewal_status || a.renewal_status === '')
+            ).length;
+            bulkBtn.style.display = (expiryFilterActive && notRenewedCount > 0) ? '' : 'none';
+            if (notRenewedCount > 0) {
+                bulkBtn.innerHTML = `<i class="fas fa-paper-plane"></i> 미재등록 TM 일괄 발송 (${notRenewedCount}명)`;
+            }
+        }
+
         this.renderList();
     },
 
@@ -1084,6 +1132,67 @@ ${(() => {
             showToast('저장되었습니다');
             await this.load();
         } catch (e) { showToast('저장 실패: ' + e.message, 'error'); }
+    },
+
+    // ── 미재등록자 일괄 TM 발송 ────────────────────────────────────────────────
+    async sendBulkRenewalTm() {
+        // 현재 필터된 목록에서 approved + renewal_status 없음 (미재등록) 대상자
+        const targets = this.filtered.filter(a =>
+            a.status === 'approved' &&
+            (!a.renewal_status || a.renewal_status === '') &&
+            a.expiry_date
+        );
+
+        if (targets.length === 0) {
+            showToast('발송 대상자가 없습니다. 수강 만료일 필터를 설정하고 만료일이 등록된 회원을 확인하세요.', 'warning');
+            return;
+        }
+
+        const period = [
+            this.filterExpiryFrom ? `${this.filterExpiryFrom}부터` : '',
+            this.filterExpiryTo   ? `${this.filterExpiryTo}까지`   : ''
+        ].filter(Boolean).join(' ');
+
+        const confirmed = await new Promise(resolve => {
+            showConfirm(
+                '미재등록 TM 일괄 발송',
+                `수강 만료일 ${period}\n\n총 ${targets.length}명에게 연장 의향 TM을 발송합니다.\n\n대상: ${targets.map(a => a.name).join(', ')}\n\n계속하시겠습니까?`,
+                () => resolve(true),
+                () => resolve(false)
+            );
+        });
+        if (!confirmed) return;
+
+        let successCount = 0;
+        let failCount    = 0;
+        const failNames  = [];
+
+        showToast(`TM 발송 중... (0 / ${targets.length})`, 'info');
+
+        for (const a of targets) {
+            try {
+                const res = await fetch('/api/renewal/send-notice', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ applicationId: a.id })
+                });
+                const json = await res.json();
+                if (json.success && json.sms?.success) {
+                    successCount++;
+                } else {
+                    failCount++;
+                    failNames.push(a.name);
+                }
+            } catch(e) {
+                failCount++;
+                failNames.push(a.name);
+            }
+        }
+
+        const msg = failCount === 0
+            ? `✅ ${successCount}명 TM 발송 완료`
+            : `⚠️ 성공 ${successCount}명 / 실패 ${failCount}명 (${failNames.join(', ')})`;
+        showToast(msg, failCount === 0 ? 'success' : 'warning');
+        await this.load();
     },
 
     // ── 연장 TM 수동 발송 ────────────────────────────────────────────────────

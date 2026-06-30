@@ -1984,8 +1984,9 @@
     }
 
     // ── 이미지 모달 전역 상태 ──
-    let _imodalUrls = [];
-    let _imodalIdx  = 0;
+    // window._imodalUrls / window._imodalIdx 를 공유 (js/main.js imodalStep과 통합)
+    if (!window._imodalUrls) window._imodalUrls = [];
+    if (window._imodalIdx == null) window._imodalIdx = 0;
 
     // onclick 속성 내 JSON 따옴표 충돌 방지용 레지스트리
     // img 클릭 시: data-store-key + data-store-idx 속성만 사용
@@ -2005,8 +2006,8 @@
     }
 
     function showInstructorImages(urls, startIdx) {
-        _imodalUrls = Array.isArray(urls) ? urls : [urls];
-        _imodalIdx  = typeof startIdx === 'number' ? startIdx : 0;
+        window._imodalUrls = Array.isArray(urls) ? urls : [urls];
+        window._imodalIdx  = typeof startIdx === 'number' ? startIdx : 0;
         _imodalRender();
         const modal = document.getElementById('imageModal');
         if (modal) {
@@ -2027,29 +2028,25 @@
         const prev    = document.getElementById('imodalPrev');
         const next    = document.getElementById('imodalNext');
         if (!img) return;
-        img.src = _imodalUrls[_imodalIdx] || '';
+        img.src = window._imodalUrls[window._imodalIdx] || '';
         if (counter) {
-            counter.textContent = _imodalUrls.length > 1
-                ? `${_imodalIdx + 1} / ${_imodalUrls.length}` : '';
+            counter.textContent = window._imodalUrls.length > 1
+                ? `${window._imodalIdx + 1} / ${window._imodalUrls.length}` : '';
         }
         // 사진 1장이면 화살표 숨김
-        const show = _imodalUrls.length > 1;
+        const show = window._imodalUrls.length > 1;
         if (prev) prev.style.display = show ? '' : 'none';
         if (next) next.style.display = show ? '' : 'none';
     }
 
-    function imodalStep(dir) {
-        if (!_imodalUrls.length) return;
-        _imodalIdx = (_imodalIdx + dir + _imodalUrls.length) % _imodalUrls.length;
-        _imodalRender();
-    }
+    // imodalStep 은 js/main.js 에 전역 정의됨 — 여기엀 중복 정의 안 함
 
     function closeImageModal(e) {
         if (e && e.target && e.target.id === 'modalImage') return;
         document.getElementById('imageModal').classList.remove('active');
         document.body.style.overflow = '';
-        _imodalUrls = [];
-        _imodalIdx  = 0;
+        window._imodalUrls = [];
+        window._imodalIdx  = 0;
     }
 
     // 강사 카드 자격증·리뷰 토글

@@ -3296,8 +3296,6 @@ function notices_toggleExpand(contentId, btn) {
 function notices_openImageModal(url, sliderId, startIdx) {
     const modal = document.getElementById('imageModal');
     if (!modal) return;
-    const img = document.getElementById('modalImage');
-    if (img) img.src = url;
 
     // 슬라이더 이미지 목록 수집
     let urls = [url];
@@ -3313,9 +3311,9 @@ function notices_openImageModal(url, sliderId, startIdx) {
         }
     }
 
-    // 모달에 상태 저장
-    modal._imodalUrls  = urls;
-    modal._imodalIdx   = curIdx;
+    // ── 전역 상태에 저장 (imodalStep 과 공유) ──
+    window._imodalUrls = urls;
+    window._imodalIdx  = curIdx;
     _imodalRefresh();
 
     modal.classList.add('active');
@@ -3324,10 +3322,8 @@ function notices_openImageModal(url, sliderId, startIdx) {
 
 // 모달 이미지 갱신 (화살표/카운터/숨기기)
 function _imodalRefresh() {
-    const modal = document.getElementById('imageModal');
-    if (!modal) return;
-    const urls   = modal._imodalUrls  || [];
-    const idx    = modal._imodalIdx   || 0;
+    const urls   = window._imodalUrls || [];
+    const idx    = window._imodalIdx  || 0;
     const img    = document.getElementById('modalImage');
     const prev   = document.getElementById('imodalPrev');
     const next   = document.getElementById('imodalNext');
@@ -3343,12 +3339,11 @@ function _imodalRefresh() {
     }
 }
 
-// 모달 내 ±1 이동
+// 모달 내 ±1 이동 (전역 _imodalUrls 참조 — notices_openImageModal / showTimetableModal 공유)
 function imodalStep(dir) {
-    const modal = document.getElementById('imageModal');
-    if (!modal || !modal._imodalUrls) return;
-    const len = modal._imodalUrls.length;
-    modal._imodalIdx = (modal._imodalIdx + dir + len) % len;
+    const urls = window._imodalUrls;
+    if (!urls || !urls.length) return;
+    window._imodalIdx = ((window._imodalIdx || 0) + dir + urls.length) % urls.length;
     _imodalRefresh();
 }
 
@@ -3533,19 +3528,72 @@ async function showTimetableModal() {
     content.innerHTML = '<span style="color:#9ca3af;font-size:.9rem">불러오는 중...</span>';
 
     try {
-        const complexCode = complexContext.getComplexCode();
+        const complexCode = complexContext?.getComplexCode?.();
         if (!complexCode) throw new Error('단지 정보를 찾을 수 없습니다');
 
         const res  = await fetch(`/api/complexes/timetable?code=${encodeURIComponent(complexCode)}`);
+        if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
         const json = await res.json();
 
         if (!json.success) throw new Error(json.error || '조회 실패');
 
         if (json.timetable_url) {
-            content.innerHTML = `
-                <img src="${json.timetable_url}" alt="시간표"
-                     style="max-width:100%;border-radius:8px;cursor:pointer"
-                     onclick="notices_openImageModal('${json.timetable_url}')">`;
+            // timetable_url 이 쉼표(,)로 복수 이미지 URL을 구분하는 경우도 지원
+            const urls = json.timetable_url
+                .split(',')
+                .map(u => u.trim())
+                .filter(u => u.length > 0);
+
+            if (urls.length > 1) {
+                // 복수 이미지 → 슬라이드 형태로 표시
+                const imgsHtml = urls.map((u, i) =>
+                    `<img src="${u}" alt="시간표 ${i + 1}"
+                         style="max-width:100%;border-radius:8px;cursor:pointer;display:${i === 0 ? 'block' : 'none'}">`
+                ).join('');
+
+                content.innerHTML = `
+                    <div id="ttSlideWrap" style="position:relative;text-align:center">
+                        ${imgsHtml}
+                        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:10px">
+                            <button onclick="_ttStep(-1)" style="background:#e5e7eb;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:.9rem">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <span id="ttCounter" style="font-size:.82rem;color:#6b7280">1 / ${urls.length}</span>
+                            <button onclick="_ttStep(1)" style="background:#e5e7eb;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:.9rem">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>`;
+
+                // 전역 상태 초기화 후 큰 이미지 모달도 연동
+                window._ttUrls = urls;
+                window._ttIdx  = 0;
+                window._ttStep = function(dir) {
+                    const imgs = document.querySelectorAll('#ttSlideWrap img');
+                    if (!imgs.length) return;
+                    imgs[window._ttIdx].style.display = 'none';
+                    window._ttIdx = (window._ttIdx + dir + urls.length) % urls.length;
+                    imgs[window._ttIdx].style.display = 'block';
+                    const ctr = document.getElementById('ttCounter');
+                    if (ctr) ctr.textContent = `${window._ttIdx + 1} / ${urls.length}`;
+                };
+                // 이미지 클릭 → 큰 이미지 모달
+                content.querySelectorAll('img').forEach((img, i) => {
+                    img.onclick = () => {
+                        window._imodalUrls = urls;
+                        window._imodalIdx  = i;
+                        _imodalRefresh();
+                        const imgModal = document.getElementById('imageModal');
+                        if (imgModal) { imgModal.classList.add('active'); document.body.style.overflow = 'hidden'; }
+                    };
+                });
+            } else {
+                // 단일 이미지
+                content.innerHTML = `
+                    <img src="${urls[0]}" alt="시간표"
+                         style="max-width:100%;border-radius:8px;cursor:pointer"
+                         onclick="(function(){window._imodalUrls=['${urls[0].replace(/'/g,'%27')}'];window._imodalIdx=0;_imodalRefresh();var m=document.getElementById('imageModal');if(m){m.classList.add('active');document.body.style.overflow='hidden';}})()">` ;
+            }
         } else {
             content.innerHTML = `
                 <div style="color:#9ca3af;font-size:.88rem;padding:24px 0">
@@ -3554,7 +3602,8 @@ async function showTimetableModal() {
                 </div>`;
         }
     } catch (e) {
-        content.innerHTML = `<span style="color:#ef4444;font-size:.88rem">오류: ${escapeHtml(e.message)}</span>`;
+        console.error('[timetable]', e);
+        content.innerHTML = `<span style="color:#ef4444;font-size:.88rem">불러오기 실패: ${escapeHtml(e.message)}</span>`;
     }
 }
 
