@@ -1,14 +1,19 @@
-/** 신청 관리 페이지 - v3.27 수강기간필터+미재등록TM */
+/** 신청 관리 페이지 - v3.28 수강기간카드표시+체크박스필터+수강기간조회 */
 const applications = {
     data: [],
     filtered: [],
     currentFilter: 'all',
     searchQuery: '',
-    filterProgram: '',   // 프로그램 필터
-    filterTime: '',      // 시간대 필터
+    filterPrograms: [],  // 프로그램 다중선택 필터 (배열)
+    filterTimes: [],     // 시간대 다중선택 필터 (배열)
     filterDong: '',      // 동 필터
     filterExpiryFrom: '', // 수강 만료일 시작
     filterExpiryTo: '',   // 수강 만료일 종료
+    filterStartFrom: '',  // 수강 시작일 시작
+    filterStartTo: '',    // 수강 시작일 종료
+    // 레거시 단일값 (applyFilters 내부에서 배열로 처리)
+    filterProgram: '',
+    filterTime: '',
 
     async render() {
         document.getElementById('pageContent').innerHTML = `
@@ -75,37 +80,68 @@ const applications = {
                        oninput="applications.search(this.value)">
             </div>
 
-            <div class="detail-filter-bar" id="detailFilterBar">
-                <div class="detail-filter-group">
+            <div class="detail-filter-bar" id="detailFilterBar" style="flex-wrap:wrap;gap:10px 16px">
+
+                <!-- 프로그램 체크박스 드롭다운 -->
+                <div class="detail-filter-group" style="flex-direction:column;gap:4px;position:relative">
                     <label><i class="fas fa-dumbbell"></i> 프로그램</label>
-                    <select id="filterProgram" onchange="applications.setDetailFilter('program', this.value)">
-                        <option value="">전체</option>
-                    </select>
+                    <div id="filterProgramDropdown"
+                         onclick="applications._toggleDropdown('programChkList')"
+                         style="cursor:pointer;border:1px solid #d1d5db;border-radius:6px;padding:5px 28px 5px 8px;font-size:.82rem;min-width:120px;background:#fff;position:relative;user-select:none">
+                        <span id="filterProgramLabel">전체</span>
+                        <i class="fas fa-chevron-down" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:.7rem;color:#9ca3af"></i>
+                    </div>
+                    <div id="programChkList"
+                         style="display:none;position:absolute;top:100%;left:0;z-index:200;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);padding:6px 0;min-width:180px;max-height:220px;overflow-y:auto">
+                    </div>
                 </div>
-                <div class="detail-filter-group">
+
+                <!-- 시간대 체크박스 드롭다운 -->
+                <div class="detail-filter-group" style="flex-direction:column;gap:4px;position:relative">
                     <label><i class="fas fa-clock"></i> 시간대</label>
-                    <select id="filterTime" onchange="applications.setDetailFilter('time', this.value)">
-                        <option value="">전체</option>
-                    </select>
+                    <div id="filterTimeDropdown"
+                         onclick="applications._toggleDropdown('timeChkList')"
+                         style="cursor:pointer;border:1px solid #d1d5db;border-radius:6px;padding:5px 28px 5px 8px;font-size:.82rem;min-width:100px;background:#fff;position:relative;user-select:none">
+                        <span id="filterTimeLabel">전체</span>
+                        <i class="fas fa-chevron-down" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:.7rem;color:#9ca3af"></i>
+                    </div>
+                    <div id="timeChkList"
+                         style="display:none;position:absolute;top:100%;left:0;z-index:200;background:#fff;border:1px solid #d1d5db;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);padding:6px 0;min-width:150px;max-height:220px;overflow-y:auto">
+                    </div>
                 </div>
-                <div class="detail-filter-group">
-                    <label><i class="fas fa-building"></i> 동</label>
-                    <select id="filterDong" onchange="applications.setDetailFilter('dong', this.value)">
-                        <option value="">전체</option>
-                    </select>
-                </div>
+
+                <!-- 동 select -->
                 <div class="detail-filter-group" style="flex-direction:column;gap:4px">
-                    <label><i class="fas fa-calendar-alt"></i> 수강 만료일</label>
-                    <div style="display:flex;align-items:center;gap:6px">
+                    <label><i class="fas fa-building"></i> 동</label>
+                    <select id="filterDong" onchange="applications.setDetailFilter('dong', this.value)"
+                            style="font-size:.82rem;padding:5px 8px;border:1px solid #d1d5db;border-radius:6px">
+                        <option value="">전체</option>
+                    </select>
+                </div>
+
+                <!-- 수강 기간 (시작일 + 만료일) -->
+                <div class="detail-filter-group" style="flex-direction:column;gap:4px">
+                    <label><i class="fas fa-calendar-alt"></i> 수강 기간</label>
+                    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+                        <span style="font-size:.75rem;color:#6b7280;font-weight:600">시작</span>
+                        <input type="date" id="filterStartFrom"
+                               style="font-size:.78rem;padding:4px 5px;border:1px solid #d1d5db;border-radius:6px"
+                               onchange="applications.setDetailFilter('startFrom', this.value)">
+                        <span style="color:#9ca3af;font-size:.78rem">~</span>
+                        <input type="date" id="filterStartTo"
+                               style="font-size:.78rem;padding:4px 5px;border:1px solid #d1d5db;border-radius:6px"
+                               onchange="applications.setDetailFilter('startTo', this.value)">
+                        <span style="font-size:.75rem;color:#6b7280;font-weight:600;margin-left:4px">만료</span>
                         <input type="date" id="filterExpiryFrom"
-                               style="font-size:.8rem;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px"
+                               style="font-size:.78rem;padding:4px 5px;border:1px solid #d1d5db;border-radius:6px"
                                onchange="applications.setDetailFilter('expiryFrom', this.value)">
-                        <span style="color:#9ca3af;font-size:.8rem">~</span>
+                        <span style="color:#9ca3af;font-size:.78rem">~</span>
                         <input type="date" id="filterExpiryTo"
-                               style="font-size:.8rem;padding:4px 6px;border:1px solid #d1d5db;border-radius:6px"
+                               style="font-size:.78rem;padding:4px 5px;border:1px solid #d1d5db;border-radius:6px"
                                onchange="applications.setDetailFilter('expiryTo', this.value)">
                     </div>
                 </div>
+
                 <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
                     <button class="btn-ghost btn-sm" onclick="applications.clearDetailFilters()">
                         <i class="fas fa-times"></i> 초기화
@@ -375,37 +411,99 @@ const applications = {
                 return isNaN(na) || isNaN(nb) ? a.localeCompare(b) : na - nb;
             });
 
-        const fill = (selId, items) => {
-            const el = document.getElementById(selId);
-            if (!el) return;
-            const cur = el.value;
-            el.innerHTML = '<option value="">전체</option>' +
-                items.map(v => `<option value="${escHtml(v)}" ${v===cur?'selected':''}>${escHtml(v)}</option>`).join('');
-        };
-        fill('filterProgram', programs);
-        fill('filterTime', times);
-        fill('filterDong', dongs);
+        // 체크박스 드롭다운 빌드
+        this._buildChkList('programChkList', programs, 'filterPrograms', 'filterProgramLabel', '프로그램');
+        this._buildChkList('timeChkList', times, 'filterTimes', 'filterTimeLabel', '시간대');
+
+        // 동 select
+        const dongEl = document.getElementById('filterDong');
+        if (dongEl) {
+            const cur = dongEl.value;
+            dongEl.innerHTML = '<option value="">전체</option>' +
+                dongs.map(v => `<option value="${escHtml(v)}" ${v===cur?'selected':''}>${escHtml(v)}</option>`).join('');
+        }
+    },
+
+    _buildChkList(listId, items, stateKey, labelId, placeholder) {
+        const container = document.getElementById(listId);
+        if (!container) return;
+        const selected = this[stateKey] || [];
+        container.innerHTML = items.map(v => `
+            <label style="display:flex;align-items:center;gap:8px;padding:5px 12px;cursor:pointer;font-size:.82rem;white-space:nowrap;hover:background:#f3f4f6"
+                   onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background=''">
+                <input type="checkbox" value="${escHtml(v)}"
+                       ${selected.includes(v) ? 'checked' : ''}
+                       onchange="applications._onChkChange('${stateKey}','${labelId}','${placeholder}')">
+                ${escHtml(v)}
+            </label>`).join('');
+    },
+
+    _onChkChange(stateKey, labelId, placeholder) {
+        const listId = stateKey === 'filterPrograms' ? 'programChkList' : 'timeChkList';
+        const checked = [...(document.getElementById(listId)?.querySelectorAll('input[type=checkbox]:checked') || [])]
+            .map(cb => cb.value);
+        this[stateKey] = checked;
+        const labelEl = document.getElementById(labelId);
+        if (labelEl) labelEl.textContent = checked.length === 0 ? '전체' : checked.length === 1 ? checked[0] : `${checked.length}개 선택`;
+        this.applyFilters();
+    },
+
+    _toggleDropdown(listId) {
+        const el = document.getElementById(listId);
+        if (!el) return;
+        const isOpen = el.style.display !== 'none';
+        // 다른 드롭다운 닫기
+        ['programChkList','timeChkList'].forEach(id => {
+            const d = document.getElementById(id);
+            if (d && id !== listId) d.style.display = 'none';
+        });
+        el.style.display = isOpen ? 'none' : 'block';
+        if (!isOpen) {
+            // 외부 클릭 시 닫기 (once)
+            setTimeout(() => {
+                const handler = (e) => {
+                    if (!el.contains(e.target) && !el.previousElementSibling?.contains(e.target)) {
+                        el.style.display = 'none';
+                    }
+                    document.removeEventListener('click', handler);
+                };
+                document.addEventListener('click', handler);
+            }, 0);
+        }
     },
 
     setDetailFilter(type, value) {
-        if (type === 'program')    this.filterProgram   = value;
-        else if (type === 'time')  this.filterTime      = value;
-        else if (type === 'dong')  this.filterDong      = value;
-        else if (type === 'expiryFrom') this.filterExpiryFrom = value;
-        else if (type === 'expiryTo')   this.filterExpiryTo   = value;
+        if (type === 'dong')             this.filterDong       = value;
+        else if (type === 'expiryFrom')  this.filterExpiryFrom = value;
+        else if (type === 'expiryTo')    this.filterExpiryTo   = value;
+        else if (type === 'startFrom')   this.filterStartFrom  = value;
+        else if (type === 'startTo')     this.filterStartTo    = value;
         this.applyFilters();
     },
 
     clearDetailFilters() {
+        this.filterPrograms  = [];
+        this.filterTimes     = [];
         this.filterProgram   = '';
         this.filterTime      = '';
         this.filterDong      = '';
         this.filterExpiryFrom = '';
         this.filterExpiryTo   = '';
-        ['filterProgram','filterTime','filterDong','filterExpiryFrom','filterExpiryTo'].forEach(id => {
+        this.filterStartFrom  = '';
+        this.filterStartTo    = '';
+        ['filterDong','filterExpiryFrom','filterExpiryTo','filterStartFrom','filterStartTo'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
+        // 체크박스 초기화
+        ['programChkList','timeChkList'].forEach(id => {
+            document.getElementById(id)?.querySelectorAll('input[type=checkbox]')
+                .forEach(cb => { cb.checked = false; });
+        });
+        const pl = document.getElementById('filterProgramLabel');
+        const tl = document.getElementById('filterTimeLabel');
+        if (pl) pl.textContent = '전체';
+        if (tl) tl.textContent = '전체';
         this.applyFilters();
     },
 
@@ -450,9 +548,20 @@ const applications = {
                 (a.program_name || '').toLowerCase().includes(q)
             );
         }
-        if (this.filterProgram) list = list.filter(a => a.program_name === this.filterProgram);
-        if (this.filterTime)    list = list.filter(a => a.preferred_time === this.filterTime);
+        // 프로그램 체크박스 다중선택 필터
+        const fp = this.filterPrograms && this.filterPrograms.length > 0 ? this.filterPrograms : (this.filterProgram ? [this.filterProgram] : []);
+        if (fp.length > 0) list = list.filter(a => fp.includes(a.program_name));
+        // 시간대 체크박스 다중선택 필터
+        const ft = this.filterTimes && this.filterTimes.length > 0 ? this.filterTimes : (this.filterTime ? [this.filterTime] : []);
+        if (ft.length > 0) list = list.filter(a => ft.includes(a.preferred_time));
         if (this.filterDong)    list = list.filter(a => a.dong === this.filterDong);
+        // 수강 시작일 기간 필터
+        if (this.filterStartFrom) {
+            list = list.filter(a => a.start_date && a.start_date >= this.filterStartFrom);
+        }
+        if (this.filterStartTo) {
+            list = list.filter(a => a.start_date && a.start_date <= this.filterStartTo);
+        }
         // 수강 만료일 기간 필터
         if (this.filterExpiryFrom) {
             list = list.filter(a => a.expiry_date && a.expiry_date >= this.filterExpiryFrom);
@@ -462,8 +571,8 @@ const applications = {
         }
         this.filtered = list;
 
-        // 수강 만료일 필터가 활성화되었을 때 미재등록 TM 버튼 표시
-        const expiryFilterActive = !!(this.filterExpiryFrom || this.filterExpiryTo);
+        // 수강 만료일 또는 시작일 필터가 활성화되었을 때 미재등록 TM 버튼 표시
+        const expiryFilterActive = !!(this.filterExpiryFrom || this.filterExpiryTo || this.filterStartFrom || this.filterStartTo);
         const bulkBtn = document.getElementById('bulkRenewalTmBtn');
         if (bulkBtn) {
             // 미재등록 TM 대상 판별 기준:
@@ -554,6 +663,7 @@ const applications = {
                     <div class="item-main">
                         <strong>${a.dong} ${a.ho} | ${a.name}</strong>${transferBadge}${sessionsBadge}${cancelTypeBadge}${changedBadge}
                         <p>${a.program_name}${a.preferred_time ? ' | ' + a.preferred_time : ''}${a.monthly_fee ? ' | ₩' + parseInt(a.monthly_fee).toLocaleString() : ''}</p>
+                        ${a.start_date || a.expiry_date ? `<p style="font-size:.78rem;color:#4338ca;margin:1px 0"><i class="fas fa-calendar-check" style="font-size:.7rem;margin-right:3px"></i>${a.start_date || '?'} ~ ${a.expiry_date || '?'}</p>` : ''}
                         <small>${a.phone} | ${formatDate(a.created_at)}${a.transfer_date ? ' | 양도일: ' + a.transfer_date : ''}${(() => { const cm = applications._parseCancelMeta(a.notes); return cm ? ' | 취소: ' + formatDate(cm.cancelled_at) : ''; })()}</small>
                     </div>
                     <i class="fas fa-chevron-right item-arrow"></i>
@@ -1172,15 +1282,21 @@ ${(() => {
             return;
         }
 
-        const period = [
-            this.filterExpiryFrom ? `${this.filterExpiryFrom}부터` : '',
-            this.filterExpiryTo   ? `${this.filterExpiryTo}까지`   : ''
-        ].filter(Boolean).join(' ');
+        const periodParts = [];
+        if (this.filterStartFrom || this.filterStartTo) {
+            const s = [this.filterStartFrom, this.filterStartTo].filter(Boolean).join('~');
+            periodParts.push(`시작일 ${s}`);
+        }
+        if (this.filterExpiryFrom || this.filterExpiryTo) {
+            const e = [this.filterExpiryFrom, this.filterExpiryTo].filter(Boolean).join('~');
+            periodParts.push(`만료일 ${e}`);
+        }
+        const period = periodParts.join(' / ') || '전체 기간';
 
         const confirmed = await new Promise(resolve => {
             showConfirm(
                 '미재등록 TM 일괄 발송',
-                `수강 만료일 ${period}\n\n총 ${targets.length}명에게 연장 의향 TM을 발송합니다.\n\n대상: ${targets.map(a => a.name).join(', ')}\n\n계속하시겠습니까?`,
+                `${period}\n\n총 ${targets.length}명에게 연장 의향 TM을 발송합니다.\n\n대상: ${targets.map(a => a.name).join(', ')}\n\n계속하시겠습니까?`,
                 () => resolve(true),
                 () => resolve(false)
             );

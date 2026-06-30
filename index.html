@@ -1714,20 +1714,8 @@
     }
 
     /* ── 시간표 모달 ── */
-    function showTimetableModal() {
-        const m = document.getElementById('timetableModal');
-        if (m) {
-            m.classList.add('active');
-            m.style.display = 'flex';
-            // main.js loadTimeSlotStatus 가 이미 로드했을 경우 그대로 표시
-        } else {
-            alert('시간표 모달을 찾을 수 없습니다.');
-        }
-    }
-    function closeTimetableModal() {
-        const m = document.getElementById('timetableModal');
-        if (m) { m.classList.remove('active'); m.style.display = 'none'; }
-    }
+    // showTimetableModal / closeTimetableModal 은 main.js에서 async 버전으로 전역 정의됨
+    // 중복 정의 시 main.js의 fetch 로직이 덮어써지므로 여기서는 제거
 
     /* ── 내 예약 조회·취소·변경 모달 ── */
     function showMyManageModal() {
