@@ -3525,15 +3525,28 @@ async function showTimetableModal() {
     if (!modal || !content) return;
 
     modal.classList.add('active');
+
+    // flex 컨테이너의 display를 block으로 전환해 이미지/에러가 제대로 표시되게 함
+    content.style.display    = 'block';
+    content.style.textAlign  = 'center';
     content.innerHTML = '<span style="color:#9ca3af;font-size:.9rem">불러오는 중...</span>';
 
     try {
-        const complexCode = complexContext?.getComplexCode?.();
+        // complexContext 미초기화 시 URL에서 직접 읽는 폴백
+        let complexCode = complexContext?.getComplexCode?.();
+        if (!complexCode) {
+            const params = new URLSearchParams(window.location.search);
+            complexCode = params.get('complex') || '';
+        }
         if (!complexCode) throw new Error('단지 정보를 찾을 수 없습니다');
 
+        console.log('📅 [timetable] complexCode:', complexCode);
+
         const res  = await fetch(`/api/complexes/timetable?code=${encodeURIComponent(complexCode)}`);
+        console.log('📅 [timetable] response status:', res.status);
         if (!res.ok) throw new Error(`서버 오류 (${res.status})`);
         const json = await res.json();
+        console.log('📅 [timetable] json:', json);
 
         if (!json.success) throw new Error(json.error || '조회 실패');
 
