@@ -102,9 +102,13 @@ router.get('/timetable', async (req, res) => {
         else      query = query.eq('code', code);
         const { data, error } = await query.single();
         if (error || !data) return res.status(404).json({ success: false, error: '단지를 찾을 수 없습니다' });
+        const rawUrl = data.timetable_url || null;
+        const isBase64 = rawUrl && rawUrl.startsWith('data:');
+        console.log(`[timetable] code=${code||''} id=${id||''} → ${rawUrl ? (isBase64 ? `base64(${rawUrl.length}bytes)` : rawUrl.substring(0,80)) : 'null'}`);
         res.json({
             success: true,
-            timetable_url: data.timetable_url || null,
+            timetable_url: rawUrl,
+            is_base64: isBase64,
             complex_name: data.name
         });
     } catch(e) {

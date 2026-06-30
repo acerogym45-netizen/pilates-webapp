@@ -3551,11 +3551,17 @@ async function showTimetableModal() {
         if (!json.success) throw new Error(json.error || '조회 실패');
 
         if (json.timetable_url) {
-            // timetable_url 이 쉼표(,)로 복수 이미지 URL을 구분하는 경우도 지원
-            const urls = json.timetable_url
-                .split(',')
-                .map(u => u.trim())
-                .filter(u => u.length > 0);
+            // base64 data URL은 내부에 ','가 포함되므로 분리하지 않고 단일 URL로 처리
+            // 복수 이미지 URL은 쉼표(,)로 구분 — 단, data: 로 시작하는 경우는 제외
+            let urls;
+            if (json.timetable_url.startsWith('data:')) {
+                urls = [json.timetable_url];
+            } else {
+                urls = json.timetable_url
+                    .split(',')
+                    .map(u => u.trim())
+                    .filter(u => u.length > 0);
+            }
 
             if (urls.length > 1) {
                 // 복수 이미지 → 슬라이드 형태로 표시
