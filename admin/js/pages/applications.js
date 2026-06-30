@@ -466,14 +466,33 @@ const applications = {
         const expiryFilterActive = !!(this.filterExpiryFrom || this.filterExpiryTo);
         const bulkBtn = document.getElementById('bulkRenewalTmBtn');
         if (bulkBtn) {
-            // 미재등록자: 현재 필터 목록 중 approved 상태이고 renewal_status가 없는 회원
-            const notRenewedCount = list.filter(a =>
-                a.status === 'approved' &&
-                (!a.renewal_status || a.renewal_status === '')
-            ).length;
+            // 미재등록 TM 대상 판별 기준:
+            // ✅ 포함: approved + renewal_status 없음(미발송) 또는 pending(발송했으나 미응답)
+            // ❌ 제외: confirmed(재등록희망) / declined(비희망) / expired(만료)
+            // ❌ 제외: 체험·OT·보강 프로그램 (재등록 대상 아님)
+            const renewalTargets = list.filter(a => {
+                if (a.status !== 'approved') return false;
+                // 재등록 결정이 난 경우 제외
+                const rs = a.renewal_status || '';
+                if (['confirmed','declined','expired'].includes(rs)) return false;
+                // 체험·OT·보강 프로그램 제외
+                const pn = (a.program_name || '').toLowerCase();
+                if (/체험|ot신청|ot 신청|\bot\b/.test(pn)) return false;
+                if (/보강|makeup/.test(pn)) return false;
+                // pending(발송 후 미응답) 또는 미발송('')은 포함
+                return rs === '' || rs === 'pending';
+            });
+            const notRenewedCount = renewalTargets.length;
             bulkBtn.style.display = (expiryFilterActive && notRenewedCount > 0) ? '' : 'none';
             if (notRenewedCount > 0) {
-                bulkBtn.innerHTML = `<i class="fas fa-paper-plane"></i> 미재등록 TM 일괄 발송 (${notRenewedCount}명)`;
+                // 미발송 vs pending(재발송 필요) 분리 표시
+                const neverSent = renewalTargets.filter(a => !a.renewal_status || a.renewal_status === '').length;
+                const pendingCount = renewalTargets.filter(a => a.renewal_status === 'pending').length;
+                let label = `미재등록 TM 일괄 발송 (${notRenewedCount}명`;
+                if (neverSent && pendingCount) label += `: 미발송 ${neverSent}명 + 미응답 ${pendingCount}명`;
+                else if (pendingCount) label += `: 미응답 재발송 ${pendingCount}명`;
+                label += ')';
+                bulkBtn.innerHTML = `<i class="fas fa-paper-plane"></i> ${label}`;
             }
         }
 
@@ -1136,12 +1155,17 @@ ${(() => {
 
     // ── 미재등록자 일괄 TM 발송 ────────────────────────────────────────────────
     async sendBulkRenewalTm() {
-        // 현재 필터된 목록에서 approved + renewal_status 없음 (미재등록) 대상자
-        const targets = this.filtered.filter(a =>
-            a.status === 'approved' &&
-            (!a.renewal_status || a.renewal_status === '') &&
-            a.expiry_date
-        );
+        // applyFilters 와 동일한 대상 기준으로 필터
+        const targets = this.filtered.filter(a => {
+            if (a.status !== 'approved') return false;
+            if (!a.expiry_date) return false;
+            const rs = a.renewal_status || '';
+            if (['confirmed','declined','expired'].includes(rs)) return false;
+            const pn = (a.program_name || '').toLowerCase();
+            if (/체험|ot신청|ot 신청|\bot\b/.test(pn)) return false;
+            if (/보강|makeup/.test(pn)) return false;
+            return rs === '' || rs === 'pending';
+        });
 
         if (targets.length === 0) {
             showToast('발송 대상자가 없습니다. 수강 만료일 필터를 설정하고 만료일이 등록된 회원을 확인하세요.', 'warning');
