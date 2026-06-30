@@ -411,11 +411,39 @@ router.post('/timetable', (req, res, next) => {
         original_name = origName;
 
         if (isVercelEnv()) {
-            // Vercel: Base64 data URL
+            // Vercel: Supabase Storage에 업로드 → public URL 반환 (base64 폴백)
             const mime = req.file.mimetype || 'image/jpeg';
-            url = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
-            storage_type = 'base64';
-            console.log(`[upload/timetable] Vercel base64: ${origName} (${req.file.size} bytes)`);
+            const ext  = mime.split('/')[1]?.replace('jpeg','jpg') || 'jpg';
+            const slug = (complex_code || 'timetable').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const filename = `${slug}_${Date.now()}.${ext}`;
+
+            let storedViaStorage = false;
+            try {
+                const sb = getSupabase();
+                const BUCKET = 'timetables';
+                const { data: upData, error: upErr } = await sb.storage
+                    .from(BUCKET)
+                    .upload(filename, req.file.buffer, {
+                        contentType: mime,
+                        upsert: true
+                    });
+                if (upErr) throw upErr;
+                const { data: pubData } = sb.storage.from(BUCKET).getPublicUrl(filename);
+                if (pubData?.publicUrl) {
+                    url = pubData.publicUrl;
+                    storage_type = 'supabase';
+                    storedViaStorage = true;
+                    console.log(`[upload/timetable] Supabase Storage 업로드 성공: ${url}`);
+                }
+            } catch(storageErr) {
+                console.warn('[upload/timetable] Supabase Storage 실패, base64 폴백:', storageErr.message);
+            }
+
+            if (!storedViaStorage) {
+                url = `data:${mime};base64,${req.file.buffer.toString('base64')}`;
+                storage_type = 'base64';
+            }
+            console.log(`[upload/timetable] Vercel: ${origName} (${req.file.size} bytes) → ${storage_type}`);
         } else {
             // 로컬: 디스크
             url = `/uploads/timetables/${req.file.filename}`;

@@ -1587,14 +1587,20 @@ const timetables = {
                     if (blob) uploadFile = new File([blob], 'timetable.jpg', { type: 'image/jpeg' });
                 } catch(e) { /* 리사이즈 실패 시 원본 사용 */ }
 
+                // /api/upload/timetable 사용 → Supabase Storage 업로드 (Vercel에서 base64 저장 방지)
                 const fd = new FormData();
-                fd.append('image', uploadFile);
-                const upRes    = await fetch('/api/upload/image', { method: 'POST', body: fd });
+                fd.append('file', uploadFile);
+                if (complexId) fd.append('complex_id', complexId);
+                const upRes    = await fetch('/api/upload/timetable', { method: 'POST', body: fd });
                 const upJson   = await upRes.json().catch(() => ({ success: false, error: 'HTTP ' + upRes.status }));
                 if (!upRes.ok || !upJson.success || !upJson.url) {
                     throw new Error(upJson.error || '이미지 업로드 실패');
                 }
                 timetableUrl = upJson.url;
+                // /api/upload/timetable이 DB를 직접 업데이트하므로 별도 API 호출 불필요
+                showToast('시간표가 저장되었습니다');
+                await this.loadPreview(complexId);
+                return;
             }
 
             if (!timetableUrl) {
