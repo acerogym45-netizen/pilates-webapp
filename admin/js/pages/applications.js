@@ -2716,25 +2716,29 @@ ${(() => {
         return h;
     },
 
-    // ── 시간표 달력 렌더 (모달 내부용)
+// ── 시간표 달력 렌더 (모달 내부용)
+    // 날짜 상태: 'class'(수업일·파랑), 'rest'(쉬는날·빨강), 없으면 기본
     _renderTtCalendar() {
         const sel = document.getElementById('ttCalMonth');
         if (!sel) return;
         const [yr, mo] = sel.value.split('-').map(Number);
-        const checked  = applications._ttCustomDates || [];
-        const holidays = applications._ttHolidays    || {};
+        const dateMap  = applications._ttDateMap  || {};  // key→'class'|'rest'
+        const holidays = applications._ttHolidays || {};
+        const selectedProgs = applications._ttSelectedProgs || new Set();
 
-        // 요일별 강좌 목록 미리계산
+        // 요일별 강좌 목록 (선택된 프로그램만)
         const apps = applications._ttApps || [];
-        const programsByDow = {}; // dow -> [{program, time}]
+        const programsByDow = {};
         const seen = new Set();
         apps.forEach(a => {
-            const k = (a.program_name||'') + '__' + (a.preferred_time||'');
+            const pn = (a.program_name || '').trim();
+            if (!selectedProgs.has(pn)) return;
+            const k = pn + '__' + (a.preferred_time || '');
             if (seen.has(k)) return; seen.add(k);
-            const dows = applications._parseProgramDows(a.program_name||'');
+            const dows = applications._parseProgramDows(pn);
             dows.forEach(dow => {
                 if (!programsByDow[dow]) programsByDow[dow] = [];
-                programsByDow[dow].push({ program: a.program_name||'', time: a.preferred_time||'' });
+                programsByDow[dow].push({ program: pn, time: a.preferred_time || '' });
             });
         });
 
@@ -2743,42 +2747,47 @@ ${(() => {
         const DOW_NAMES  = ['일','월','화','수','목','금','토'];
         const DOW_COLORS = ['#e74c3c','#444','#444','#444','#444','#444','#2980b9'];
 
-        // 헤더
         const headerHtml = DOW_NAMES.map((n, i) =>
             '<th style="padding:4px 0;text-align:center;font-size:.75rem;color:' + DOW_COLORS[i] + ';border-bottom:1px solid #ddd;width:14.28%">' + n + '</th>'
         ).join('');
 
-        // 셀
         let cellIdx = 0, rows = '', row = '<tr>';
         for (let i = 0; i < firstDay; i++) { row += '<td></td>'; cellIdx++; }
         for (let d = 1; d <= lastDate; d++) {
-            const dow     = new Date(yr, mo-1, d).getDay();
-            const key     = yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
-            const isSel   = checked.includes(key);
-            const isHol   = !!holidays[key];
-            const isSun   = dow === 0;
-            const isSat   = dow === 6;
-            const isRed   = isHol || isSun;
+            const dow    = new Date(yr, mo-1, d).getDay();
+            const key    = yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+            const state  = dateMap[key] || '';           // 'class' | 'rest' | ''
+            const isHol  = !!holidays[key];
+            const isSun  = dow === 0;
+            const isSat  = dow === 6;
             const holName = holidays[key] || '';
-            const numCol  = isSel ? '#fff' : (isRed ? '#e74c3c' : (isSat ? '#2980b9' : '#333'));
-            const bgCol   = isSel ? '#3498db' : (isRed ? '#fff5f5' : '#fff');
-            const border  = isSel ? '2px solid #2980b9' : (isRed ? '1px solid #f5c6c6' : '1px solid #e8e8e8');
 
-            // 해당 요일에 개설되는 강좌 미리보기 (최대 3개)
-            const dowPrograms = programsByDow[dow] || [];
-            const progHtml = isSel ? dowPrograms.slice(0,3).map(g =>
-                '<div style="font-size:.55rem;color:' + (isSel?'rgba(255,255,255,0.9)':'#1a5276') + ';line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:left;padding:0 1px">' +
-                g.time + '</div>'
-            ).join('') : '';
+            let bgCol, numCol, border, stateIcon = '';
+            if (state === 'class') {
+                bgCol = '#e8f4fd'; numCol = '#1a5276'; border = '2px solid #3498db';
+                stateIcon = '<div style="font-size:.55rem;color:#3498db;font-weight:700;line-height:1">수업</div>';
+            } else if (state === 'rest') {
+                bgCol = '#fdecea'; numCol = '#c0392b'; border = '2px solid #e74c3c';
+                stateIcon = '<div style="font-size:.55rem;color:#e74c3c;font-weight:700;line-height:1">휴무</div>';
+            } else {
+                bgCol = (isHol || isSun) ? '#fff5f5' : (isSat ? '#f8faff' : '#fff');
+                numCol = (isHol || isSun) ? '#e74c3c' : (isSat ? '#2980b9' : '#333');
+                border = (isHol || isSun) ? '1px solid #f5c6c6' : '1px solid #e8e8e8';
+            }
+
+            const dowPrograms = (state === 'class') ? (programsByDow[dow] || []) : [];
+            const progHtml = dowPrograms.slice(0,3).map(g =>
+                '<div style="font-size:.52rem;color:#1a5276;line-height:1.3;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:left;padding:0 1px">' + g.time + '</div>'
+            ).join('');
 
             row +=
                 '<td style="padding:1px;text-align:center;vertical-align:top">' +
-                '<label style="display:block;cursor:pointer;border-radius:4px;border:' + border + ';background:' + bgCol + ';padding:3px 2px;min-height:38px">' +
-                '<input type="checkbox" style="display:none" ' + (isSel?'checked':'') +
-                    ' onchange="applications._onTtCalCheck(this,\'' + key + '\')">' +
+                '<label style="display:block;cursor:pointer;border-radius:4px;border:' + border + ';background:' + bgCol + ';padding:3px 2px;min-height:42px" onclick="event.preventDefault();applications._cycleTtDate(\'' + key + '\')">' +
                 '<div style="font-size:.82rem;font-weight:700;color:' + numCol + ';line-height:1.2">' + d + '</div>' +
-                (holName ? '<div style="font-size:.58rem;color:' + (isSel?'rgba(255,255,255,0.9)':'#e74c3c') + ';line-height:1;overflow:hidden;white-space:nowrap">' + holName + '</div>' : '') +
-                (dowPrograms.length && !isSel ? '<div style="font-size:.58rem;color:#888;line-height:1.2;margin-top:1px">' + dowPrograms.length + '개강좌</div>' : '') +
+                (holName ? '<div style="font-size:.55rem;color:' + (state==='rest'?'#c0392b':'#e74c3c') + ';line-height:1;overflow:hidden;white-space:nowrap">' + holName + '</div>' : '') +
+                stateIcon +
+                (state==='' && dowPrograms.length===0 && (programsByDow[dow]||[]).length>0 ?
+                    '<div style="font-size:.55rem;color:#bbb;line-height:1.2;margin-top:1px">' + (programsByDow[dow]||[]).length + '강좌</div>' : '') +
                 progHtml +
                 '</label></td>';
             cellIdx++;
@@ -2793,53 +2802,69 @@ ${(() => {
         if (grid) grid.innerHTML =
             '<table style="width:100%;border-collapse:collapse"><thead><tr>' + headerHtml + '</tr></thead><tbody>' + rows + '</tbody></table>';
 
-        // 태그 업데이트
+        // 요약 태그
         const tags = document.getElementById('ttCalTags');
         if (tags) {
-            const sorted = [...checked].sort();
-            if (sorted.length) {
-                tags.innerHTML = sorted.map(k => {
+            const classDates = Object.entries(dateMap).filter(([,v])=>v==='class').map(([k])=>k).sort();
+            const restDates  = Object.entries(dateMap).filter(([,v])=>v==='rest').map(([k])=>k).sort();
+            let html = '';
+            if (classDates.length || restDates.length) {
+                classDates.forEach(k => {
                     const [y,m,dd] = k.split('-').map(Number);
-                    const dow2 = new Date(y,m-1,dd).getDay();
-                    const isH  = !!holidays[k] || dow2===0;
-                    const isS  = dow2===6;
-                    const col  = isH?'#e74c3c':(isS?'#2980b9':'#2c3e50');
-                    const bg   = isH?'#fdecea':(isS?'#eaf3fb':'#f0f4f8');
-                    const lbl  = m+'/'+dd+'('+['일','월','화','수','목','금','토'][dow2]+')';
-                    return '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:'+bg+';border:1px solid '+col+';font-size:.75rem;color:'+col+'">' +
-                        lbl + '<button onclick="applications._removeTtDate(\''+k+'\')" style="border:none;background:none;cursor:pointer;font-size:.8rem;color:'+col+';padding:0;line-height:1">×</button></span>';
-                }).join('');
+                    const dw = new Date(y,m-1,dd).getDay();
+                    html += '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:#e8f4fd;border:1px solid #3498db;font-size:.75rem;color:#1a5276">' +
+                        m+'/'+dd+'('+['일','월','화','수','목','금','토'][dw]+')' +
+                        '<button onclick="applications._removeTtDate(\''+k+'\')" style="border:none;background:none;cursor:pointer;font-size:.8rem;color:#3498db;padding:0;line-height:1">×</button></span>';
+                });
+                restDates.forEach(k => {
+                    const [y,m,dd] = k.split('-').map(Number);
+                    const dw = new Date(y,m-1,dd).getDay();
+                    html += '<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:10px;background:#fdecea;border:1px solid #e74c3c;font-size:.75rem;color:#c0392b">' +
+                        m+'/'+dd+'('+['일','월','화','수','목','금','토'][dw]+') 휴무' +
+                        '<button onclick="applications._removeTtDate(\''+k+'\')" style="border:none;background:none;cursor:pointer;font-size:.8rem;color:#c0392b;padding:0;line-height:1">×</button></span>';
+                });
             } else {
-                tags.innerHTML = '<span style="color:#bbb;font-size:.82rem">선택된 날짜 없음</span>';
+                html = '<span style="color:#bbb;font-size:.82rem">날짜를 클릭하여 수업일/휴무일을 설정하세요</span>';
             }
+            tags.innerHTML = html;
         }
         const cnt = document.getElementById('ttDateCount');
-        if (cnt) cnt.textContent = checked.length ? '(' + checked.length + '일 선택됨)' : '';
+        if (cnt) {
+            const c = Object.values(dateMap).filter(v=>v==='class').length;
+            const r = Object.values(dateMap).filter(v=>v==='rest').length;
+            cnt.textContent = (c||r) ? '(수업 ' + c + '일 · 휴무 ' + r + '일)' : '';
+        }
     },
 
-    _onTtCalCheck(cb, key) {
-        const arr = applications._ttCustomDates || [];
-        if (cb.checked) { if (!arr.includes(key)) arr.push(key); }
-        else { const i = arr.indexOf(key); if (i > -1) arr.splice(i,1); }
-        applications._ttCustomDates = arr.sort();
+    // 날짜 클릭: 없음→수업→휴무→없음 순환
+    _cycleTtDate(key) {
+        const map = applications._ttDateMap || {};
+        const cur = map[key] || '';
+        if (cur === '')       map[key] = 'class';
+        else if (cur === 'class') map[key] = 'rest';
+        else                  delete map[key];
+        applications._ttDateMap = map;
         applications._renderTtCalendar();
     },
 
     _removeTtDate(key) {
-        applications._ttCustomDates = (applications._ttCustomDates || []).filter(k => k !== key);
+        const map = applications._ttDateMap || {};
+        delete map[key];
+        applications._ttDateMap = map;
         applications._renderTtCalendar();
     },
 
+    // 요일별 일괄 수업일 지정
     _selectTtByDow(yr, mo, dow) {
         const last = new Date(yr, mo, 0).getDate();
-        const arr  = applications._ttCustomDates || [];
+        const map  = applications._ttDateMap || {};
         for (let d = 1; d <= last; d++) {
             if (new Date(yr, mo-1, d).getDay() === dow) {
                 const k = yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
-                if (!arr.includes(k)) arr.push(k);
+                map[k] = 'class';
             }
         }
-        applications._ttCustomDates = arr.sort();
+        applications._ttDateMap = map;
         applications._renderTtCalendar();
     },
 
@@ -2849,23 +2874,42 @@ ${(() => {
         applications._ttMonth = sel.value;
         const [yr, mo] = sel.value.split('-').map(Number);
         applications._ttHolidays = applications._getKoreanHolidays(yr);
-        // 새 월에 맞춰 프로그램 요일 기반 날짜 자동 재선택
+        // 새 월로 날짜맵 재계산 (선택된 프로그램 기반 자동 수업일)
+        applications._ttDateMap = applications._autoTtDateMap(yr, mo);
+        applications._renderTtCalendar();
+    },
+
+    // 선택된 프로그램의 요일 기반 수업일 자동 생성
+    _autoTtDateMap(yr, mo) {
         const apps = applications._ttApps || [];
-        const groups = {};
-        apps.forEach(a => {
-            const k = (a.program_name||'') + '__' + (a.preferred_time||'');
-            if (!groups[k]) groups[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정' };
-        });
+        const selectedProgs = applications._ttSelectedProgs || new Set();
         const lastDate = new Date(yr, mo, 0).getDate();
-        const autoSelected = new Set();
-        Object.values(groups).forEach(g => {
-            const dows = applications._parseProgramDows(g.program);
+        const map = {};
+        apps.forEach(a => {
+            const pn = (a.program_name || '').trim();
+            if (!selectedProgs.has(pn)) return;
+            const dows = applications._parseProgramDows(pn);
             for (let d = 1; d <= lastDate; d++) {
-                if (dows.includes(new Date(yr, mo-1, d).getDay()))
-                    autoSelected.add(yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
+                if (dows.includes(new Date(yr, mo-1, d).getDay())) {
+                    const k = yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+                    map[k] = 'class';
+                }
             }
         });
-        applications._ttCustomDates = [...autoSelected].sort();
+        return map;
+    },
+
+    // 프로그램 선택 체크박스 토글
+    _onTtProgCheck() {
+        const boxes = document.querySelectorAll('#ttProgList input[type=checkbox]:checked');
+        const selected = new Set([...boxes].map(b => b.value));
+        applications._ttSelectedProgs = selected;
+        // 수업일 재계산
+        const sel = document.getElementById('ttCalMonth');
+        if (sel) {
+            const [yr, mo] = sel.value.split('-').map(Number);
+            applications._ttDateMap = applications._autoTtDateMap(yr, mo);
+        }
         applications._renderTtCalendar();
     },
 
@@ -2894,65 +2938,63 @@ ${(() => {
             ? (Admin.selectedComplexName || '단지') : (Admin.complex?.name || '단지');
         const now = new Date();
         const defaultMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-        const [initYr] = defaultMonth.split('-').map(Number);
+        const [initYr, initMo] = defaultMonth.split('-').map(Number);
+
+        // 프로그램 중복 제거 — 체험·OT·보강 자동 제외
+        const allProgs = [...new Set(apps.map(a => (a.program_name||'').trim()).filter(Boolean))].sort();
+        const isExcluded = pn => /체험|ot신청|ot 신청|\bot\b|보강|makeup/i.test(pn);
+        const defaultSelected = new Set(allProgs.filter(p => !isExcluded(p)));
 
         applications._ttApps         = apps;
         applications._ttComplexName  = complexName;
         applications._ttMonth        = defaultMonth;
-        applications._ttCustomDates  = [];
         applications._ttHolidays     = applications._getKoreanHolidays(initYr);
+        applications._ttSelectedProgs = defaultSelected;
+        applications._ttDateMap      = applications._autoTtDateMap(initYr, initMo);
 
-        // 프로그램별 요일 자동 감지 → 해당 월 날짜 자동 선택
-        const groups = {};
-        apps.forEach(a => {
-            const k = (a.program_name||'') + '__' + (a.preferred_time||'');
-            if (!groups[k]) groups[k] = { program: a.program_name||'미지정', time: a.preferred_time||'미지정' };
-        });
-        const [initYr2, initMo] = defaultMonth.split('-').map(Number);
-        const lastDate = new Date(initYr2, initMo, 0).getDate();
-        const autoSelected = new Set();
-        Object.values(groups).forEach(g => {
-            const dows = applications._parseProgramDows(g.program);
-            for (let d = 1; d <= lastDate; d++) {
-                if (dows.includes(new Date(initYr2, initMo-1, d).getDay()))
-                    autoSelected.add(initYr2 + '-' + String(initMo).padStart(2,'0') + '-' + String(d).padStart(2,'0'));
-            }
-        });
-        applications._ttCustomDates = [...autoSelected].sort();
-
-        // 강좌 목록 (모달 내 미리보기)
-        const DOW_KR = ['일','월','화','수','목','금','토'];
-        const comboRows = Object.values(groups).map(g => {
-            const dows = applications._parseProgramDows(g.program);
-            const dowStr = dows.length ? dows.map(d => DOW_KR[d]).join('·') : '?';
-            return '<tr style="border-bottom:1px solid #f0f0f0">' +
-                '<td style="padding:4px 8px;font-size:.82rem">' + g.program + '</td>' +
-                '<td style="padding:4px 8px;font-size:.82rem;color:#555">' + g.time + '</td>' +
-                '<td style="padding:4px 8px;font-size:.82rem;color:#3498db;text-align:center">' + dowStr + '</td></tr>';
+        // 프로그램 체크박스 HTML
+        const progCheckHtml = allProgs.map(p => {
+            const excluded = isExcluded(p);
+            const checked  = defaultSelected.has(p);
+            return '<label style="display:flex;align-items:center;gap:6px;padding:4px 8px;cursor:pointer;font-size:.82rem;border-radius:4px;' +
+                (excluded ? 'color:#999' : '') + '"' +
+                ' onmouseover="this.style.background=\'#f3f4f6\'" onmouseout="this.style.background=\'\'">' +
+                '<input type="checkbox" value="' + p.replace(/"/g,'&quot;') + '" ' + (checked?'checked':'') +
+                ' onchange="applications._onTtProgCheck()">' +
+                '<span>' + p + (excluded ? ' <span style="font-size:.7rem;color:#aaa">(자동제외)</span>' : '') + '</span>' +
+                '</label>';
         }).join('');
 
         const body =
-            // ── 월 선택 + 달력
+            // ── 프로그램 선택
+            '<div style="background:#f8f9fa;border:1px solid #e0e0e0;border-radius:8px;padding:10px 14px;margin-bottom:10px">' +
+            '<div style="font-size:.85rem;font-weight:700;color:#2c3e50;margin-bottom:8px"><i class="fas fa-dumbbell" style="color:#3498db"></i> 시간표에 표시할 프로그램 선택</div>' +
+            '<div id="ttProgList" style="display:flex;flex-wrap:wrap;gap:0;background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:4px 0;max-height:140px;overflow-y:auto">' +
+            progCheckHtml +
+            '</div>' +
+            '<div style="display:flex;gap:8px;margin-top:8px">' +
+            '<button onclick="document.querySelectorAll(\'#ttProgList input\').forEach(c=>{c.checked=true});applications._onTtProgCheck()" style="padding:3px 10px;background:#3498db;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer">전체 선택</button>' +
+            '<button onclick="document.querySelectorAll(\'#ttProgList input\').forEach(c=>{c.checked=false});applications._onTtProgCheck()" style="padding:3px 10px;background:#95a5a6;color:#fff;border:none;border-radius:4px;font-size:.78rem;cursor:pointer">전체 해제</button>' +
+            '</div></div>' +
+            // ── 달력 + 날짜 선택
             '<div style="background:#f0f7ff;border:1px solid #bee3f8;border-radius:8px;padding:10px 14px;margin-bottom:10px">' +
-            '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-            '<div style="font-size:.85rem;font-weight:700;color:#1a5276"><i class="fas fa-calendar-check"></i> 수업 날짜 선택 ' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">' +
+            '<div style="font-size:.85rem;font-weight:700;color:#1a5276"><i class="fas fa-calendar-check"></i> 수업일 / 휴무일 설정 ' +
             '<span id="ttDateCount" style="font-weight:400;color:#888;font-size:.8rem"></span></div>' +
             '<div style="display:flex;align-items:center;gap:6px">' +
             '<label style="font-size:.8rem;color:#555">월:</label>' +
             '<input type="month" id="ttCalMonth" value="' + defaultMonth + '" onchange="applications._onTtMonthChange()" ' +
             'style="padding:4px 8px;border:1px solid #bee3f8;border-radius:6px;font-size:.85rem;color:#1a5276;font-weight:600"></div></div>' +
+            '<div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">' +
+            '<span style="font-size:.78rem;color:#555;align-self:center">클릭:</span>' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;padding:2px 8px;background:#e8f4fd;border:1px solid #3498db;border-radius:10px;color:#1a5276"><b>수업</b> = 파랑</span>' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;padding:2px 8px;background:#fdecea;border:1px solid #e74c3c;border-radius:10px;color:#c0392b"><b>휴무</b> = 빨강</span>' +
+            '<span style="font-size:.78rem;color:#888">한번더 클릭 = 해제</span>' +
+            '</div>' +
             '<div id="ttCalGrid" style="margin-bottom:8px"></div>' +
-            '<div style="font-size:.78rem;color:#888;font-weight:600;margin-bottom:4px">선택된 날짜</div>' +
+            '<div style="font-size:.78rem;color:#888;font-weight:600;margin-bottom:4px">설정된 날짜</div>' +
             '<div id="ttCalTags" style="display:flex;flex-wrap:wrap;gap:4px;min-height:26px;padding:4px 6px;background:#fff;border:1px solid #bee3f8;border-radius:6px">' +
-            '<span style="color:#bbb;font-size:.82rem">선택된 날짜 없음</span></div></div>' +
-            // ── 강좌 목록 참고
-            '<details style="margin-top:2px"><summary style="font-size:.82rem;color:#888;cursor:pointer;padding:4px 0">강좌 목록 (참고)</summary>' +
-            '<div style="background:#f8f9fa;border-radius:6px;padding:8px 10px;margin-top:6px">' +
-            '<table style="width:100%;border-collapse:collapse">' +
-            '<thead><tr style="background:#eee"><th style="padding:4px 8px;text-align:left;font-size:.78rem">프로그램</th>' +
-            '<th style="padding:4px 8px;text-align:left;font-size:.78rem">시간</th>' +
-            '<th style="padding:4px 8px;text-align:center;font-size:.78rem">수업요일</th></tr></thead>' +
-            '<tbody>' + comboRows + '</tbody></table></div></details>';
+            '<span style="color:#bbb;font-size:.82rem">날짜를 클릭하여 수업일/휴무일을 설정하세요</span></div></div>';
 
         const footer =
             '<button onclick="closeGlobalModal()" style="padding:8px 18px;background:#95a5a6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem;margin-right:8px">닫기</button>' +
@@ -2960,7 +3002,6 @@ ${(() => {
 
         document.getElementById('globalModalBody').innerHTML = body;
         document.getElementById('globalModalFooter').innerHTML = footer;
-        // 달력 초기 렌더
         applications._renderTtCalendar();
     },
 
@@ -2970,15 +3011,22 @@ ${(() => {
         const complexName = applications._ttComplexName || '';
         const apps        = applications._ttApps || [];
         const holidays    = applications._ttHolidays || applications._getKoreanHolidays(yr);
-        // 선택된 날짜 (없으면 자동 계산)
-        let selDates = (applications._ttCustomDates || []).slice().sort();
-        if (!selDates.length) { showToast('날짜를 선택해주세요','error'); return; }
+        const dateMap     = applications._ttDateMap || {};
+        const selectedProgs = applications._ttSelectedProgs || new Set();
 
-        // 강좌별 그룹화 - 프로그램명 기준 중복 제거 (시간표에서는 시간 미표시)
+        const classDates = Object.entries(dateMap).filter(([,v])=>v==='class').map(([k])=>k).sort();
+        const restDates  = Object.entries(dateMap).filter(([,v])=>v==='rest').map(([k])=>k).sort();
+
+        if (!classDates.length && !restDates.length) {
+            showToast('날짜를 설정해주세요 (수업일 또는 휴무일)', 'error'); return;
+        }
+
+        // 선택된 프로그램만 그룹화
         const groups = {};
         apps.forEach(a => {
             const k = (a.program_name||'').trim();
-            if (!groups[k]) groups[k] = { program: k||'미지정' };
+            if (!selectedProgs.has(k)) return;
+            if (!groups[k]) groups[k] = { program: k };
         });
         const sortedGroups = Object.values(groups).sort((a,b) => {
             const pa = (() => { const d = applications._parseProgramDows(a.program); return d.length ? Math.min(...d.map(x=>x===0?98:x)) : 99; })();
@@ -2988,75 +3036,86 @@ ${(() => {
 
         const monthLabel = yr + '년 ' + mo + '월';
         const DOW_KR     = ['일','월','화','수','목','금','토'];
-
-        // ── 달력 그리기
         const firstDay = new Date(yr, mo-1, 1).getDay();
         const lastDate = new Date(yr, mo, 0).getDate();
 
-        // 날짜별 강좌 목록 (선택된 날짜만, 요일로 매칭)
+        // 날짜별 강좌 목록 (수업일만)
         const dayClasses = {};
-        selDates.forEach(key => {
+        classDates.forEach(key => {
             const [y,m,d] = key.split('-').map(Number);
             const dow = new Date(y,m-1,d).getDay();
             const matched = sortedGroups.filter(g => {
                 const dows = applications._parseProgramDows(g.program);
                 return dows.includes(dow);
             });
-            if (matched.length) dayClasses[d] = matched;
+            if (matched.length) dayClasses[parseInt(d)] = matched;
         });
 
-        // 달력 헤더
         const DOW_COLORS_HD = ['#e74c3c','#444','#444','#444','#444','#444','#2980b9'];
         const DOW_BG_HD     = ['#fdecea','#f5f5f5','#f5f5f5','#f5f5f5','#f5f5f5','#f5f5f5','#eaf3fb'];
         const dowHeaders = DOW_KR.map((n,i) =>
             '<th style="padding:5px 2px;text-align:center;font-size:9pt;font-weight:700;color:' + DOW_COLORS_HD[i] + ';background:' + DOW_BG_HD[i] + ';border:1px solid #ddd;width:14.28%">' + n + '</th>'
         ).join('');
 
-        // 달력 행 수 계산 → 셀 높이 동적 산출 (landscape A4 유효높이 ~170mm, 헤더 ~22mm 제외)
         const totalRows = Math.ceil((firstDay + lastDate) / 7);
         const cellH = Math.floor((170 - 22) / totalRows) + 'mm';
 
-        // 달력 셀
         let cellIdx = 0, calRows = '', row = '<tr>';
         for (let i = 0; i < firstDay; i++) {
-            row += '<td style="border:1px solid #eee;height:' + cellH + ';background:#fafafa"></td>';
-            cellIdx++;
+            row += '<td style="border:1px solid #eee;height:' + cellH + ';background:#fafafa"></td>'; cellIdx++;
         }
         for (let d = 1; d <= lastDate; d++) {
             const dow     = new Date(yr, mo-1, d).getDay();
             const dateKey = yr + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+            const state   = dateMap[dateKey] || '';
             const isHol   = !!holidays[dateKey];
             const isSun   = dow === 0;
             const isSat   = dow === 6;
-            const isRed   = isHol || isSun;
-            const numColor = isRed ? '#e74c3c' : (isSat ? '#2980b9' : '#222');
-            const cellBg   = isRed ? '#fff8f8' : (isSat ? '#f8faff' : '#fff');
-            const isSel    = selDates.includes(dateKey);
-            const classes  = dayClasses[d] || [];
-            const holName  = holidays[dateKey] || '';
+            const holName = holidays[dateKey] || '';
+            const classes = dayClasses[d] || [];
 
-            // 강좌 블록 (선택 날짜에만, 프로그램명만 표시)
-            const classHtml = (isSel && classes.length) ? classes.map(g =>
+            let numColor, cellBg, cellBorder = '1px solid #ddd';
+            if (state === 'rest') {
+                // 휴무일: 빨간 배경 + 텍스트
+                numColor = '#c0392b';
+                cellBg   = '#fef0ef';
+                cellBorder = '1.5px solid #e74c3c';
+            } else if (state === 'class') {
+                numColor = (isHol||isSun) ? '#e74c3c' : (isSat ? '#2980b9' : '#222');
+                cellBg   = '#fff';
+            } else {
+                // 미지정: 공휴일/일요일·토요일 배경만
+                numColor = (isHol||isSun) ? '#e74c3c' : (isSat ? '#2980b9' : '#aaa');
+                cellBg   = (isHol||isSun) ? '#fff8f8' : (isSat ? '#f8faff' : '#f9f9f9');
+                cellBorder = '1px solid #eee';
+            }
+
+            // 수업 강좌 블록 (수업일만)
+            const classHtml = (state === 'class' && classes.length) ? classes.map(g =>
                 '<div style="margin:1px 1px;padding:1px 3px;background:#e8f4fd;border-left:2.5px solid #3498db;border-radius:2px;font-size:6.5pt;line-height:1.35;font-weight:700;color:#1a5276;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">' +
                 g.program + '</div>'
             ).join('') : '';
 
+            // 휴무 표시
+            const restHtml = (state === 'rest') ?
+                '<div style="margin-top:2px;font-size:7pt;color:#c0392b;font-weight:700;text-align:center">휴 무</div>' : '';
+
             row +=
-                '<td style="border:1px solid #ddd;height:' + cellH + ';vertical-align:top;padding:2px;background:' + cellBg + '">' +
+                '<td style="border:' + cellBorder + ';height:' + cellH + ';vertical-align:top;padding:2px;background:' + cellBg + '">' +
                 '<div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 1px">' +
                 '<span style="font-size:9pt;font-weight:700;color:' + numColor + '">' + d + '</span>' +
                 (holName ? '<span style="font-size:5.5pt;color:#e74c3c;font-weight:600;white-space:nowrap">' + holName + '</span>' : '') +
                 '</div>' +
-                classHtml + '</td>';
+                classHtml + restHtml + '</td>';
             cellIdx++;
             if (cellIdx % 7 === 0) { row += '</tr>'; calRows += row; row = '<tr>'; }
         }
         if (cellIdx % 7 !== 0) {
-            while (cellIdx % 7 !== 0) { row += '<td style="border:1px solid #eee;height:' + cellH + ';background:#fafafa"></td>'; cellIdx++; }
+            while (cellIdx % 7 !== 0) {
+                row += '<td style="border:1px solid #eee;height:' + cellH + ';background:#fafafa"></td>'; cellIdx++;
+            }
             row += '</tr>'; calRows += row;
         }
-
-        // 범례 섹션 삭제됨
 
         const content =
             '<div style="text-align:center;border-bottom:2.5px solid #3498db;padding-bottom:6px;margin-bottom:8px;position:relative">' +
