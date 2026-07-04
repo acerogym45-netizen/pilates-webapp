@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.28 수강기간카드표시+체크박스필터+수강기간조회 */
+/** 신청 관리 페이지 - v3.29 프로그램현황 실제접수인원 동기화 */
 const applications = {
     data: [],
     filtered: [],
@@ -311,6 +311,14 @@ const applications = {
                                 <i class="fas fa-undo"></i> 전체 초기화</button>`
                             : '';
 
+                        // 실제값으로 동기화 버튼: 슬롯이 있을 때 항상 표시
+                        const syncSlotData = JSON.stringify((prog.slot_summary || []).map(s => ({ slot: s.slot, approved: s.approved })));
+                        const syncBtn = (prog.slot_summary && prog.slot_summary.length > 0)
+                            ? `<button onclick="applications._syncToActual('${prog.program_id}', ${syncSlotData.replace(/"/g,'&quot;')})"
+                                style="font-size:.7rem;padding:2px 9px;background:#1a73e8;color:#fff;border:none;border-radius:4px;cursor:pointer" title="현재 실제 승인 접수 인원을 표시 인원으로 저장합니다">
+                                <i class="fas fa-sync"></i> 실제값으로 동기화</button>`
+                            : '';
+
                         return `
                             <div style="border:${cardBorder};border-radius:8px;padding:12px;background:${cardBg}">
                                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -322,6 +330,7 @@ const applications = {
                                     ${prog.total_waiting > 0 ? `<span style="font-size:.78rem;background:#fef9e7;color:#f39c12;border-radius:4px;padding:2px 8px">대기 ${prog.total_waiting}</span>` : ''}
                                     ${prog.total_cancelled > 0 ? `<span style="font-size:.78rem;background:#fdedec;color:#c0392b;border-radius:4px;padding:2px 8px">해지 ${prog.total_cancelled}</span>` : ''}
                                     ${resetAllBtn}
+                                    ${syncBtn}
                                 </div>
                                 ${noSlot
                                     ? `<div style="padding:10px 0">
@@ -339,7 +348,10 @@ const applications = {
                             </div>`;
                     }).join('')}
                 </div>
-                <div style="margin-top:10px;text-align:right">
+                <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+                    <button onclick="applications._syncAllToActual()" style="font-size:.78rem;background:#1a73e8;color:#fff;border:none;border-radius:4px;padding:4px 12px;cursor:pointer">
+                        <i class="fas fa-sync"></i> 전체 프로그램 실제값으로 동기화
+                    </button>
                     <button onclick="applications.loadProgramStatus()" style="font-size:.78rem;background:none;border:1px solid #ddd;border-radius:4px;padding:3px 10px;cursor:pointer;color:#666">
                         <i class="fas fa-sync-alt"></i> 새로고침
                     </button>
@@ -399,6 +411,82 @@ const applications = {
             await this.loadProgramStatus();
         } catch (e) {
             alert(`표시 인원 저장 실패: ${e.message}`);
+        }
+    },
+
+    /**
+     * 단일 프로그램 — 실제 승인 인원으로 display_approved_count 동기화
+     * @param {string} programId - 프로그램 ID
+     * @param {Array}  slots     - [{slot, approved}, ...] (렌더 시점의 실제값)
+     */
+    async _syncToActual(programId, slots) {
+        if (!programId || !Array.isArray(slots) || slots.length === 0) return;
+        try {
+            // 실제 승인 건수를 JSONB 맵으로 변환
+            const newMap = {};
+            slots.forEach(s => {
+                if (s.slot && typeof s.approved === 'number') {
+                    newMap[s.slot] = s.approved;
+                }
+            });
+            const payload = Object.keys(newMap).length ? newMap : null;
+            const res = await API.programs.update(programId, { display_approved_count: payload });
+            if (res.error) throw new Error(res.error);
+            await this.loadProgramStatus();
+        } catch (e) {
+            alert(`동기화 실패: ${e.message}`);
+        }
+    },
+
+    /**
+     * 현재 패널에 표시된 모든 프로그램을 실제 승인 인원으로 일괄 동기화
+     */
+    async _syncAllToActual() {
+        const body = document.getElementById('statusPanelBody');
+        if (!body) return;
+        if (!confirm('모든 프로그램의 표시 인원을 현재 실제 승인 인원으로 동기화하시겠습니까?\n(기존 수동 설정값이 실제값으로 덮어씌워집니다)')) return;
+
+        try {
+            // 최신 실제 데이터를 API에서 다시 조회
+            const params = {};
+            const cid = getEffectiveComplexId();
+            if (cid) params.complexId = cid;
+            const res = await API.applications.programSummary(params);
+            if (res.warning) { alert(res.warning); return; }
+
+            const list = res.data || [];
+            if (!list.length) { alert('동기화할 프로그램이 없습니다.'); return; }
+
+            // 슬롯이 있는 프로그램만 필터
+            const targets = list.filter(p => p.slot_summary && p.slot_summary.length > 0);
+            if (!targets.length) { alert('시간대가 등록된 프로그램이 없습니다.'); return; }
+
+            let successCount = 0;
+            let failCount    = 0;
+
+            await Promise.all(targets.map(async prog => {
+                try {
+                    const newMap = {};
+                    prog.slot_summary.forEach(s => {
+                        newMap[s.slot] = s.approved; // 실제 approved 건수로 설정
+                    });
+                    const payload = Object.keys(newMap).length ? newMap : null;
+                    const upRes = await API.programs.update(prog.program_id, { display_approved_count: payload });
+                    if (upRes.error) throw new Error(upRes.error);
+                    successCount++;
+                } catch (e) {
+                    console.error(`[syncAll] ${prog.program_name} 실패:`, e);
+                    failCount++;
+                }
+            }));
+
+            const msg = failCount > 0
+                ? `동기화 완료: ${successCount}개 성공, ${failCount}개 실패`
+                : `${successCount}개 프로그램이 실제 접수 인원으로 동기화되었습니다.`;
+            alert(msg);
+            await this.loadProgramStatus();
+        } catch (e) {
+            alert(`일괄 동기화 실패: ${e.message}`);
         }
     },
 
