@@ -1806,7 +1806,7 @@ ${(() => {
     },
 
     exportCSV() {
-        const headers = ['신청일', '상태', '동', '호수', '이름', '전화번호', '프로그램', '희망시간', '대기순번', '월수강료', '총횟수', '잔여횟수', '양도일', '취소일시', '메모'];
+        const headers = ['신청일', '상태', '동', '호수', '이름', '전화번호', '프로그램', '희망시간', '대기순번', '수강시작일', '수강만료일', '월수강료', '총횟수', '잔여횟수', '양도일', '취소일시', '메모'];
         const rows = this.filtered.map(a => {
             const cm = this._parseCancelMeta(a.notes);
             return {
@@ -1815,6 +1815,8 @@ ${(() => {
             '동': a.dong, '호수': a.ho, '이름': a.name, '전화번호': fmtPhone(a.phone),
             '프로그램': a.program_name, '희망시간': a.preferred_time || '',
             '대기순번': a.status === 'waiting' ? (a._waitingOrder || '') : '',
+            '수강시작일': a.start_date || '',
+            '수강만료일': a.expiry_date || '',
             '월수강료': a.monthly_fee || '',
             '총횟수': a.total_sessions || '',
             '잔여횟수': a.remaining_sessions != null ? a.remaining_sessions : '',
