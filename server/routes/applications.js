@@ -233,10 +233,13 @@ router.get('/program-summary', async (req, res) => {
         // ─── 3단계: 같은 days + 같은 slot을 공유하는 그룹 합산 표기 ─────────
         // days가 같고 time_slots에 공통 슬롯이 있는 프로그램들은 프론트에서
         // 합산하여 표시할 수 있도록 shared_slot_groups 메타 정보를 추가로 반환
+        // ※ is_active=false(체험수업 등 비활성) 프로그램은 합산 제외
+        //   — 체험수업이 같은 요일에 있어도 정규 프로그램 합산에 포함되면 안 됨
         // key: "days|slot" → [program_name, ...]
         const sharedSlotMap = {}; // "days|slot" → { totalApproved, totalWaiting, capacity, programs[] }
         progResults.forEach(p => {
-            if (!p.days) return; // days 없는 프로그램은 합산 대상 아님
+            if (!p.days) return;    // days 없는 프로그램은 합산 대상 아님
+            if (!p.is_active) return; // 비활성(체험수업 등) 제외
             p.slot_summary.forEach(s => {
                 const key = `${p.days}|${s.slot}`;
                 if (!sharedSlotMap[key]) {
@@ -252,9 +255,9 @@ router.get('/program-summary', async (req, res) => {
         // 합산 그룹 중 2개 이상 프로그램이 공유하는 슬롯만 추출
         const sharedGroups = Object.values(sharedSlotMap).filter(g => g.programs.length >= 2);
 
-        // 각 progResult에 shared_slot_totals (합산값) 주입
+        // 각 progResult에 shared_slot_totals (합산값) 주입 (활성 프로그램만)
         progResults.forEach(p => {
-            if (!p.days) return;
+            if (!p.days || !p.is_active) return;
             p.slot_summary.forEach(s => {
                 const key = `${p.days}|${s.slot}`;
                 const grp = sharedSlotMap[key];

@@ -62,7 +62,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     renderPeriodBanner();              // 접수·해지 기간 배너
     initManageTabBar();                // 내 신청 취소·변경 탭바 초기화
     _updateContractPeriodLabels();     // 계약서·해지모달 기간 텍스트 실시간 반영
-    
+
+    // ── 시간대 현황 자동 갱신 ─────────────────────────────────────────────
+    // ① 탭 전환 후 재진입 시 즉시 갱신 (관리자 삭제·승인 후 탭 돌아오면 반영)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            loadTimeSlotStatus();
+        }
+    });
+    // ② 3분마다 폴링 — 페이지를 열어둔 채로도 주기적으로 현황 최신화
+    setInterval(() => loadTimeSlotStatus(), 3 * 60 * 1000);
+
     console.log('✅ Application ready');
 });
 
