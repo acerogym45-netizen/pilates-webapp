@@ -62,7 +62,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     renderPeriodBanner();              // 접수·해지 기간 배너
     initManageTabBar();                // 내 신청 취소·변경 탭바 초기화
     _updateContractPeriodLabels();     // 계약서·해지모달 기간 텍스트 실시간 반영
-    
+
+    // ── 시간대 현황 자동 갱신 ─────────────────────────────────────────────
+    // ① 탭 전환 후 재진입 시 즉시 갱신 (관리자 삭제·승인 후 탭 돌아오면 반영)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            loadTimeSlotStatus();
+        }
+    });
+    // ② 3분마다 폴링 — 페이지를 열어둔 채로도 주기적으로 현황 최신화
+    setInterval(() => loadTimeSlotStatus(), 3 * 60 * 1000);
+
     console.log('✅ Application ready');
 });
 
@@ -998,8 +1008,11 @@ async function loadTimeSlotStatus() {
         const programs = (programsResult.data || [])
             .filter(p => {
                 const n = p.name || p.program_name || '';
-                return !n.includes('1:1') && !n.includes('2:1');
-            }); // Only group lessons
+                // 1:1 / 2:1 제외, 보강 수업(type='makeup') 제외
+                // makeup 타입은 정규 퇀스롯 카운팅 대상이 아님 — 포함 시 인원 초과 표시
+                return !n.includes('1:1') && !n.includes('2:1')
+                    && p.type !== 'makeup';
+            }); // Only group lessons (excluding makeup/personal)
         
         // Load approved applications
         const response = await fetch(`/api/applications?complexCode=${complexCode}&status=approved&limit=1000`);
