@@ -1008,8 +1008,11 @@ async function loadTimeSlotStatus() {
         const programs = (programsResult.data || [])
             .filter(p => {
                 const n = p.name || p.program_name || '';
-                return !n.includes('1:1') && !n.includes('2:1');
-            }); // Only group lessons
+                // 1:1 / 2:1 제외, 보강 수업(type='makeup') 제외
+                // makeup 타입은 정규 퇀스롯 카운팅 대상이 아님 — 포함 시 인원 초과 표시
+                return !n.includes('1:1') && !n.includes('2:1')
+                    && p.type !== 'makeup';
+            }); // Only group lessons (excluding makeup/personal)
         
         // Load approved applications
         const response = await fetch(`/api/applications?complexCode=${complexCode}&status=approved&limit=1000`);
