@@ -14,6 +14,10 @@
       "use": "@vercel/node"
     },
     {
+      "src": "api/makeup-reset-cron.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "api/backup-trigger.js",
       "use": "@vercel/node"
     },
@@ -42,6 +46,10 @@
     {
       "path": "/api/renewal-cron",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/makeup-reset-cron",
+      "schedule": "0 15 28-31 * *"
     }
   ],
   "routes": [
@@ -52,6 +60,10 @@
     {
       "src": "/api/renewal-cron",
       "dest": "/api/renewal-cron.js"
+    },
+    {
+      "src": "/api/makeup-reset-cron",
+      "dest": "/api/makeup-reset-cron.js"
     },
     {
       "src": "/api/renewal-test",
