@@ -162,6 +162,15 @@ router.get('/program-summary', async (req, res) => {
         const idToName = {};
         (rawPrograms || []).forEach(p => { idToName[p.id] = p.name; });
 
+        // preferred_time 정규화 헬퍼 — DB에 '저녁 21시' 같은 구 형식이 남아있을 때 HH:MM으로 변환
+        function normalizeTime(raw) {
+            if (!raw) return raw;
+            if (/^\d{2}:\d{2}$/.test(raw)) return raw;                // 이미 HH:MM
+            const m = raw.match(/(\d{1,2})시/);
+            if (m) return String(parseInt(m[1])).padStart(2, '0') + ':00';
+            return raw;
+        }
+
         // ─── 2단계: 프로그램별 집계 ─────────────────────────────────────────
         const progResults = programs.map(grp => {
             const prog     = grp.representative;
@@ -169,11 +178,12 @@ router.get('/program-summary', async (req, res) => {
             const slots    = [...grp.slots].sort();
             const progApps = apps.filter(a => {
                 if (a.program_id == null) {
+                    // program_id 없는 구 데이터: 프로그램명으로 매칭
                     return a.program_name === prog.name;
                 }
-                if (!grp.ids.includes(a.program_id)) return false;
-                if (a.program_name) return a.program_name === prog.name;
-                return true;
+                // program_id 있는 데이터: id 매칭만으로 충분 (program_name은 구 이름일 수 있음)
+                // → program_name 이중 검사 제거 (프로그램명 변경 후 불일치 방지)
+                return grp.ids.includes(a.program_id);
             });
 
             const approved  = progApps.filter(a => a.status === 'approved');
@@ -184,8 +194,9 @@ router.get('/program-summary', async (req, res) => {
                 ? prog.display_approved_count : {};
 
             const slotSummary = slots.map(slot => {
-                const slotApproved = approved.filter(a => a.preferred_time === slot).length;
-                const slotWaiting  = waiting.filter(a => a.preferred_time === slot).length;
+                // preferred_time을 HH:MM으로 정규화하여 비교 (구 형식 '저녁 21시' 등 대응)
+                const slotApproved = approved.filter(a => normalizeTime(a.preferred_time) === slot).length;
+                const slotWaiting  = waiting.filter(a => normalizeTime(a.preferred_time) === slot).length;
                 const exceeded     = slotApproved > capacity;
                 const available    = Math.max(0, capacity - slotApproved);
                 const displayCount = displayMap[slot] != null ? displayMap[slot] : null;

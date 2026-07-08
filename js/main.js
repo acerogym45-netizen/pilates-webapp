@@ -722,7 +722,21 @@ async function submitContract() {
         
         const result = await response.json();
         
-        // 서버 중복 체크 (409 응답)
+        // 보강 수업 당월 중복 신청 차단 (409 + MAKEUP_DUPLICATE_MONTH)
+        if (response.status === 409 && result.code === 'MAKEUP_DUPLICATE_MONTH') {
+            showMakeupBlockModal('duplicate', result.error || '이미 이번 달 보강 수업을 신청하셨습니다.');
+            console.log('❌ 보강 당월 중복 차단');
+            return;
+        }
+
+        // 보강 수업 신청기간 외 차단 (403 + MAKEUP_NOT_IN_PERIOD)
+        if (response.status === 403 && result.code === 'MAKEUP_NOT_IN_PERIOD') {
+            showMakeupBlockModal('period', result.error || '현재 보강 수업 신청 기간이 아닙니다.');
+            console.log('❌ 보강 신청기간 외 차단');
+            return;
+        }
+
+        // 서버 중복 체크 (409 응답 — 일반 중복)
         if (response.status === 409 && result.duplicate) {
             showDuplicateWarningModal(contractData, { program_name: result.existingProgram, status: result.existingStatus });
             console.log('❌ 서버에서 중복 신청 차단');
@@ -1729,6 +1743,38 @@ function showFullCapacityModal(contractData, errorMsg) {
         </div>
     `;
 
+    modal.classList.add('active');
+}
+
+// 보강 수업 신청 차단 안내 모달
+// type: 'duplicate' — 당월 중복 | 'period' — 신청기간 외
+function showMakeupBlockModal(type, errorMsg) {
+    const modal   = document.getElementById('successNotificationModal');
+    const content = document.getElementById('successNotificationContent');
+
+    const isDup   = type === 'duplicate';
+    const icon    = isDup ? 'fa-calendar-times' : 'fa-clock';
+    const color   = isDup ? '#f59e0b' : '#3b82f6';
+    const title   = isDup ? '보강 수업 중복 신청' : '보강 신청 기간 아님';
+    const bgColor = isDup ? '#fffbeb' : '#eff6ff';
+    const bdColor = isDup ? '#f59e0b' : '#3b82f6';
+    const txColor = isDup ? '#92400e' : '#1e40af';
+
+    content.innerHTML = `
+        <div style="text-align:center;">
+            <i class="fas ${icon}" style="font-size:48px;color:${color};margin-bottom:15px;"></i>
+            <h3 style="color:${color};margin-bottom:10px;">${title}</h3>
+        </div>
+        <div style="background:${bgColor};padding:15px;border-radius:8px;margin-top:8px;border-left:4px solid ${bdColor};">
+            <p style="margin:0;color:${txColor};font-size:.93rem;line-height:1.6;">
+                ${errorMsg}
+            </p>
+        </div>
+        ${isDup ? '' : `
+        <p style="font-size:.82rem;color:#6b7280;margin-top:12px;text-align:center;">
+            신청 가능 기간은 매월 2·4번째 주 수요일 09:00 ~ 목요일 00:00 (KST)입니다.
+        </p>`}
+    `;
     modal.classList.add('active');
 }
 
