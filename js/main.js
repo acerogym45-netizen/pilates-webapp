@@ -1027,26 +1027,36 @@ async function loadTimeSlotStatus() {
         const programByName = {};
         programs.forEach(p => { programByName[p.name || p.program_name] = p; });
 
+        // ── program_id → pKey 역방향 맵 (프로그램명 변경 대응) ──────────────────────────────
+        // program_id 기반으로 현재 프로그램명(pKey)을 찾을 수 있도록 미리 구성
+        const programIdToKey = {};
+        programs.forEach(p => {
+            if (p.id) programIdToKey[p.id] = p.name || p.program_name;
+        });
+
         // ── 계약별 카운팅 ─────────────────────────────────────────────────
+        // 우선순위: ① program_name_ref(현재 프로그램명, JOIN값) ② program_id 기반 역방향 맵
+        //           ③ program_name(DB 저장값, 구 이름일 수 있음) ④ lesson_type
+        // → 프로그램명을 변경해도 program_id로 정확히 매핑
         contracts.forEach(contract => {
             if (contract.status !== 'approved') return;
             const rawTime = contract.preferred_time;
             const time = normalizeToHHMM(rawTime);
-            const program = contract.program_name || contract.lesson_type;
-            if (!time || !program) return;
+            if (!time) return;
+
+            // 프로그램 키 결정 (현재 이름 우선)
+            const program =
+                contract.program_name_ref                                       // ① 현재 프로그램명 (JOIN)
+                || (contract.program_id && programIdToKey[contract.program_id]) // ② program_id 역방향 맵
+                || contract.program_name                                        // ③ DB 저장값 (구 이름)
+                || contract.lesson_type;                                        // ④ fallback
+            if (!program) return;
 
             if (programTimeSlots[program] && Object.prototype.hasOwnProperty.call(programTimeSlots[program], time)) {
                 programTimeSlots[program][time]++;
             } else {
-                // 프로그램명 부분 매칭
-                for (const pName in programTimeSlots) {
-                    if (pName.includes(program) || program.includes(pName)) {
-                        if (Object.prototype.hasOwnProperty.call(programTimeSlots[pName], time)) {
-                            programTimeSlots[pName][time]++;
-                            break;
-                        }
-                    }
-                }
+                // 완전 매칭 실패 시 로그만 남기고 스킵 (부분 매칭 제거 — 오탐 방지)
+                console.warn(`⚠️ [카운팅] 매칭 실패: program='${program}', time='${time}', id='${contract.program_id}', name_ref='${contract.program_name_ref}'`);
             }
         });
 
@@ -1096,13 +1106,17 @@ async function loadTimeSlotStatus() {
         // ── display_approved_count 오버라이드 ─────────────────────────────
         // JSONB { "HH:MM": N } — 타임별 독립 표시값
         // window.programDisplayOverride = { programName: { "HH:MM": N, ... } }
+        // ※ display_approved_count가 null이거나 빈 객체이면 항목 자체를 포함하지 않음
+        // ※ loadTimeSlotStatus() 재호출 시 window를 완전히 교체하여 구 캐시 제거
         const programDisplayOverride = {};
         programs.forEach(p => {
             const pKey = p.name || p.program_name;
-            if (p.display_approved_count && typeof p.display_approved_count === 'object' && pKey) {
+            if (pKey && p.display_approved_count && typeof p.display_approved_count === 'object'
+                && Object.keys(p.display_approved_count).length > 0) {
                 programDisplayOverride[pKey] = p.display_approved_count;
             }
         });
+        // window 전역 완전 교체 (이전 프로그램명으로 남아있던 키 제거)
         window.programDisplayOverride = programDisplayOverride;
 
         // Store in global variable for later use
@@ -1312,9 +1326,11 @@ function updateTimeSlotOptions() {
     availableTimeSlots.forEach(timeCode => {
         // slots 키가 HH:MM 이므로 바로 조회
         const realCount = (slots && slots[timeCode] != null) ? slots[timeCode] : 0;
-        // 해당 타임에 display값 있으면 표시용으로만 사용 (정원 마감 판단은 실제값 유지)
-        const displayCount = (overrideMap && overrideMap[timeCode] != null)
-            ? overrideMap[timeCode]
+        // display override: 값이 존재하고 1 이상인 경우만 표시에 사용
+        // → 0이 저장된 경우(초기화 직후 잔여값)는 실제값을 사용하여 입주민 페이지 즉시 반영
+        const overrideVal = overrideMap ? overrideMap[timeCode] : undefined;
+        const displayCount = (overrideVal != null && overrideVal > 0)
+            ? overrideVal
             : realCount;
         const isFull = realCount >= maxCapacity;
         const isAlmostFull = !isFull && realCount >= (maxCapacity - 1);
