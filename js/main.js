@@ -1311,16 +1311,24 @@ function updateTimeSlotOptions() {
     }
     
     // Get counts for selected program
-    const slots = window.programTimeSlots[selectedProgram];
+    // makeup 타입 등 programTimeSlots에 미포함된 프로그램은 count=0으로 슬롯 표시
+    const slots = window.programTimeSlots[selectedProgram] || null;
     
     if (!slots) {
-        console.error('❌ No slots found for program:', selectedProgram);
-        console.log('Available programs:', Object.keys(window.programTimeSlots));
-        timeSlotSelect.innerHTML = '<option value="">해당 프로그램의 데이터가 없습니다</option>';
-        return;
+        // programTimeSlots에 없어도 availableTimeSlots가 있으면 count=0으로 표시
+        // (보강 수업·체험수업 등 카운팅 제외 대상이지만 신청 자체는 가능한 프로그램)
+        if (availableTimeSlots && availableTimeSlots.length > 0) {
+            console.warn(`⚠️ No slots in programTimeSlots for "${selectedProgram}", displaying with count=0`);
+            // slots 없음 → realCount 항상 0으로 동작하도록 빈 객체로 대체
+        } else {
+            console.error('❌ No slots found for program:', selectedProgram);
+            console.log('Available programs:', Object.keys(window.programTimeSlots));
+            timeSlotSelect.innerHTML = '<option value="">해당 프로그램의 데이터가 없습니다</option>';
+            return;
+        }
     }
     
-    console.log('✅ Slots for selected program:', slots);
+    console.log('✅ Slots for selected program:', slots || '(count=0 fallback)');
     
     // Get max capacity from selected option data attribute
     const maxCapacity = selectedOption && selectedOption.dataset.maxCapacity 
