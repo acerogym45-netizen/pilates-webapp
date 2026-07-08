@@ -102,24 +102,25 @@ router.get('/program-summary', async (req, res) => {
             return res.json({ success: true, data: [], warning: '단지를 선택해주세요' });
         }
 
-        // 전체 프로그램 목록 조회 (활성 + 비활성 모두 — 해지/현황 파악용)
+        // 전체 프로그램 목록 조회 (활성 + 비활성 모두 — 해지/현황 파악용, days 포함)
         const { data: rawPrograms, error: progErr } = await sb
             .from('programs')
-            .select('id, name, capacity, time_slots, price, display_order, is_active, display_approved_count')
+            .select('id, name, capacity, time_slots, price, display_order, is_active, display_approved_count, days, type')
             .eq('complex_id', cxId)          // ← 단지 필터 필수
             .order('display_order')
             .order('name');
         if (progErr) throw sbErr(progErr, 'program-summary: programs');
 
-        // ─── 중복 프로그램명 dedup (같은 단지 내 동일 이름만) ───────────────
-        const progMap = {}; // name → { representative, ids[], slots(Set) }
+        // ─── 1단계: 프로그램명 dedup 맵 (name → group) ──────────────────────
+        const progMap = {}; // name → { representative, ids[], slots(Set), days }
         (rawPrograms || []).forEach(p => {
             const slots = Array.isArray(p.time_slots) ? p.time_slots : [];
             if (!progMap[p.name]) {
-                progMap[p.name] = { representative: p, ids: [p.id], slots: new Set(slots) };
+                progMap[p.name] = { representative: p, ids: [p.id], slots: new Set(slots), days: p.days || '' };
             } else {
                 progMap[p.name].ids.push(p.id);
                 slots.forEach(s => progMap[p.name].slots.add(s));
+                if (!progMap[p.name].days && p.days) progMap[p.name].days = p.days;
             }
         });
         const programs = Object.values(progMap);
@@ -158,24 +159,19 @@ router.get('/program-summary', async (req, res) => {
         const apps = [...appsById, ...appsByName.filter(a => !seen.has(a.id))];
 
         // program_id → 프로그램명 역방향 맵 구성 (교차 검증용)
-        // 잘못된 program_id가 저장된 데이터(다른 프로그램의 ID를 갖는 신청)를 필터링하기 위함
         const idToName = {};
         (rawPrograms || []).forEach(p => { idToName[p.id] = p.name; });
 
-        // 프로그램 그룹별 집계
-        const result = programs.map(grp => {
+        // ─── 2단계: 프로그램별 집계 ─────────────────────────────────────────
+        const progResults = programs.map(grp => {
             const prog     = grp.representative;
             const capacity = prog.capacity || 6;
             const slots    = [...grp.slots].sort();
             const progApps = apps.filter(a => {
                 if (a.program_id == null) {
-                    // program_id 없음 → program_name으로만 매칭
                     return a.program_name === prog.name;
                 }
-                // program_id 있음 → 이 그룹 ids에 포함되고,
-                // program_name도 이 그룹 이름과 일치해야 함 (오염된 program_id 방지)
                 if (!grp.ids.includes(a.program_id)) return false;
-                // program_name이 있으면 교차 검증, 없으면 program_id만으로 허용
                 if (a.program_name) return a.program_name === prog.name;
                 return true;
             });
@@ -184,7 +180,6 @@ router.get('/program-summary', async (req, res) => {
             const waiting   = progApps.filter(a => a.status === 'waiting');
             const cancelled = progApps.filter(a => a.status === 'cancelled');
 
-            // display_approved_count: JSONB { "HH:MM": N } — 타임별 마케팅 표시값
             const displayMap = (prog.display_approved_count && typeof prog.display_approved_count === 'object')
                 ? prog.display_approved_count : {};
 
@@ -193,12 +188,11 @@ router.get('/program-summary', async (req, res) => {
                 const slotWaiting  = waiting.filter(a => a.preferred_time === slot).length;
                 const exceeded     = slotApproved > capacity;
                 const available    = Math.max(0, capacity - slotApproved);
-                // display_count: 슬롯별 마케팅 표시값 (null이면 실제값)
                 const displayCount = displayMap[slot] != null ? displayMap[slot] : null;
                 return {
                     slot,
                     approved:      slotApproved,
-                    display_count: displayCount,   // ← 추가: null이면 실제값 그대로
+                    display_count: displayCount,
                     waiting:       slotWaiting,
                     capacity,
                     available,
@@ -214,8 +208,10 @@ router.get('/program-summary', async (req, res) => {
                 program_price:          prog.price || 0,
                 estimated_monthly_fee:  prog.price || 0,
                 is_active:              prog.is_active !== false,
+                program_type:           prog.type || '',
+                days:                   grp.days || '',
                 capacity,
-                display_approved_count: prog.display_approved_count ?? null,  // JSONB 원본
+                display_approved_count: prog.display_approved_count ?? null,
                 total_approved:         approved.length,
                 total_waiting:          waiting.length,
                 total_cancelled:        cancelled.length,
@@ -223,7 +219,43 @@ router.get('/program-summary', async (req, res) => {
             };
         });
 
-        res.json({ success: true, data: result });
+        // ─── 3단계: 같은 days + 같은 slot을 공유하는 그룹 합산 표기 ─────────
+        // days가 같고 time_slots에 공통 슬롯이 있는 프로그램들은 프론트에서
+        // 합산하여 표시할 수 있도록 shared_slot_groups 메타 정보를 추가로 반환
+        // key: "days|slot" → [program_name, ...]
+        const sharedSlotMap = {}; // "days|slot" → { totalApproved, totalWaiting, capacity, programs[] }
+        progResults.forEach(p => {
+            if (!p.days) return; // days 없는 프로그램은 합산 대상 아님
+            p.slot_summary.forEach(s => {
+                const key = `${p.days}|${s.slot}`;
+                if (!sharedSlotMap[key]) {
+                    sharedSlotMap[key] = { days: p.days, slot: s.slot, totalApproved: 0, totalWaiting: 0, capacity: s.capacity, programs: [] };
+                }
+                sharedSlotMap[key].totalApproved += s.approved;
+                sharedSlotMap[key].totalWaiting  += s.waiting;
+                sharedSlotMap[key].programs.push(p.program_name);
+                // capacity는 같은 요일+슬롯이면 동일하므로 대표값 유지
+            });
+        });
+
+        // 합산 그룹 중 2개 이상 프로그램이 공유하는 슬롯만 추출
+        const sharedGroups = Object.values(sharedSlotMap).filter(g => g.programs.length >= 2);
+
+        // 각 progResult에 shared_slot_totals (합산값) 주입
+        progResults.forEach(p => {
+            if (!p.days) return;
+            p.slot_summary.forEach(s => {
+                const key = `${p.days}|${s.slot}`;
+                const grp = sharedSlotMap[key];
+                if (grp && grp.programs.length >= 2) {
+                    s.shared_total_approved = grp.totalApproved;
+                    s.shared_total_waiting  = grp.totalWaiting;
+                    s.shared_programs       = grp.programs;
+                }
+            });
+        });
+
+        res.json({ success: true, data: progResults, sharedGroups });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
@@ -483,6 +515,95 @@ router.post('/', async (req, res) => {
                         || /보강/.test(mpData.name || '');
                 }
             } catch (_) {}
+        }
+
+        // ── 보강 프로그램: 당월 중복 신청 방지 ────────────────────────────────
+        // 같은 사람(phone + complex_id)이 당월에 이미 같은 보강 프로그램에 approved/waiting 신청이 있으면 차단
+        if (_isMakeupProgram && !admin_bypass) {
+            try {
+                const nowKst   = new Date(Date.now() + 9 * 60 * 60 * 1000);
+                const yrKst    = nowKst.getUTCFullYear();
+                const moKst    = String(nowKst.getUTCMonth() + 1).padStart(2, '0');
+                const monthStart = `${yrKst}-${moKst}-01`;      // YYYY-MM-01 KST ≈ UTC
+                const nextMonth  = nowKst.getUTCMonth() === 11
+                    ? `${yrKst + 1}-01-01`
+                    : `${yrKst}-${String(nowKst.getUTCMonth() + 2).padStart(2, '0')}-01`;
+
+                const { data: existMakeup } = await sb
+                    .from('applications')
+                    .select('id, status, created_at')
+                    .eq('complex_id', complex_id)
+                    .eq('phone', phone)
+                    .eq('program_name', program_name)
+                    .in('status', ['approved', 'waiting'])
+                    .gte('created_at', new Date(`${monthStart}T00:00:00+09:00`).toISOString())
+                    .lt('created_at', new Date(`${nextMonth}T00:00:00+09:00`).toISOString())
+                    .limit(1);
+
+                if (existMakeup && existMakeup.length > 0) {
+                    return res.status(409).json({
+                        success: false,
+                        error: `이미 ${yrKst}년 ${parseInt(moKst,10)}월에 보강 수업(${program_name})을 신청하셨습니다. 보강 수업은 매월 1회만 신청 가능합니다.`,
+                        code: 'MAKEUP_DUPLICATE_MONTH'
+                    });
+                }
+            } catch (_mkErr) {
+                console.warn('[보강중복체크] 오류 (신청은 계속 진행):', _mkErr.message);
+            }
+        }
+
+        // ── 보강 프로그램: 개별 신청기간(registration_open_rule) 검증 ──────────
+        if (_isMakeupProgram && !admin_bypass && program_id) {
+            try {
+                const { data: ruleProgram } = await sb
+                    .from('programs')
+                    .select('registration_open_rule')
+                    .eq('id', program_id)
+                    .single();
+                const rule = ruleProgram?.registration_open_rule;
+                if (rule && rule.mode) {
+                    // programs.js의 _calcProgramOpenStatus 로직을 서버 측에서 인라인으로 처리
+                    const nowKst  = new Date(Date.now() + 9 * 60 * 60 * 1000);
+                    let ruleOpen  = true; // 기본: 허용
+                    if (rule.mode === 'makeup_auto') {
+                        const yr  = nowKst.getUTCFullYear();
+                        const mo  = nowKst.getUTCMonth();
+                        const nthWed = (n) => {
+                            const first = new Date(Date.UTC(yr, mo, 1));
+                            const dow   = first.getUTCDay();
+                            const offset = ((3 - dow + 7) % 7) + (n - 1) * 7;
+                            return new Date(Date.UTC(yr, mo, 1 + offset));
+                        };
+                        const nowUtcMs = Date.now();
+                        const checkPeriod = (wed) => {
+                            const openMs  = wed.getTime(); // KST 00:00 = UTC 수요일 00:00 (실제는 +09:00 이므로 전날 15:00 UTC, 하지만 이 코드는 KST로 계산)
+                            // KST 수요일 09:00 = UTC (수요일 - 0일) + 0시 = wed UTC 00:00 + 0h (wed는 이미 UTC 자정)
+                            // 정확 계산: KST wed 09:00 = UTC wed 00:00
+                            const openUTC  = wed.getTime(); // UTC 00:00 당일 = KST 09:00
+                            const closeUTC = wed.getTime() + 15 * 60 * 60 * 1000; // UTC +15h = KST 다음날 00:00
+                            return nowUtcMs >= openUTC && nowUtcMs < closeUTC;
+                        };
+                        ruleOpen = checkPeriod(nthWed(2)) || checkPeriod(nthWed(4));
+                    } else if (rule.mode === 'custom') {
+                        const nowUtcMs = Date.now();
+                        const start = rule.custom_start ? new Date(rule.custom_start).getTime() : null;
+                        const end   = rule.custom_end   ? new Date(rule.custom_end).getTime()   : null;
+                        ruleOpen = (!start || nowUtcMs >= start) && (!end || nowUtcMs <= end);
+                    }
+                    if (!ruleOpen) {
+                        const modeLabel = rule.mode === 'makeup_auto'
+                            ? '매월 2, 4번째 주 수요일 09:00 ~ 목요일 00:00 KST'
+                            : '설정된 신청 기간';
+                        return res.status(403).json({
+                            success: false,
+                            error: `현재 보강 수업 신청 기간이 아닙니다. 신청 가능 기간: ${modeLabel}`,
+                            code: 'MAKEUP_NOT_IN_PERIOD'
+                        });
+                    }
+                }
+            } catch (_rErr) {
+                console.warn('[보강기간체크] 오류 (신청은 계속 진행):', _rErr.message);
+            }
         }
 
         // ── 중복 신청 체크 ─────────────────────────────────────────

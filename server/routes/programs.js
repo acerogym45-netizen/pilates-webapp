@@ -27,11 +27,20 @@ router.get('/', async (req, res) => {
         const { data, error } = await query;
         if (error) throw sbErr(error, 'GET /programs');
 
-        const result = (data || []).map(r => ({
-            ...r,
-            complex_code: r.complexes?.code,
-            time_slots: Array.isArray(r.time_slots) ? r.time_slots : (r.time_slots ? JSON.parse(r.time_slots) : [])
-        }));
+        const nowKst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+        const result = (data || []).map(r => {
+            const base = {
+                ...r,
+                complex_code: r.complexes?.code,
+                time_slots: Array.isArray(r.time_slots) ? r.time_slots : (r.time_slots ? JSON.parse(r.time_slots) : [])
+            };
+            // 프로그램별 개별 신청기간 규칙이 있으면 openStatus 주입
+            if (r.registration_open_rule) {
+                const openStatus = _calcProgramOpenStatus(r, nowKst);
+                base.program_open_status = openStatus;
+            }
+            return base;
+        });
 
         res.json({ success: true, data: result });
     } catch (e) {
@@ -195,12 +204,10 @@ router.post('/', async (req, res) => {
 // ── 프로그램 수정 ─────────────────────────────────────────────
 router.put('/:id', async (req, res) => {
     try {
-        const { name, type, description, days, time_slots, price, capacity, display_order, is_active, show_on_inactive, duration_days, display_approved_count, always_open_lesson } = req.body;
+        const { name, type, description, days, time_slots, price, capacity, display_order, is_active, show_on_inactive, duration_days, display_approved_count, always_open_lesson, registration_open_rule } = req.body;
         const sb = getSupabase();
 
         // ── Partial Update 방식: undefined 필드는 DB에 반영하지 않음 ──────────
-        // display_approved_count만 전송하는 경우(전체초기화 등) time_slots 등을
-        // 빈값으로 덮어쓰는 버그를 방지하기 위해 각 필드를 조건부로 추가
         const updateObj = {};
         if (name        !== undefined) updateObj.name         = name;
         if (type        !== undefined) updateObj.type         = type;
@@ -213,12 +220,16 @@ router.put('/:id', async (req, res) => {
         if (is_active   !== undefined) updateObj.is_active    = Boolean(is_active);
 
         // show_on_inactive: 비활성 상태일 때도 입주민 페이지에 표시할지 여부
-        // 컬럼이 DB에 없으면 무시 (에러 방지)
         if (show_on_inactive !== undefined) updateObj.show_on_inactive = Boolean(show_on_inactive);
         // duration_days: NULL이면 자동계산 미사용
         if (duration_days !== undefined) updateObj.duration_days = duration_days ? parseInt(duration_days) : null;
         // always_open_lesson: 개인/듀엣 상시 접수 ON/OFF
         if (always_open_lesson !== undefined) updateObj.always_open_lesson = Boolean(always_open_lesson);
+        // registration_open_rule: JSONB — 보강 등 프로그램별 신청기간 규칙
+        // { mode: 'makeup_auto' | 'custom', custom_start: 'ISO', custom_end: 'ISO' }
+        if (registration_open_rule !== undefined) {
+            updateObj.registration_open_rule = registration_open_rule === null ? null : registration_open_rule;
+        }
         // display_approved_count: JSONB { "HH:MM": N, ... } — NULL이면 실제값 표시 (마케팅용)
         if (display_approved_count !== undefined) {
             if (display_approved_count === null) {
@@ -267,6 +278,151 @@ router.put('/:id', async (req, res) => {
         res.status(500).json({ success: false, error: e.message });
     }
 });
+
+// ── 보강 프로그램 월별 인원 현황 초기화 (Cron / 수동 호출용) ─────────────
+// POST /api/programs/reset-makeup-monthly
+// - type='makeup' 또는 이름에 '보강'이 포함된 프로그램의 display_approved_count를 null로 초기화
+// - 매월 1일 KST 00:00에 Vercel Cron으로 자동 호출 (applications 이력은 보존)
+// - Authorization: Bearer <CRON_SECRET> 또는 body.secret (마스터 비밀번호)
+router.post('/reset-makeup-monthly', async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'] || '';
+        const cronSecret = process.env.CRON_SECRET || '';
+        const masterPw   = process.env.MASTER_PASSWORD || 'master2026';
+        const bodySecret = req.body?.secret || '';
+
+        const validCron   = cronSecret && authHeader === `Bearer ${cronSecret}`;
+        const validMaster = bodySecret && bodySecret === masterPw;
+        if (!validCron && !validMaster) {
+            return res.status(401).json({ success: false, error: '인증 실패' });
+        }
+
+        const sb = getSupabase();
+        const { complexId } = req.body;
+
+        // 보강 프로그램 조회 (type='makeup' OR name에 '보강' 포함)
+        let query = sb.from('programs')
+            .select('id, name, complex_id, display_approved_count')
+            .or('type.eq.makeup,name.ilike.%보강%');
+        if (complexId && /^[0-9a-f-]{36}$/i.test(complexId)) {
+            query = query.eq('complex_id', complexId);
+        }
+        const { data: makeupProgs, error: mErr } = await query;
+        if (mErr) throw sbErr(mErr, 'reset-makeup: fetch');
+
+        const targets = (makeupProgs || []).filter(p => p.display_approved_count !== null);
+        if (!targets.length) {
+            return res.json({ success: true, reset: 0, message: '초기화할 프로그램 없음' });
+        }
+
+        const ids = targets.map(p => p.id);
+        const { error: upErr } = await sb
+            .from('programs')
+            .update({ display_approved_count: null })
+            .in('id', ids);
+        if (upErr) throw sbErr(upErr, 'reset-makeup: update');
+
+        const nowKst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+        console.log(`[reset-makeup] ${nowKst.toISOString()} — ${ids.length}개 보강 프로그램 display_approved_count 초기화`);
+
+        res.json({
+            success: true,
+            reset: ids.length,
+            programs: targets.map(p => p.name),
+            message: `${ids.length}개 보강 프로그램 인원 현황 초기화 완료 (신청 이력은 보존됨)`
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── 프로그램 신청기간 상태 조회 (프로그램 개별 isInPeriod) ─────────────────
+// GET /api/programs/:id/open-status
+router.get('/:id/open-status', async (req, res) => {
+    try {
+        const sb = getSupabase();
+        const { data: prog, error } = await sb
+            .from('programs')
+            .select('id, name, type, registration_open_rule, complex_id')
+            .eq('id', req.params.id)
+            .single();
+        if (error || !prog) return res.status(404).json({ success: false, error: '프로그램 없음' });
+
+        const nowUtc = new Date();
+        const nowKst = new Date(nowUtc.getTime() + 9 * 60 * 60 * 1000);
+        const result = _calcProgramOpenStatus(prog, nowKst);
+        res.json({ success: true, ...result });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+/**
+ * 프로그램별 신청기간 계산 헬퍼
+ * rule.mode:
+ *   'makeup_auto' — 매월 2,4번째 수요일 09:00 KST ~ 그다음 목요일 00:00 KST
+ *   'custom'      — rule.custom_start ~ rule.custom_end (ISO UTC 문자열)
+ *   없음(null)    — 단지 전역 설정 따름 (기존 동작)
+ */
+function _calcProgramOpenStatus(prog, nowKst) {
+    const rule = prog.registration_open_rule;
+    if (!rule || !rule.mode) {
+        return { mode: 'global', isInPeriod: null, periodInfo: '단지 전역 설정' };
+    }
+
+    if (rule.mode === 'makeup_auto') {
+        // 매월 N번째 수요일 계산 (1-indexed, 수요일 = 3)
+        const year  = nowKst.getUTCFullYear();
+        const month = nowKst.getUTCMonth(); // 0-indexed
+        const nthWed = (n) => {
+            const first = new Date(Date.UTC(year, month, 1));
+            const dow   = first.getUTCDay(); // 0=Sun
+            const offset = ((3 - dow + 7) % 7) + (n - 1) * 7; // 첫번째 수요일 + (n-1)주
+            return new Date(Date.UTC(year, month, 1 + offset));
+        };
+        const wed2 = nthWed(2); // 2번째 수요일
+        const wed4 = nthWed(4); // 4번째 수요일
+
+        // 개방 구간: 수요일 09:00 KST ~ 그다음 목요일 00:00 KST (= 수요일 15:00 UTC ~ 목요일+1 15:00 UTC)
+        const _openUTC  = (wed) => new Date(wed.getTime() +  9 * 60 * 60 * 1000); // 수요일 09:00 KST = 00:00 UTC
+        const _closeUTC = (wed) => new Date(wed.getTime() + 24 * 60 * 60 * 1000); // 목요일 00:00 KST = 목요일 전날 15:00 UTC = wed + 24h (KST 기준 자정)
+        // KST 수요일 09:00 = UTC 수요일 00:00
+        // KST 목요일 00:00 = UTC 수요일 15:00
+        const open2  = new Date(wed2.getTime()); // KST 09:00 = UTC 00:00 (same day for wed2)
+        const close2 = new Date(wed2.getTime() + 15 * 60 * 60 * 1000); // UTC wed2 15:00 = KST 목요일 00:00
+        const open4  = new Date(wed4.getTime());
+        const close4 = new Date(wed4.getTime() + 15 * 60 * 60 * 1000);
+
+        const nowUtc = new Date(nowKst.getTime() - 9 * 60 * 60 * 1000);
+        const inPeriod2 = nowUtc >= open2 && nowUtc < close2;
+        const inPeriod4 = nowUtc >= open4 && nowUtc < close4;
+        const isInPeriod = inPeriod2 || inPeriod4;
+
+        const fmtKst = (d) => {
+            const k = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+            return `${k.getUTCMonth()+1}/${k.getUTCDate()} ${String(k.getUTCHours()).padStart(2,'0')}:${String(k.getUTCMinutes()).padStart(2,'0')}`;
+        };
+        return {
+            mode: 'makeup_auto',
+            isInPeriod,
+            periodInfo: `2번째 수: ${fmtKst(open2)}~${fmtKst(close2)} / 4번째 수: ${fmtKst(open4)}~${fmtKst(close4)} KST`,
+            nextOpen2: open2.toISOString(),
+            nextClose2: close2.toISOString(),
+            nextOpen4: open4.toISOString(),
+            nextClose4: close4.toISOString()
+        };
+    }
+
+    if (rule.mode === 'custom') {
+        const nowUtc = new Date(nowKst.getTime() - 9 * 60 * 60 * 1000);
+        const start  = rule.custom_start ? new Date(rule.custom_start) : null;
+        const end    = rule.custom_end   ? new Date(rule.custom_end)   : null;
+        const isInPeriod = (!start || nowUtc >= start) && (!end || nowUtc <= end);
+        return { mode: 'custom', isInPeriod, periodInfo: `${rule.custom_start || '?'} ~ ${rule.custom_end || '?'}` };
+    }
+
+    return { mode: rule.mode, isInPeriod: null, periodInfo: '알 수 없는 모드' };
+}
 
 // ── 프로그램 자동 활성화/비활성화 (Cron Job 호출용) ──────────────
 // POST /api/programs/auto-toggle

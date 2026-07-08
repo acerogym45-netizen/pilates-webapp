@@ -1,4 +1,4 @@
-/** 신청 관리 페이지 - v3.29 프로그램현황 실제접수인원 동기화 */
+/** 신청 관리 페이지 - v3.30 days+slot 합산현황 / 만료-잔여 필터 / 보강 신청기간 */
 const applications = {
     data: [],
     filtered: [],
@@ -11,6 +11,7 @@ const applications = {
     filterExpiryTo: '',   // 수강 만료일 종료
     filterStartFrom: '',  // 수강 시작일 시작
     filterStartTo: '',    // 수강 시작일 종료
+    filterExpiryStatus: '', // '' | 'expired' | 'active' — 수강기간 만료여부 필터
     // 레거시 단일값 (applyFilters 내부에서 배열로 처리)
     filterProgram: '',
     filterTime: '',
@@ -142,6 +143,33 @@ const applications = {
                     </div>
                 </div>
 
+                <!-- 수강기간 만료 여부 단추 필터 -->
+                <div class="detail-filter-group" style="flex-direction:column;gap:4px">
+                    <label><i class="fas fa-hourglass-half"></i> 수강 상태</label>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap">
+                        <button id="expiryStatusBtn_all"
+                            onclick="applications.setDetailFilter('expiryStatus','')"
+                            style="font-size:.75rem;padding:3px 10px;border-radius:20px;border:1px solid #d1d5db;background:#f3f4f6;color:#374151;cursor:pointer;font-weight:600">
+                            전체
+                        </button>
+                        <button id="expiryStatusBtn_active"
+                            onclick="applications.setDetailFilter('expiryStatus','active')"
+                            style="font-size:.75rem;padding:3px 10px;border-radius:20px;border:1px solid #d1d5db;background:#f3f4f6;color:#374151;cursor:pointer">
+                            <i class="fas fa-check-circle" style="color:#22c55e"></i> 수강 중
+                        </button>
+                        <button id="expiryStatusBtn_expired"
+                            onclick="applications.setDetailFilter('expiryStatus','expired')"
+                            style="font-size:.75rem;padding:3px 10px;border-radius:20px;border:1px solid #d1d5db;background:#f3f4f6;color:#374151;cursor:pointer">
+                            <i class="fas fa-clock" style="color:#ef4444"></i> 만료
+                        </button>
+                        <button id="expiryStatusBtn_nodate"
+                            onclick="applications.setDetailFilter('expiryStatus','nodate')"
+                            style="font-size:.75rem;padding:3px 10px;border-radius:20px;border:1px solid #d1d5db;background:#f3f4f6;color:#374151;cursor:pointer">
+                            <i class="fas fa-minus-circle" style="color:#9ca3af"></i> 기간 미설정
+                        </button>
+                    </div>
+                </div>
+
                 <div style="display:flex;flex-direction:column;gap:4px;align-self:flex-end">
                     <button class="btn-ghost btn-sm" onclick="applications.clearDetailFilters()">
                         <i class="fas fa-times"></i> 초기화
@@ -254,6 +282,14 @@ const applications = {
                                     ? '<span style="color:#e74c3c;font-size:.75rem">마감</span>'
                                     : `<span style="color:#27ae60;font-size:.75rem">여유 ${available}</span>`;
 
+                            // ── 같은 days+slot 합산 인원 배지 ──────────────────────────────
+                            const sharedBadge = s.shared_total_approved != null
+                                ? `<span style="font-size:.7rem;background:#fef3c7;color:#92400e;border-radius:3px;padding:1px 5px;margin-left:3px;cursor:help"
+                                    title="같은 요일(${prog.days}) ${s.slot} 합산: ${s.shared_programs ? s.shared_programs.join(', ') : ''}">
+                                    <i class="fas fa-layer-group" style="font-size:.65rem"></i> 합계 ${s.shared_total_approved}/${cap}
+                                  </span>`
+                                : '';
+
                             // 표시 인원 인풋 (타임별)
                             const slotDispVal = dispMap[s.slot] != null ? dispMap[s.slot] : '';
                             const slotInputId = `dispSlot_${prog.program_id}_${s.slot.replace(':','')}`;
@@ -270,6 +306,7 @@ const applications = {
                                             ${statusLabel}
                                             ${s.waiting > 0 ? `<span style="color:#f39c12;font-size:.75rem">대기 ${s.waiting}</span>` : ''}
                                             ${dispBadge}
+                                            ${sharedBadge}
                                         </span>
                                     </div>
                                     <div style="height:5px;background:#eee;border-radius:3px;overflow:hidden;margin-bottom:5px">
@@ -561,28 +598,44 @@ const applications = {
     },
 
     setDetailFilter(type, value) {
-        if (type === 'dong')             this.filterDong       = value;
-        else if (type === 'expiryFrom')  this.filterExpiryFrom = value;
-        else if (type === 'expiryTo')    this.filterExpiryTo   = value;
-        else if (type === 'startFrom')   this.filterStartFrom  = value;
-        else if (type === 'startTo')     this.filterStartTo    = value;
+        if (type === 'dong')             this.filterDong         = value;
+        else if (type === 'expiryFrom')  this.filterExpiryFrom   = value;
+        else if (type === 'expiryTo')    this.filterExpiryTo     = value;
+        else if (type === 'startFrom')   this.filterStartFrom    = value;
+        else if (type === 'startTo')     this.filterStartTo      = value;
+        else if (type === 'expiryStatus') {
+            this.filterExpiryStatus = value;
+            // 버튼 active 스타일 갱신
+            ['all','active','expired','nodate'].forEach(k => {
+                const btn = document.getElementById(`expiryStatusBtn_${k}`);
+                if (!btn) return;
+                const isActive = (k === (value || 'all'));
+                btn.style.fontWeight  = isActive ? '700' : '400';
+                btn.style.background  = isActive ? (k==='active' ? '#dcfce7' : k==='expired' ? '#fee2e2' : k==='nodate' ? '#f3f4f6' : '#e0e7ff') : '#f3f4f6';
+                btn.style.borderColor = isActive ? (k==='active' ? '#86efac' : k==='expired' ? '#fca5a5' : k==='nodate' ? '#9ca3af' : '#818cf8') : '#d1d5db';
+                btn.style.color       = isActive ? (k==='active' ? '#15803d' : k==='expired' ? '#b91c1c' : k==='nodate' ? '#6b7280' : '#3730a3') : '#374151';
+            });
+        }
         this.applyFilters();
     },
 
     clearDetailFilters() {
-        this.filterPrograms  = [];
-        this.filterTimes     = [];
-        this.filterProgram   = '';
-        this.filterTime      = '';
-        this.filterDong      = '';
-        this.filterExpiryFrom = '';
-        this.filterExpiryTo   = '';
-        this.filterStartFrom  = '';
-        this.filterStartTo    = '';
+        this.filterPrograms     = [];
+        this.filterTimes        = [];
+        this.filterProgram      = '';
+        this.filterTime         = '';
+        this.filterDong         = '';
+        this.filterExpiryFrom   = '';
+        this.filterExpiryTo     = '';
+        this.filterStartFrom    = '';
+        this.filterStartTo      = '';
+        this.filterExpiryStatus = '';
         ['filterDong','filterExpiryFrom','filterExpiryTo','filterStartFrom','filterStartTo'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
+        // 수강상태 버튼 초기화
+        this.setDetailFilter('expiryStatus', '');
         // 체크박스 초기화
         ['programChkList','timeChkList'].forEach(id => {
             document.getElementById(id)?.querySelectorAll('input[type=checkbox]')
@@ -657,10 +710,24 @@ const applications = {
         if (this.filterExpiryTo) {
             list = list.filter(a => a.expiry_date && a.expiry_date <= this.filterExpiryTo);
         }
+        // ── 수강기간 만료여부 단추 필터 ─────────────────────────────────────
+        if (this.filterExpiryStatus) {
+            const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+            if (this.filterExpiryStatus === 'active') {
+                // expiry_date가 오늘 이후 (수강 중)
+                list = list.filter(a => a.expiry_date && a.expiry_date >= todayStr);
+            } else if (this.filterExpiryStatus === 'expired') {
+                // expiry_date가 오늘 이전 (만료)
+                list = list.filter(a => a.expiry_date && a.expiry_date < todayStr);
+            } else if (this.filterExpiryStatus === 'nodate') {
+                // expiry_date 없음
+                list = list.filter(a => !a.expiry_date);
+            }
+        }
         this.filtered = list;
 
         // 수강 만료일 또는 시작일 필터가 활성화되었을 때 미재등록 TM 버튼 표시
-        const expiryFilterActive = !!(this.filterExpiryFrom || this.filterExpiryTo || this.filterStartFrom || this.filterStartTo);
+        const expiryFilterActive = !!(this.filterExpiryFrom || this.filterExpiryTo || this.filterStartFrom || this.filterStartTo || this.filterExpiryStatus === 'expired');
         const bulkBtn = document.getElementById('bulkRenewalTmBtn');
         if (bulkBtn) {
             // 미재등록 TM 대상 판별 기준:
@@ -3384,6 +3451,11 @@ ${(() => {
                     onclick="applications._resetApplyPeriod('${complexId}')">
                 <i class="fas fa-undo"></i> 전체 기본값 복귀
             </button>
+            <button class="btn-ghost" style="color:#f59e0b;border-color:#f59e0b"
+                    onclick="applications._resetMakeupMonthly('${complexId}')"
+                    title="보강 프로그램의 표시 인원을 수동으로 초기화합니다 (신청 이력 보존)">
+                <i class="fas fa-sync"></i> 보강 인원 초기화
+            </button>
             <button class="btn-primary" style="background:#8e44ad"
                     onclick="applications._saveApplyPeriodAll('${complexId}')">
                 <i class="fas fa-save"></i> 저장
@@ -3621,6 +3693,29 @@ ${(() => {
                 this._refreshApplyPeriodBadge(complexId);
             } catch(e) { showToast('초기화 실패: ' + e.message, 'error'); }
         });
+    },
+
+    /** 보강 프로그램 인원 현황 수동 초기화 (신청 이력 보존) */
+    async _resetMakeupMonthly(complexId) {
+        showConfirm(
+            '보강 인원 초기화',
+            '보강 프로그램의 표시 인원 현황을 초기화합니다.\n(신청 이력은 삭제되지 않습니다)\n\n진행하시겠습니까?',
+            async () => {
+                try {
+                    const masterPw = prompt('마스터 비밀번호를 입력하세요:');
+                    if (!masterPw) return;
+                    const res  = await fetch('/api/programs/reset-makeup-monthly', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ secret: masterPw, complexId })
+                    });
+                    const json = await res.json();
+                    if (!json.success) throw new Error(json.error);
+                    showToast(`${json.reset}개 보강 프로그램 초기화 완료`, 'success');
+                    await this.loadProgramStatus();
+                } catch(e) { showToast('초기화 실패: ' + e.message, 'error'); }
+            }
+        );
     },
 
     // 상단 버튼 배지(열림/닫힘 표시) 갱신

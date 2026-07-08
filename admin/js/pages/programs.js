@@ -195,6 +195,28 @@ const programs = {
             if (!PRESET_TIMES.includes(s)) programs._addCustomSlotCheckbox(s, true);
         });
 
+        // 보강 유형이면 기존 registration_open_rule 값으로 라디오 초기화
+        if (p && (p.type === 'makeup' || /보강/.test(p.name || ''))) {
+            const rule = p.registration_open_rule;
+            // _onTypeChange 가 makeupNotice를 이미 삽입했을 것임 — 라디오 설정
+            setTimeout(() => {
+                const mode = rule?.mode || 'global';
+                const radio = document.getElementById(
+                    mode === 'makeup_auto' ? 'pRuleMakeupAuto'
+                  : mode === 'custom'      ? 'pRuleCustom'
+                  :                          'pRuleGlobal'
+                );
+                if (radio) { radio.checked = true; programs._onRuleChange(mode); }
+                if (mode === 'custom') {
+                    const toLocal = (iso) => iso ? iso.slice(0,16) : '';
+                    const csEl = document.getElementById('pRuleCustomStart');
+                    const ceEl = document.getElementById('pRuleCustomEnd');
+                    if (csEl && rule.custom_start) csEl.value = toLocal(rule.custom_start);
+                    if (ceEl && rule.custom_end)   ceEl.value = toLocal(rule.custom_end);
+                }
+            }, 50);
+        }
+
         // pActive 토글 시 showOnInactiveGroup 표시/숨김
         const pActiveEl = document.getElementById('pActive');
         const showGrp   = document.getElementById('showOnInactiveGroup');
@@ -216,8 +238,43 @@ const programs = {
         if (isMakeupType && !makeupNotice) {
             makeupNotice = document.createElement('div');
             makeupNotice.id = 'pMakeupNotice';
-            makeupNotice.style.cssText = 'margin-top:6px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;font-size:.8rem;color:#92400e';
-            makeupNotice.innerHTML = '<i class="fas fa-info-circle" style="color:#f59e0b"></i> <b>보강</b> 유형: 중복 수강 허용 · 자동 승인 · 접수 완료 문자 발송 (입금 안내 없음)';
+            makeupNotice.style.cssText = 'margin-top:6px;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:.8rem;color:#92400e';
+            makeupNotice.innerHTML = `
+                <div style="margin-bottom:8px">
+                    <i class="fas fa-info-circle" style="color:#f59e0b"></i>
+                    <b>보강</b> 유형: 중복 수강 허용 · 자동 승인 · 접수 완료 문자 발송 (입금 안내 없음)
+                    <br><span style="color:#b45309">⚠️ 당월 1인 1회만 신청 가능 — 매월 1일에 인원 현황 자동 초기화</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                    <b style="font-size:.78rem;color:#78350f"><i class="fas fa-clock"></i> 신청기간 규칙</b>
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                        <input type="radio" name="pRegOpenRule" value="global" id="pRuleGlobal" checked
+                            onchange="programs._onRuleChange(this.value)">
+                        <span>단지 전역 설정 따름 (기본)</span>
+                    </label>
+                    <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer">
+                        <input type="radio" name="pRegOpenRule" value="makeup_auto" id="pRuleMakeupAuto"
+                            onchange="programs._onRuleChange(this.value)" style="margin-top:2px">
+                        <span>매월 <b>2, 4번째 주 수요일</b> 09:00 KST ~
+                            <b>목요일</b> 00:00 KST 자동 접수
+                            <small style="display:block;color:#a16207;margin-top:2px">선택 시 해당 프로그램은 전역 신청기간과 무관하게 위 기간에만 접수 가능</small>
+                        </span>
+                    </label>
+                    <label style="display:flex;align-items:flex-start;gap:6px;cursor:pointer">
+                        <input type="radio" name="pRegOpenRule" value="custom" id="pRuleCustom"
+                            onchange="programs._onRuleChange(this.value)" style="margin-top:2px">
+                        <span style="display:flex;flex-direction:column;gap:4px">
+                            직접 입력
+                            <div id="pRuleCustomInputs" style="display:none;flex-wrap:wrap;gap:4px;align-items:center;margin-top:3px">
+                                <input type="datetime-local" id="pRuleCustomStart"
+                                    style="font-size:.75rem;padding:3px 5px;border:1px solid #d1d5db;border-radius:5px">
+                                <span style="color:#9ca3af">~</span>
+                                <input type="datetime-local" id="pRuleCustomEnd"
+                                    style="font-size:.75rem;padding:3px 5px;border:1px solid #d1d5db;border-radius:5px">
+                            </div>
+                        </span>
+                    </label>
+                </div>`;
             typeSelect?.closest('.form-group')?.appendChild(makeupNotice);
         } else if (!isMakeupType && makeupNotice) {
             makeupNotice.remove();
@@ -282,6 +339,12 @@ const programs = {
         lbl.innerHTML = `<input type="checkbox" name="pTimeCheck" value="${escHtml(val)}" ${checked?'checked':''}><span>${escHtml(val)}</span>`;
         wrap.appendChild(lbl);
     },
+    /** 보강 신청기간 규칙 라디오 변경 핸들러 */
+    _onRuleChange(val) {
+        const customInputs = document.getElementById('pRuleCustomInputs');
+        if (customInputs) customInputs.style.display = val === 'custom' ? 'flex' : 'none';
+    },
+
     _onDepositToggle(checked) {
         const wrap = document.getElementById('pDepositAmountWrap');
         if (wrap) wrap.style.display = checked ? 'flex' : 'none';
@@ -309,6 +372,25 @@ const programs = {
             // always_open_lesson: 개인/듀엣 상시접수 (체크박스가 있을 때만 포함)
             const alwaysOpenEl = document.getElementById('pAlwaysOpenLesson');
             if (alwaysOpenEl) data.always_open_lesson = alwaysOpenEl.checked;
+
+            // registration_open_rule: 보강 유형일 때 신청기간 규칙 수집
+            const ruleRadio = document.querySelector('input[name="pRegOpenRule"]:checked');
+            if (ruleRadio) {
+                const ruleVal = ruleRadio.value;
+                if (ruleVal === 'global') {
+                    data.registration_open_rule = null;
+                } else if (ruleVal === 'makeup_auto') {
+                    data.registration_open_rule = { mode: 'makeup_auto' };
+                } else if (ruleVal === 'custom') {
+                    const cs = document.getElementById('pRuleCustomStart')?.value;
+                    const ce = document.getElementById('pRuleCustomEnd')?.value;
+                    data.registration_open_rule = {
+                        mode: 'custom',
+                        custom_start: cs ? new Date(cs).toISOString() : null,
+                        custom_end:   ce ? new Date(ce).toISOString() : null
+                    };
+                }
+            }
 
             // 예약금(보증금) 설정
             const depositEnabledEl = document.getElementById('pDepositEnabled');
