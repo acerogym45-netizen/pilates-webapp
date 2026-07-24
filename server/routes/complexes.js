@@ -471,26 +471,40 @@ router.delete('/:id', async (req, res) => {
         }
 
         // [3단계] 나머지 자식 테이블 (complex_id 기준, 상호 FK 없음)
+        // ※ Supabase에 실제로 존재하지 않는 테이블(attendance_records 등)은
+        //   schema cache 오류("Could not find the table")가 발생하므로 무시
         const remainingTables = [
             'programs',
             'notices',
             'instructors',
             'curricula',
             'inquiries',
-            'attendance_records',
+            'attendance_records',   // 없는 경우 schema cache 오류 → 무시
             'renewal_payments',
             'complex_apply_settings',
-            'discount_codes',
-            'workout_reports',
-            'member_tokens',
+            'discount_codes',       // 호텔 전용, 없는 단지에선 무시
+            'workout_reports',      // 호텔 전용, 없는 단지에선 무시
+            'member_tokens',        // 호텔 전용, 없는 단지에선 무시
         ];
+
+        // 테이블이 Supabase에 없거나 complex_id 컬럼이 없으면 무시하는 헬퍼
+        function isTableMissingError(err) {
+            if (!err) return false;
+            const msg = err.message || '';
+            return (
+                msg.includes('Could not find the table') ||   // schema cache miss
+                msg.includes('does not exist') ||             // 테이블 없음
+                msg.includes('column') ||                     // 컬럼 없음
+                err.code === '42P01'                          // undefined_table (PostgreSQL)
+            );
+        }
+
         for (const table of remainingTables) {
             const { error: delErr } = await sb
                 .from(table)
                 .delete()
                 .eq('complex_id', cxId);
-            // complex_id 컬럼이 없는 테이블 에러는 무시
-            if (delErr && !delErr.message.includes('column') && !delErr.message.includes('does not exist')) {
+            if (delErr && !isTableMissingError(delErr)) {
                 throw sbErr(delErr, `DELETE ${table} for complex ${cxId}`);
             }
         }
