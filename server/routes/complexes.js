@@ -442,11 +442,43 @@ router.delete('/:id', async (req, res) => {
             return res.status(403).json({ success: false, error: '마스터 비밀번호가 올바르지 않습니다' });
         }
 
-        const sb = getSupabase();
+        const sb  = getSupabase();
+        const cxId = req.params.id;
+
+        // ── FK 제약 때문에 complexes 직접 삭제 불가 → 연관 데이터 먼저 삭제 ──
+        // 삭제 순서: 자식 테이블 → 부모(complexes) 순
+        const childTables = [
+            'applications',
+            'cancellations',
+            'notices',
+            'programs',
+            'instructors',
+            'curricula',
+            'inquiries',
+            'attendance_records',
+            'renewal_payments',
+            'complex_apply_settings',
+            'discount_codes',
+            'workout_reports',
+            'member_tokens',
+        ];
+
+        for (const table of childTables) {
+            const { error: delErr } = await sb
+                .from(table)
+                .delete()
+                .eq('complex_id', cxId);
+            // complex_id 컬럼이 없는 테이블은 에러가 날 수 있으므로 무시
+            if (delErr && !delErr.message.includes('column') && !delErr.message.includes('does not exist')) {
+                throw sbErr(delErr, `DELETE ${table} for complex ${cxId}`);
+            }
+        }
+
+        // 연관 데이터 모두 제거 후 단지 삭제
         const { error } = await sb
             .from('complexes')
             .delete()
-            .eq('id', req.params.id);
+            .eq('id', cxId);
 
         if (error) throw sbErr(error, 'DELETE /complexes/:id');
         res.json({ success: true, message: '삭제되었습니다' });
