@@ -445,13 +445,35 @@ router.delete('/:id', async (req, res) => {
         const sb  = getSupabase();
         const cxId = req.params.id;
 
-        // ── FK 제약 때문에 complexes 직접 삭제 불가 → 연관 데이터 먼저 삭제 ──
-        // 삭제 순서: 자식 테이블 → 부모(complexes) 순
-        const childTables = [
-            'applications',
-            'cancellations',
-            'notices',
+        // ── FK 체인을 역순으로 삭제 (자식 → 부모 순) ────────────────────────
+        // FK 의존 관계:
+        //   cancellations.application_id → applications.id
+        //   applications.program_id      → programs.id
+        //   (위 두 테이블은 complex_id FK도 가짐)
+        //
+        // 단계 1: complex_id 없이 application_id 로만 연결된 손자 테이블 삭제
+        //   → cancellations 중 application_id 참조분 (complex_id 로도 커버되지만 명시적으로 먼저)
+        // 단계 2: complex_id 기준으로 나머지 자식 테이블 순서대로 삭제
+        //   순서: cancellations → applications → programs → 나머지
+
+        // [1단계] cancellations: complex_id 기준 삭제
+        //         (application_id FK 때문에 applications 보다 반드시 먼저)
+        {
+            const { error: e } = await sb.from('cancellations').delete().eq('complex_id', cxId);
+            if (e) throw sbErr(e, 'DELETE cancellations for complex');
+        }
+
+        // [2단계] applications: complex_id 기준 삭제
+        //         (program_id FK 때문에 programs 보다 먼저)
+        {
+            const { error: e } = await sb.from('applications').delete().eq('complex_id', cxId);
+            if (e) throw sbErr(e, 'DELETE applications for complex');
+        }
+
+        // [3단계] 나머지 자식 테이블 (complex_id 기준, 상호 FK 없음)
+        const remainingTables = [
             'programs',
+            'notices',
             'instructors',
             'curricula',
             'inquiries',
@@ -462,13 +484,12 @@ router.delete('/:id', async (req, res) => {
             'workout_reports',
             'member_tokens',
         ];
-
-        for (const table of childTables) {
+        for (const table of remainingTables) {
             const { error: delErr } = await sb
                 .from(table)
                 .delete()
                 .eq('complex_id', cxId);
-            // complex_id 컬럼이 없는 테이블은 에러가 날 수 있으므로 무시
+            // complex_id 컬럼이 없는 테이블 에러는 무시
             if (delErr && !delErr.message.includes('column') && !delErr.message.includes('does not exist')) {
                 throw sbErr(delErr, `DELETE ${table} for complex ${cxId}`);
             }
