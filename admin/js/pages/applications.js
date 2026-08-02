@@ -2465,11 +2465,34 @@ ${(() => {
 
         try {
             const res  = await API.applications.list({ complexId, status: 'approved', limit: 500 });
-            const apps = res.data || res.applications || [];
+            const allApps = res.data || res.applications || [];
+
+            // ── 출석부 제외 조건 ──────────────────────────────────────────
+            // 1) 수강만료자 제외: expiry_date가 오늘 이전인 경우
+            // 2) 잔여횟수 0회 제외: remaining_sessions === 0 (총횟수 관리 단지)
+            // 3) 보강 수업 제외: program_type_ref === 'makeup' 또는 이름에 '보강' 포함
+            // 4) 체험 수업 제외: 이름에 '무료' 또는 '체험' 포함
+            const todayStr = new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+            const apps = allApps.filter(a => {
+                // 1) 수강만료일 체크
+                if (a.expiry_date && a.expiry_date < todayStr) return false;
+                // 2) 잔여횟수 0 체크 (null이면 횟수 무제한 → 제외 안 함)
+                if (a.remaining_sessions != null && parseInt(a.remaining_sessions) === 0) return false;
+                // 3) 보강 수업 제외
+                const pType = a.program_type_ref || a.type || '';
+                if (pType === 'makeup') return false;
+                const pName = a.program_name || '';
+                if (/보강/.test(pName)) return false;
+                // 4) 체험 수업 제외
+                if (/무료|체험/.test(pName)) return false;
+                return true;
+            });
+
+            const excluded = allApps.length - apps.length;
 
             if (!apps.length) {
                 document.getElementById('globalModalBody').innerHTML =
-                    '<p style="padding:20px;text-align:center;color:#999">승인된 회원이 없습니다.</p>';
+                    '<p style="padding:20px;text-align:center;color:#999">출석부에 표시할 정규 수강 회원이 없습니다.</p>';
                 return;
             }
 
@@ -2490,6 +2513,13 @@ ${(() => {
             const timeOpts = times.map(t => '<option value="' + t + '">' + t + '</option>').join('');
 
             const body =
+                // ── 제외 안내 배지
+                (excluded > 0
+                    ? '<div style="background:#fef9e7;border:1px solid #f9ca24;border-radius:6px;padding:7px 12px;margin-bottom:10px;font-size:.82rem;color:#7d6608">' +
+                      '<i class="fas fa-info-circle"></i> ' +
+                      '만료·잔여0회·보강·체험 수강자 <strong>' + excluded + '명</strong>이 출석부에서 자동 제외됐습니다.' +
+                      '</div>'
+                    : '') +
                 // ── 필터 행
                 '<div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">' +
                   '<div style="display:flex;flex-direction:column;gap:4px">' +
