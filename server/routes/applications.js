@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
 
         let query = sb
             .from('applications')
-            .select('*, complexes!inner(code), programs(name)')
+            .select('*, complexes!inner(code), programs(name, type)')
             .order('created_at', { ascending: false });
 
         if (complexId)   query = query.eq('complex_id', complexId);
@@ -39,8 +39,9 @@ router.get('/', async (req, res) => {
 
         const result = (data || []).map(r => ({
             ...r,
-            complex_code: r.complexes?.code,
-            program_name_ref: r.programs?.name
+            complex_code:      r.complexes?.code,
+            program_name_ref:  r.programs?.name,
+            program_type_ref:  r.programs?.type   // makeup / individual / duet / group 등
         }));
 
         res.json({ success: true, data: result, page: parseInt(page), limit: parseInt(limit) });
