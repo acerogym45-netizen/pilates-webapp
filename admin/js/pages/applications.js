@@ -2603,10 +2603,24 @@ ${(() => {
             return;
         }
 
+        // ── 그룹화: 요일셋+시간대가 같으면 프로그램명이 달라도 통합 ──────
+        // 예) '월&수 6:1 그룹수업(6.8 오픈)' + '월&수 6:1 그룹수업' → 동일 그룹
+        // 요일 추출 불가 시 program_name을 키로 fallback
+        const _attGroupKey = (pname, time) => {
+            const dows = applications._parseProgramDows(pname || '');
+            const dowKey = dows.length ? dows.slice().sort((a,b)=>a-b).join(',') : ('p:' + (pname||'미지정'));
+            return dowKey + '__' + (time||'미지정');
+        };
+        // 그룹 대표 라벨: 같은 그룹 내 program_name 중 가장 짧은 것 사용
+        const _attGroupLabel = (existing, newName) => {
+            if (!existing) return newName || '프로그램 미지정';
+            return (newName||'').length < existing.length ? (newName||'') : existing;
+        };
         const groups = {};
         filtered.forEach(a => {
-            const key = (a.program_name||'미지정') + '__' + (a.preferred_time||'미지정');
+            const key = _attGroupKey(a.program_name, a.preferred_time);
             if (!groups[key]) groups[key] = { program: a.program_name||'프로그램 미지정', time: a.preferred_time||'시간 미지정', members: [] };
+            else groups[key].program = _attGroupLabel(groups[key].program, a.program_name);
             groups[key].members.push(a);
         });
 
@@ -2666,20 +2680,33 @@ ${(() => {
         if (time) filtered = filtered.filter(a => a.preferred_time === time);
         if (!filtered.length) { showToast('출력할 회원이 없습니다','error'); return; }
 
-        // ── 1단계: 프로그램명+시간 단위로 세부 그룹화
+        // ── 1단계: 요일셋+시간 단위로 세부 그룹화 (프로그램명 달라도 통합) ──
+        // 요일 추출 불가 시 program_name fallback
+        const _pdfGroupKey = (pname, time) => {
+            const dows = applications._parseProgramDows(pname || '');
+            const dowKey = dows.length ? dows.slice().sort((a,b)=>a-b).join(',') : ('p:' + (pname||''));
+            return dowKey + '__' + (time||'');
+        };
+        const _pdfGroupLabel = (existing, newName) => {
+            if (!existing) return newName || '프로그램 미지정';
+            return (newName||'').length < existing.length ? (newName||'') : existing;
+        };
         const timeGroups = {};
         filtered.forEach(a => {
-            const key = (a.program_name||'') + '__' + (a.preferred_time||'');
+            const key = _pdfGroupKey(a.program_name, a.preferred_time);
             if (!timeGroups[key]) timeGroups[key] = { program: a.program_name||'프로그램 미지정', time: a.preferred_time||'시간 미지정', members: [] };
+            else timeGroups[key].program = _pdfGroupLabel(timeGroups[key].program, a.program_name);
             timeGroups[key].members.push(a);
         });
 
-        // ── 2단계: 프로그램명 기준으로 상위 그룹화
+        // ── 2단계: 요일셋 기준으로 상위 그룹화 (대표 프로그램명 갱신)
         const progGroups = {};
         Object.values(timeGroups).forEach(tg => {
-            const pname = tg.program;
-            if (!progGroups[pname]) progGroups[pname] = { program: pname, timeSlots: [] };
-            progGroups[pname].timeSlots.push(tg);
+            const dows = applications._parseProgramDows(tg.program || '');
+            const pgKey = dows.length ? dows.slice().sort((a,b)=>a-b).join(',') : ('p:' + tg.program);
+            if (!progGroups[pgKey]) progGroups[pgKey] = { program: tg.program, timeSlots: [] };
+            else progGroups[pgKey].program = _pdfGroupLabel(progGroups[pgKey].program, tg.program);
+            progGroups[pgKey].timeSlots.push(tg);
         });
 
         const monthLabel = calYr + '년 ' + calMo + '월';
