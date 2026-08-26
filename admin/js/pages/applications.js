@@ -1548,16 +1548,31 @@ ${(() => {
         if (status === 'cancelled') {
             const a = this.data.find(x => x.id === id);
             const name = a ? `${a.name} (${a.dong || ''} ${a.ho || ''})` : id;
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const isExpired = a && a.expiry_date && a.expiry_date < todayStr;
             const confirmed = await new Promise(resolve => {
-                showConfirm(
-                    '⚠️ 해지 처리 확인',
-                    `${name} 을(를) 직접 해지 처리하려 합니다.\n\n` +
-                    `반드시 [해지 관리 탭]에서 해지 신청이 먼저 등록되어 있어야 합니다.\n` +
-                    `시간대/요일 변경자를 해지로 처리하는 실수를 주의하세요.\n\n` +
-                    `계속하시겠습니까?`,
-                    () => resolve(true),
-                    () => resolve(false)
-                );
+                if (isExpired) {
+                    // 수강만료 회원: 해지 관리 탭 안내 불필요
+                    showConfirm(
+                        '⚠️ 해지 처리 확인',
+                        `${name} 은(는) 수강이 만료된 회원입니다.\n\n` +
+                        `(수강기간: ${a.expiry_date} 만료)\n\n` +
+                        `해지 처리하시겠습니까?`,
+                        () => resolve(true),
+                        () => resolve(false)
+                    );
+                } else {
+                    // 일반 회원: 해지 관리 탭 선등록 필요 안내
+                    showConfirm(
+                        '⚠️ 해지 처리 확인',
+                        `${name} 을(를) 직접 해지 처리하려 합니다.\n\n` +
+                        `반드시 [해지 관리 탭]에서 해지 신청이 먼저 등록되어 있어야 합니다.\n` +
+                        `시간대/요일 변경자를 해지로 처리하는 실수를 주의하세요.\n\n` +
+                        `계속하시겠습니까?`,
+                        () => resolve(true),
+                        () => resolve(false)
+                    );
+                }
             });
             if (!confirmed) return;
         }

@@ -1159,19 +1159,26 @@ router.put('/:id', async (req, res) => {
         // applications 상태를 직접 cancelled로 바꾸려면 반드시 cancellations 테이블에
         // 해당 신청(application_id 또는 phone+complex_id 매칭)이 있어야 함.
         // 정산 작업 중 실수로 일괄 cancelled 처리하는 사고(2026-04-30 사례) 재발 방지.
+        // 단, 수강만료일(expiry_date)이 오늘 이전인 회원은 이미 만료된 수강이므로
+        // cancellations 기록 없이도 직접 해지 허용 (해지 관리 탭 경유 불필요).
         if (status === 'cancelled' && current.status !== 'cancelled') {
-            const { data: cancelRecord, error: cancelCheckErr } = await sb
-                .from('cancellations')
-                .select('id, status')
-                .or(`application_id.eq.${req.params.id},and(phone.eq.${current.phone || ''},complex_id.eq.${current.complex_id || ''})`)
-                .limit(1);
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const isExpired = current.expiry_date && current.expiry_date < todayStr;
 
-            if (!cancelCheckErr && (!cancelRecord || cancelRecord.length === 0)) {
-                return res.status(400).json({
-                    success: false,
-                    error: `[차단] cancellations 테이블에 해지 신청 기록이 없습니다. 해지 처리는 반드시 해지 관리 탭에서 먼저 등록하세요. (신청자: ${current.name}, ${current.dong} ${current.ho})`,
-                    blocked: true
-                });
+            if (!isExpired) {
+                const { data: cancelRecord, error: cancelCheckErr } = await sb
+                    .from('cancellations')
+                    .select('id, status')
+                    .or(`application_id.eq.${req.params.id},and(phone.eq.${current.phone || ''},complex_id.eq.${current.complex_id || ''})`)
+                    .limit(1);
+
+                if (!cancelCheckErr && (!cancelRecord || cancelRecord.length === 0)) {
+                    return res.status(400).json({
+                        success: false,
+                        error: `[차단] cancellations 테이블에 해지 신청 기록이 없습니다. 해지 처리는 반드시 해지 관리 탭에서 먼저 등록하세요. (신청자: ${current.name}, ${current.dong} ${current.ho})`,
+                        blocked: true
+                    });
+                }
             }
         }
 
