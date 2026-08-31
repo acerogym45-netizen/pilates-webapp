@@ -164,8 +164,12 @@ router.post('/', async (req, res) => {
         };
         // show_on_inactive 컬럼이 있으면 포함
         if (show_on_inactive !== undefined) insertObj.show_on_inactive = Boolean(show_on_inactive);
-        // duration_days: NULL이면 자동계산 미사용
-        if (duration_days !== undefined) insertObj.duration_days = duration_days ? parseInt(duration_days) : null;
+        // duration_days: NULL이면 자동계산 미사용 / 미입력 시 기본값 35일 적용
+        if (duration_days !== undefined) {
+            insertObj.duration_days = duration_days ? parseInt(duration_days) : null;
+        } else {
+            insertObj.duration_days = 35; // 기본 유효기간 35일 (2026-07 정책 변경)
+        }
         // always_open_lesson: 개인/듀엣 상시 접수 ON/OFF
         if (always_open_lesson !== undefined) insertObj.always_open_lesson = Boolean(always_open_lesson);
         // display_approved_count: JSONB { "HH:MM": N, ... } — NULL이면 실제값 표시 (마케팅용)
@@ -274,6 +278,59 @@ router.put('/:id', async (req, res) => {
             show_on_inactive: data.show_on_inactive !== undefined ? data.show_on_inactive : (show_on_inactive !== undefined ? Boolean(show_on_inactive) : true)
         };
         res.json({ success: true, data: result });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// ── duration_days 일괄 패치 (28일→35일 정책 마이그레이션용) ───────────────
+// POST /api/programs/patch-duration-days
+// - duration_days = 28 인 모든 프로그램을 35로 일괄 업데이트
+// - Authorization: Bearer <CRON_SECRET> 또는 body.secret (마스터 비밀번호)
+router.post('/patch-duration-days', async (req, res) => {
+    try {
+        const authHeader = req.headers['authorization'] || '';
+        const cronSecret = process.env.CRON_SECRET || '';
+        const masterPw   = process.env.MASTER_PASSWORD || 'master2026';
+        const bodySecret = req.body?.secret || '';
+
+        const validCron   = cronSecret && authHeader === `Bearer ${cronSecret}`;
+        const validMaster = bodySecret && bodySecret === masterPw;
+        if (!validCron && !validMaster) {
+            return res.status(401).json({ success: false, error: '인증 실패' });
+        }
+
+        const sb = getSupabase();
+        const fromDays = parseInt(req.body?.from_days ?? 28);
+        const toDays   = parseInt(req.body?.to_days   ?? 35);
+
+        // duration_days = fromDays 인 프로그램 조회
+        const { data: targets, error: selectErr } = await sb
+            .from('programs')
+            .select('id, name, complex_id, duration_days')
+            .eq('duration_days', fromDays);
+
+        if (selectErr) throw selectErr;
+        if (!targets || targets.length === 0) {
+            return res.json({ success: true, updated: 0, message: `duration_days=${fromDays} 프로그램 없음` });
+        }
+
+        const ids = targets.map(p => p.id);
+        const { error: updateErr } = await sb
+            .from('programs')
+            .update({ duration_days: toDays })
+            .in('id', ids);
+
+        if (updateErr) throw updateErr;
+
+        console.log(`[patch-duration-days] ${fromDays}일 → ${toDays}일: ${ids.length}개 프로그램 업데이트`);
+        res.json({
+            success: true,
+            updated: ids.length,
+            from_days: fromDays,
+            to_days: toDays,
+            programs: targets.map(p => ({ id: p.id, name: p.name, complex_id: p.complex_id }))
+        });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
