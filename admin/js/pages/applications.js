@@ -2645,33 +2645,45 @@ ${(() => {
             return String(a.ho||'').replace(/호$/,'').localeCompare(String(b.ho||'').replace(/호$/,''),'ko',{numeric:true});
         });
 
+        // 미리보기: PDF 출력과 동일한 컬럼 구성 (번호·동호수·이름·잔여·유효기간·출석날짜)
+        const fmtExpiryPrev = (d) => {
+            if (!d) return '-';
+            const parts = String(d).split('-');
+            return parts.length === 3 ? parts[0].slice(2) + '.' + parts[1] + '.' + parts[2] : d;
+        };
+
         let html = '';
         Object.values(groups).forEach(g => {
             sortM(g.members);
             const thDates = dateCols.map(d =>
-                '<th style="padding:5px 2px;border:1px solid #d5f5e3;text-align:center;min-width:46px;font-size:.74rem;white-space:nowrap">' + d + '</th>'
+                '<th style="padding:5px 2px;border:1px solid #d5f5e3;text-align:center;min-width:38px;font-size:.72rem;white-space:nowrap">' + d + '</th>'
             ).join('');
-            const rows = g.members.map((m, i) =>
-                '<tr style="background:' + (i%2===0?'#fff':'#f5fdfc') + '">' +
-                '<td style="padding:6px 6px;border:1px solid #e8f8f5;text-align:center;color:#aaa;font-size:.8rem">' + (i+1) + '</td>' +
-                '<td style="padding:6px 8px;border:1px solid #e8f8f5;text-align:center;white-space:nowrap">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
-                '<td style="padding:6px 8px;border:1px solid #e8f8f5;text-align:center;font-weight:600">' + (m.name||'') + '</td>' +
-                '<td style="padding:6px 8px;border:1px solid #e8f8f5;text-align:center;color:#888;font-size:.8rem">' + applications._fmtPhoneLast4(m.phone) + '</td>' +
-                dateCols.map(() => '<td style="border:1px solid #e8f8f5;min-width:46px"></td>').join('') +
-                '<td style="border:1px solid #e8f8f5;min-width:44px"></td></tr>'
-            ).join('');
+            const rows = g.members.map((m, i) => {
+                const remSess   = (m.remaining_sessions != null) ? m.remaining_sessions + '회' : '-';
+                const expiryStr = fmtExpiryPrev(m.expiry_date);
+                return '<tr style="background:' + (i%2===0?'#fff':'#f5fdfc') + '">' +
+                    '<td style="padding:5px 4px;border:1px solid #e8f8f5;text-align:center;color:#aaa;font-size:.78rem;min-width:28px">' + (i+1) + '</td>' +
+                    '<td style="padding:5px 6px;border:1px solid #e8f8f5;text-align:center;white-space:nowrap;font-size:.82rem">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
+                    '<td style="padding:5px 6px;border:1px solid #e8f8f5;text-align:center;font-weight:600;font-size:.85rem">' + (m.name||'') + '</td>' +
+                    '<td style="padding:5px 4px;border:1px solid #e8f8f5;text-align:center;font-size:.78rem;color:#2980b9;min-width:38px">' + remSess + '</td>' +
+                    '<td style="padding:5px 4px;border:1px solid #e8f8f5;text-align:center;font-size:.75rem;color:#555;white-space:nowrap;min-width:62px">' + expiryStr + '</td>' +
+                    dateCols.map(() => '<td style="border:1px solid #e8f8f5;min-width:38px;height:28px"></td>').join('') +
+                    '</tr>';
+            }).join('');
             html +=
-                '<div style="margin-bottom:18px">' +
-                '<div style="background:#1abc9c;color:#fff;padding:7px 14px;border-radius:6px 6px 0 0;font-weight:700;font-size:.9rem">' +
-                g.program + ' · ' + g.time +
-                (rawDates.length ? '<span style="font-weight:400;opacity:.85;font-size:.8rem;margin-left:6px">월 ' + rawDates.length + '회</span>' : '') +
-                '<span style="float:right;font-size:.82rem;opacity:.9">' + g.members.length + '명</span></div>' +
-                '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.82rem;min-width:460px">' +
-                '<thead><tr style="background:#f0fdf9">' +
-                '<th style="padding:6px;border:1px solid #d5f5e3;text-align:center;width:30px">No.</th>' +
-                '<th style="padding:6px 8px;border:1px solid #d5f5e3;text-align:center;min-width:76px">동/호수</th>' +
-                '<th style="padding:6px 8px;border:1px solid #d5f5e3;text-align:center;min-width:54px">이름</th>' +
-                '<th style="padding:6px 8px;border:1px solid #d5f5e3;text-align:center;min-width:64px">연락처</th>' +
+                '<div style="margin-bottom:16px">' +
+                '<div style="background:#1abc9c;color:#fff;padding:6px 12px;border-radius:6px 6px 0 0;font-weight:700;font-size:.88rem;display:flex;justify-content:space-between;align-items:center">' +
+                '<span>' + g.program + ' · ' + g.time +
+                (rawDates.length ? '<span style="font-weight:400;opacity:.85;font-size:.78rem;margin-left:6px">월 ' + rawDates.length + '회</span>' : '') +
+                '</span>' +
+                '<span style="font-size:.8rem;opacity:.9">' + g.members.length + '명</span></div>' +
+                '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.8rem;min-width:520px">' +
+                '<thead><tr style="background:#e8f8f2">' +
+                '<th style="padding:5px 4px;border:1px solid #d5f5e3;text-align:center;min-width:28px;font-size:.76rem">No.</th>' +
+                '<th style="padding:5px 6px;border:1px solid #d5f5e3;text-align:center;min-width:76px;font-size:.8rem">동/호수</th>' +
+                '<th style="padding:5px 6px;border:1px solid #d5f5e3;text-align:center;min-width:52px;font-size:.82rem">이름</th>' +
+                '<th style="padding:5px 4px;border:1px solid #d5f5e3;text-align:center;min-width:38px;font-size:.76rem">잔여</th>' +
+                '<th style="padding:5px 4px;border:1px solid #d5f5e3;text-align:center;min-width:62px;font-size:.76rem">유효기간</th>' +
                 thDates +
                 '</tr></thead>' +
                 '<tbody>' + rows + '</tbody></table></div></div>';
@@ -2679,7 +2691,7 @@ ${(() => {
         container.innerHTML = html;
     },
 
-    // ── PDF 다운로드 (v3.24 - 요일별 1슬라이드, 높이 초과 시 자동 분할) ──────
+    // ── PDF 다운로드 (v4.0 - 개별출석부 양식: A4 세로, 프로그램별 페이지, 심플 흑백) ──
     _downloadAttendancePDF() {
         const prog        = document.getElementById('attProgram')?.value || '';
         const time        = document.getElementById('attTime')?.value   || '';
@@ -2695,17 +2707,20 @@ ${(() => {
         if (time) filtered = filtered.filter(a => a.preferred_time === time);
         if (!filtered.length) { showToast('출력할 회원이 없습니다','error'); return; }
 
-        // ── 1단계: 요일셋+시간 단위로 세부 그룹화 (프로그램명 달라도 통합) ──
-        // 요일 추출 불가 시 program_name fallback
-        const _pdfGroupKey = (pname, time) => {
+        const monthLabel = calYr + '년 ' + calMo + '월';
+
+        // ── 그룹화 헬퍼 (요일셋+시간 → 프로그램명 달라도 통합) ────────────
+        const _pdfGroupKey = (pname, t) => {
             const dows = applications._parseProgramDows(pname || '');
             const dowKey = dows.length ? dows.slice().sort((a,b)=>a-b).join(',') : ('p:' + (pname||''));
-            return dowKey + '__' + (time||'');
+            return dowKey + '__' + (t||'');
         };
         const _pdfGroupLabel = (existing, newName) => {
             if (!existing) return newName || '프로그램 미지정';
             return (newName||'').length < existing.length ? (newName||'') : existing;
         };
+
+        // ── 1단계: 시간대별 세부 그룹화 ────────────────────────────────────
         const timeGroups = {};
         filtered.forEach(a => {
             const key = _pdfGroupKey(a.program_name, a.preferred_time);
@@ -2714,7 +2729,7 @@ ${(() => {
             timeGroups[key].members.push(a);
         });
 
-        // ── 2단계: 요일셋 기준으로 상위 그룹화 (대표 프로그램명 갱신)
+        // ── 2단계: 요일셋 기준 상위 프로그램 그룹화 ────────────────────────
         const progGroups = {};
         Object.values(timeGroups).forEach(tg => {
             const dows = applications._parseProgramDows(tg.program || '');
@@ -2724,9 +2739,7 @@ ${(() => {
             progGroups[pgKey].timeSlots.push(tg);
         });
 
-        const monthLabel = calYr + '년 ' + calMo + '월';
-
-        // 그룹별 날짜 계산
+        // ── 그룹별 수업 날짜 목록 계산 ──────────────────────────────────────
         const getGroupDates = (programName) => {
             const dows = applications._parseProgramDows(programName);
             if (!dows.length) return manualDates.length ? manualDates : null;
@@ -2747,13 +2760,14 @@ ${(() => {
             return dates.length ? dates : null;
         };
 
+        // ── 동호수 기준 정렬 ─────────────────────────────────────────────
         const sortM = arr => arr.sort((a, b) => {
             const da = String(a.dong||'').replace(/동$/,''), db = String(b.dong||'').replace(/동$/,'');
             if (da !== db) return da.localeCompare(db,'ko',{numeric:true});
             return String(a.ho||'').replace(/호$/,'').localeCompare(String(b.ho||'').replace(/호$/,''),'ko',{numeric:true});
         });
 
-        // 프로그램 정렬 (요일 우선순위)
+        // ── 프로그램 정렬 (첫 요일 우선순위) ────────────────────────────────
         const getDowPriority = (programName) => {
             const dows = applications._parseProgramDows(programName);
             if (!dows.length) return 99;
@@ -2767,152 +2781,222 @@ ${(() => {
             pg.timeSlots.sort((a, b) => (a.time||'').localeCompare(b.time||'', 'ko'));
         });
 
-        // ── 시간대 블록 하나의 HTML + 예상 높이(mm) 반환 ──────────────────
-        // 실측 기반 높이 (96dpi: 1px=0.2646mm)
-        // 시간대 헤더 div: 10pt폰트(13.3px)*1.4 + padding8px = 26.6px ≈ 7.0mm
-        // 테이블 헤더 tr: 7.5pt폰트(10px)*1.2 + padding8px = 20px ≈ 5.3mm
-        // 데이터 행: height:22px셀 + border공유 = 23px ≈ 6.1mm
-        // 타이틀바: 12pt폰트(16px)*1.4 + padding6px + border2px = 30.4px ≈ 8.0mm
-        const ROW_H_MM     = 6.1;   // 데이터 행 1개 실측 높이(mm)
-        const SLOT_HEAD_MM = 7.0;   // 시간대 헤더 div 높이(mm)
-        const TBL_HEAD_MM  = 5.3;   // 테이블 헤더 tr 높이(mm)
-        const tsBlockHtml = (ts, dateCols, dateMm, isFirst) => {
-            sortM(ts.members);
-            const rows = ts.members.map((m, i) =>
-                '<tr style="' + (i%2 ? 'background:#f5fdfb' : '') + '">' +
-                '<td style="padding:3px 2px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#999;width:8mm">' + (i+1) + '</td>' +
-                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:8pt;white-space:nowrap;width:22mm">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
-                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:9.5pt;font-weight:bold;width:16mm">' + (m.name||'') + '</td>' +
-                '<td style="padding:3px 4px;border:1px solid #ccc;text-align:center;font-size:7.5pt;color:#555;width:16mm">' + applications._fmtPhoneLast4(m.phone) + '</td>' +
-                dateCols.map(() => '<td style="border:1px solid #ccc;height:22px;width:' + dateMm + 'mm"></td>').join('') +
-                '</tr>'
-            ).join('');
-            const thDates = dateCols.map(d =>
-                '<th style="padding:3px 1px;text-align:center;border:1px solid #bbb;font-size:7pt;width:' + dateMm + 'mm;white-space:nowrap">' + d + '</th>'
-            ).join('');
-            const html =
-                '<div style="' + (!isFirst ? 'margin-top:4mm;' : '') + '">' +
-                '<div style="display:flex;justify-content:space-between;align-items:center;' +
-                'background:#1abc9c;color:#fff;padding:4px 8px;border-radius:3px 3px 0 0">' +
-                '<span style="font-size:10pt;font-weight:700">' + ts.time + '</span>' +
-                '<span style="font-size:8pt;opacity:.9">' + ts.members.length + '명</span></div>' +
-                '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-                '<thead><tr style="background:#e8f8f2">' +
-                '<th style="padding:4px 2px;text-align:center;border:1px solid #bbb;width:8mm;font-size:7.5pt">No.</th>' +
-                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:22mm;font-size:8pt">동/호수</th>' +
-                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:8.5pt">이름</th>' +
-                '<th style="padding:4px 3px;text-align:center;border:1px solid #bbb;width:16mm;font-size:7.5pt">연락처</th>' +
-                thDates +
-                '</tr></thead><tbody>' + rows + '</tbody></table></div>';
-            // 예상 높이(mm): 간격 + 시간대헤더 + 테이블헤더 + 행당 높이
-            const estimatedMm = (!isFirst ? 4 : 0) + SLOT_HEAD_MM + TBL_HEAD_MM + ts.members.length * ROW_H_MM;
-            return { html, estimatedMm };
+        // ── 유효기간 포맷 (YYYY-MM-DD → YY.MM.DD) ──────────────────────────
+        const fmtExpiry = (d) => {
+            if (!d) return '-';
+            const parts = String(d).split('-');
+            if (parts.length === 3) return parts[0].slice(2) + '.' + parts[1] + '.' + parts[2];
+            return d;
         };
 
-        // ── page-block 생성: 각 프로그램을 슬라이드로, 넘치면 자동 분할 ──
-        // A4 가로 210mm - page-block padding(8mm*2) = 194mm 사용 가능
-        // html2canvas가 scrollHeight 기준으로 캡처 후 ratio fit하므로
-        // 194mm 이하면 A4에 꽉 차게, 초과 시 축소됨
-        const PAGE_H_MM  = 194;  // page-block 내부 실사용 높이(mm)
-        const TITLE_H_MM = 8.0;  // 프로그램 타이틀바 높이(mm)
+        // ── page-block HTML 생성 ─────────────────────────────────────────────
+        // 각 프로그램 × 시간대 조합이 한 페이지(A4 세로) → 인원 초과 시 자동 분할
+        // A4 세로 내부 실사용: 상하 12mm 패딩, 타이틀 ~18mm, 테이블헤더 ~8mm, 행 ~8mm
+        const ROWS_PER_PAGE = 19; // 1페이지 최대 행 수 (A4 세로 여유분 기준)
 
         let printContent = '';
 
         sortedProgGroups.forEach(pg => {
-            const groupRaw  = getGroupDates(pg.program) || [];
-            const dateCols  = groupRaw.length ? groupRaw.map(k => applications._dateLabel(k)) : ['1회','2회','3회','4회'];
-            const dateMm    = Math.max(9, Math.floor(185 / dateCols.length));
-            const totalMembers = pg.timeSlots.reduce((s, ts) => s + ts.members.length, 0);
+            const groupRaw = getGroupDates(pg.program) || [];
+            // 날짜 컬럼: 선택된 날짜 기준, 없으면 회차 번호 fallback
+            const dateCols = groupRaw.length
+                ? groupRaw.map(k => applications._dateLabel(k))
+                : ['1회','2회','3회','4회'];
+            const dateCount = dateCols.length;
 
-            // 슬라이드 분할: 시간대를 순서대로 쌓으면서 PAGE_H_MM 초과 시 새 슬라이드
-            let slides = [];          // 슬라이드 배열 [ [{html,mm}, ...], ... ]
-            let curSlide = [];        // 현재 슬라이드에 쌓인 블록들
-            let curH = TITLE_H_MM;   // 현재 슬라이드 누적 높이 (타이틀 포함)
+            pg.timeSlots.forEach(ts => {
+                sortM(ts.members);
 
-            pg.timeSlots.forEach((ts) => {
-                const isFirstInSlide = curSlide.length === 0;
-                const block = tsBlockHtml(ts, dateCols, dateMm, isFirstInSlide);
-
-                if (!isFirstInSlide && curH + block.estimatedMm > PAGE_H_MM) {
-                    // 현재 슬라이드 저장 후 새 슬라이드 시작
-                    slides.push(curSlide);
-                    curSlide = [];
-                    curH = TITLE_H_MM;
-                    // 새 슬라이드에서의 첫 블록이므로 isFirst=true 로 재생성
-                    const blockNew = tsBlockHtml(ts, dateCols, dateMm, true);
-                    curSlide.push(blockNew);
-                    curH += blockNew.estimatedMm;
-                } else {
-                    curSlide.push(block);
-                    curH += block.estimatedMm;
+                // 행 수 초과 시 페이지 분할
+                const chunks = [];
+                for (let i = 0; i < ts.members.length; i += ROWS_PER_PAGE) {
+                    chunks.push(ts.members.slice(i, i + ROWS_PER_PAGE));
                 }
-            });
-            if (curSlide.length) slides.push(curSlide);
+                if (!chunks.length) chunks.push([]);
 
-            // 슬라이드 → page-block HTML
-            slides.forEach((blocks, si) => {
-                const slideLabel = slides.length > 1 ? ' (' + (si+1) + '/' + slides.length + ')' : '';
-                printContent +=
-                    '<div class="page-block">' +
-                    '<div style="display:flex;justify-content:space-between;align-items:flex-end;' +
-                    'margin-bottom:4px;border-bottom:2px solid #1abc9c;padding-bottom:3px">' +
-                    '<span style="font-size:12pt;font-weight:bold;color:#1e8449">' +
-                    pg.program + slideLabel + '</span>' +
-                    '<span style="font-size:8pt;color:#888">' + monthLabel +
-                    ' &nbsp;|&nbsp; 총 <strong style="color:#333">' + totalMembers + '</strong>명' +
-                    ' | 인당 <strong style="color:#333">' + dateCols.length + '</strong>회</span></div>' +
-                    blocks.map(b => b.html).join('') +
-                    '</div>';
+                chunks.forEach((chunk, ci) => {
+                    const pageLabel = chunks.length > 1 ? ' (' + (ci+1) + '/' + chunks.length + ')' : '';
+                    const startIdx  = ci * ROWS_PER_PAGE;
+
+                    // ── 날짜 헤더 컬럼 ──────────────────────────────────────
+                    // 날짜 수에 따라 셀 너비 동적 조정
+                    // 고정폭: No(8) + 동호수(22) + 이름(16) + 횟수(12) + 유효기간(18) = 76mm
+                    // 나머지: A4 세로 내부 190mm - 76mm = 114mm → 날짜 컬럼 분배
+                    const fixedMm   = 76;
+                    const totalMm   = 190;
+                    const dateMm    = dateCount > 0 ? Math.max(7, Math.floor((totalMm - fixedMm) / dateCount)) : 10;
+
+                    const thDates = dateCols.map(d =>
+                        '<th style="padding:3px 1px;text-align:center;border:1px solid #999;' +
+                        'font-size:6.5pt;width:' + dateMm + 'mm;white-space:nowrap;font-weight:600">' + d + '</th>'
+                    ).join('');
+
+                    // ── 데이터 행 ────────────────────────────────────────────
+                    const rows = chunk.map((m, i) => {
+                        const rowNum = startIdx + i + 1;
+                        const expiryStr = fmtExpiry(m.expiry_date);
+                        const remSess   = (m.remaining_sessions != null) ? String(m.remaining_sessions) + '회' : '-';
+                        return '<tr>' +
+                            '<td style="padding:2px;border:1px solid #999;text-align:center;' +
+                            'font-size:7pt;color:#555;width:8mm;height:9mm">' + rowNum + '</td>' +
+                            '<td style="padding:2px 3px;border:1px solid #999;text-align:center;' +
+                            'font-size:8pt;white-space:nowrap;width:22mm">' + applications._fmtDongHo(m.dong,m.ho) + '</td>' +
+                            '<td style="padding:2px 3px;border:1px solid #999;text-align:center;' +
+                            'font-size:9pt;font-weight:bold;width:16mm">' + (m.name||'') + '</td>' +
+                            '<td style="padding:2px 2px;border:1px solid #999;text-align:center;' +
+                            'font-size:7.5pt;color:#333;width:12mm">' + remSess + '</td>' +
+                            '<td style="padding:2px 2px;border:1px solid #999;text-align:center;' +
+                            'font-size:7pt;color:#444;width:18mm">' + expiryStr + '</td>' +
+                            dateCols.map(() =>
+                                '<td style="border:1px solid #999;width:' + dateMm + 'mm;height:9mm"></td>'
+                            ).join('') +
+                            '</tr>';
+                    }).join('');
+
+                    // ── 빈 행 채우기 (인쇄 시 줄 맞춤) ──────────────────────
+                    const emptyCount = Math.max(0, ROWS_PER_PAGE - chunk.length);
+                    const emptyRows  = Array(emptyCount).fill(0).map((_, i) => {
+                        const rowNum = startIdx + chunk.length + i + 1;
+                        return '<tr>' +
+                            '<td style="padding:2px;border:1px solid #ccc;text-align:center;' +
+                            'font-size:7pt;color:#ccc;width:8mm;height:9mm">' + rowNum + '</td>' +
+                            '<td style="border:1px solid #ccc;width:22mm"></td>' +
+                            '<td style="border:1px solid #ccc;width:16mm"></td>' +
+                            '<td style="border:1px solid #ccc;width:12mm"></td>' +
+                            '<td style="border:1px solid #ccc;width:18mm"></td>' +
+                            dateCols.map(() =>
+                                '<td style="border:1px solid #ccc;width:' + dateMm + 'mm"></td>'
+                            ).join('') +
+                            '</tr>';
+                    }).join('');
+
+                    // ── 합계 행 ───────────────────────────────────────────────
+                    const totalRow =
+                        '<tr style="background:#f5f5f5;font-weight:bold">' +
+                        '<td colspan="5" style="padding:3px 6px;border:1px solid #999;text-align:right;' +
+                        'font-size:8pt">합계</td>' +
+                        dateCols.map(() =>
+                            '<td style="border:1px solid #999;height:9mm"></td>'
+                        ).join('') +
+                        '</tr>';
+
+                    // ── 기간 표시 (헤더용) ───────────────────────────────────
+                    const periodStr = groupRaw.length >= 2
+                        ? groupRaw[0] + ' ~ ' + groupRaw[groupRaw.length-1]
+                        : monthLabel;
+
+                    printContent +=
+                        '<div class="page-block">' +
+
+                        // 제목 영역
+                        '<div style="text-align:center;margin-bottom:6px">' +
+                        '<div style="font-size:14pt;font-weight:bold;letter-spacing:2px;margin-bottom:3px">개 별 출 석 부</div>' +
+                        '<div style="font-size:8.5pt;color:#333">' +
+                        '<span style="margin-right:16px">■ 기&nbsp;&nbsp;&nbsp;간 : ' + periodStr + '</span>' +
+                        '<span>■ ' + complexName + '</span>' +
+                        '</div></div>' +
+
+                        // 프로그램·시간대 정보 바
+                        '<div style="display:flex;justify-content:space-between;align-items:center;' +
+                        'border-top:2px solid #333;border-bottom:1px solid #999;padding:3px 4px;margin-bottom:0">' +
+                        '<span style="font-size:9pt;font-weight:bold">' + pg.program + pageLabel + '</span>' +
+                        '<span style="font-size:8.5pt;font-weight:600;color:#333">' + ts.time + '</span>' +
+                        '<span style="font-size:8pt;color:#555">총 <strong>' + ts.members.length + '</strong>명 · 월 <strong>' + dateCount + '</strong>회</span>' +
+                        '</div>' +
+
+                        // 테이블
+                        '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
+                        '<thead>' +
+                        '<tr style="background:#e8e8e8">' +
+                        '<th style="padding:4px 2px;text-align:center;border:1px solid #999;' +
+                        'width:8mm;font-size:7.5pt">번호</th>' +
+                        '<th style="padding:4px 3px;text-align:center;border:1px solid #999;' +
+                        'width:22mm;font-size:8pt">동/호수</th>' +
+                        '<th style="padding:4px 3px;text-align:center;border:1px solid #999;' +
+                        'width:16mm;font-size:8.5pt">성&nbsp;&nbsp;명</th>' +
+                        '<th style="padding:4px 2px;text-align:center;border:1px solid #999;' +
+                        'width:12mm;font-size:7.5pt">잔여</th>' +
+                        '<th style="padding:4px 2px;text-align:center;border:1px solid #999;' +
+                        'width:18mm;font-size:7.5pt">유효기간</th>' +
+                        '<th colspan="' + dateCount + '" style="padding:4px 2px;text-align:center;' +
+                        'border:1px solid #999;font-size:8pt">출&nbsp;&nbsp;&nbsp;&nbsp;석&nbsp;&nbsp;&nbsp;&nbsp;확&nbsp;&nbsp;&nbsp;&nbsp;인</th>' +
+                        '</tr>' +
+                        '<tr style="background:#f0f0f0">' +
+                        '<th style="border:1px solid #999;height:6px" colspan="5"></th>' +
+                        thDates +
+                        '</tr>' +
+                        '</thead>' +
+                        '<tbody>' + rows + emptyRows + totalRow + '</tbody>' +
+                        '</table>' +
+                        '</div>';
+                });
             });
         });
 
-        const win = window.open('','_blank','width=1150,height=820');
+        // ── 팝업 윈도우 출력 ─────────────────────────────────────────────────
+        const win = window.open('','_blank','width=900,height=980');
         if (!win) { showToast('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.','error'); return; }
-        const attTitle = complexName + ' 출석부';
+        const attTitle = complexName + ' 개별출석부';
         win.document.write(
             '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">' +
             '<title>' + attTitle + ' ' + monthLabel + '</title>' +
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>' +
             '<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>' +
             '<style>' +
-            '*{box-sizing:border-box}' +
-            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',Arial,sans-serif;margin:0;padding:0;color:#111;background:#f0f0f0}' +
-            '.page-block{width:277mm;padding:8mm 10mm;background:#fff;margin:0 auto 4mm;box-shadow:0 1px 4px rgba(0,0,0,.1)}'  /* min-height 제거: 내용만큼만 높이 */ +
-            'table{border-collapse:collapse}' +
-            '@media print{body{background:#fff}.page-block{box-shadow:none;margin:0;page-break-after:always}}' +
+            '*{box-sizing:border-box;margin:0;padding:0}' +
+            'body{font-family:\'Malgun Gothic\',\'맑은 고딕\',\'Apple SD Gothic Neo\',Arial,sans-serif;' +
+            'background:#e8e8e8;color:#111}' +
+            '.page-block{width:190mm;min-height:267mm;padding:12mm 10mm;background:#fff;' +
+            'margin:6mm auto;box-shadow:0 2px 6px rgba(0,0,0,.15)}' +
+            'table{border-collapse:collapse;width:100%}' +
+            'td,th{box-sizing:border-box}' +
+            '@media print{' +
+            'body{background:#fff}' +
+            '.page-block{box-shadow:none;margin:0;page-break-after:always;width:190mm;min-height:267mm}' +
+            '.no-print{display:none!important}' +
+            '}' +
             '<\/style>' +
             '<script>async function downloadPDF(){' +
-            'var btn=document.getElementById(\'dlBtn\');btn.disabled=true;btn.textContent=\'생성 중...\';' +
+            'var btn=document.getElementById(\'dlBtn\');' +
+            'btn.disabled=true;btn.textContent=\'생성 중...\';' +
             'var blocks=document.querySelectorAll(\'.page-block\');' +
-            'var pdf=new window.jspdf.jsPDF({orientation:\'landscape\',unit:\'mm\',format:\'a4\'});' +
-            'var pw=pdf.internal.pageSize.getWidth();var ph=pdf.internal.pageSize.getHeight();' +
-            'var margin=8;' +
+            'var pdf=new window.jspdf.jsPDF({orientation:\'portrait\',unit:\'mm\',format:\'a4\'});' +
+            'var pw=pdf.internal.pageSize.getWidth();' +  // 210mm
+            'var ph=pdf.internal.pageSize.getHeight();' + // 297mm
+            'var marginX=10;var marginY=10;' +
             'for(var i=0;i<blocks.length;i++){' +
             'var el=blocks[i];' +
-            // html2canvas 전에 블록 너비를 A4 가로 픽셀 기준으로 고정
-            'var origW=el.style.width;el.style.width=\'277mm\';' +
+            'var origW=el.style.width;el.style.width=\'190mm\';' +
             'var bw=el.scrollWidth;var bh=el.scrollHeight;' +
-            'var canvas=await html2canvas(el,{scale:2.5,useCORS:true,logging:false,backgroundColor:\'#ffffff\',' +
-            'width:bw,height:bh,windowWidth:bw,windowHeight:bh,scrollX:0,scrollY:0});' +
+            'var canvas=await html2canvas(el,{scale:3,useCORS:true,logging:false,' +
+            'backgroundColor:\'#ffffff\',width:bw,height:bh,' +
+            'windowWidth:bw,windowHeight:bh,scrollX:0,scrollY:0});' +
             'el.style.width=origW;' +
             'var iw=canvas.width;var ih=canvas.height;' +
-            'var aw=pw-margin*2;var ah=ph-margin*2;' +
-            'var ratio=Math.min(aw/iw, ah/ih);' +  // 가로·세로 모두 맞춤
-            'var cx=margin+(aw-iw*ratio)/2;var cy=margin;' +
-            'if(i>0)pdf.addPage(\'a4\',\'landscape\');' +
-            'pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.95),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
+            'var aw=pw-marginX*2;var ah=ph-marginY*2;' +
+            'var ratio=Math.min(aw/iw,ah/ih);' +
+            'var cx=marginX+(aw-iw*ratio)/2;var cy=marginY;' +
+            'if(i>0)pdf.addPage(\'a4\',\'portrait\');' +
+            'pdf.addImage(canvas.toDataURL(\'image/jpeg\',0.97),\'JPEG\',cx,cy,iw*ratio,ih*ratio);' +
             '}' +
-            'pdf.save(\'출석부_' + monthLabel + '.pdf\');' +
-            'btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';}<\/script>' +
+            'pdf.save(\'개별출석부_' + monthLabel + '.pdf\');' +
+            'btn.disabled=false;btn.textContent=\'📥 PDF 다운로드\';' +
+            '}<\/script>' +
             '</head><body>' +
-            '<div style="position:sticky;top:0;z-index:99;background:#fff;text-align:right;' +
-            'padding:6px 10mm;border-bottom:1px solid #eee">' +
-            '<span style="font-size:9pt;color:#888;margin-right:12px">' + attTitle + ' ' + monthLabel + '</span>' +
-            '<button id="dlBtn" onclick="downloadPDF()" style="padding:7px 18px;background:#1abc9c;' +
-            'color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer;margin-right:8px">📥 PDF 다운로드</button>' +
-            '<button onclick="window.close()" style="padding:7px 13px;background:#95a5a6;' +
-            'color:#fff;border:none;border-radius:6px;font-size:10.5pt;cursor:pointer">닫기</button></div>' +
-            printContent + '</body></html>'
+            '<div class="no-print" style="position:sticky;top:0;z-index:99;background:#fff;' +
+            'display:flex;align-items:center;justify-content:flex-end;gap:8px;' +
+            'padding:7px 14px;border-bottom:1px solid #ddd;box-shadow:0 1px 4px rgba(0,0,0,.1)">' +
+            '<span style="font-size:8.5pt;color:#888;margin-right:8px">' + attTitle + ' · ' + monthLabel + '</span>' +
+            '<button id="dlBtn" onclick="downloadPDF()" style="padding:7px 20px;background:#1abc9c;' +
+            'color:#fff;border:none;border-radius:6px;font-size:10pt;cursor:pointer;font-weight:600">' +
+            '📥 PDF 다운로드</button>' +
+            '<button onclick="window.print()" style="padding:7px 14px;background:#3498db;' +
+            'color:#fff;border:none;border-radius:6px;font-size:10pt;cursor:pointer">🖨 인쇄</button>' +
+            '<button onclick="window.close()" style="padding:7px 12px;background:#95a5a6;' +
+            'color:#fff;border:none;border-radius:6px;font-size:10pt;cursor:pointer">닫기</button>' +
+            '</div>' +
+            printContent +
+            '</body></html>'
         );
         win.document.close();
         win.focus();
