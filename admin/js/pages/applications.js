@@ -2619,23 +2619,22 @@ ${(() => {
         }
 
         // ── 그룹화: 요일셋+시간대가 같으면 프로그램명이 달라도 통합 ──────
-        // 예) '월&수 6:1 그룹수업(6.8 오픈)' + '월&수 6:1 그룹수업' → 동일 그룹
-        // 요일 추출 불가 시 program_name을 키로 fallback
-        const _attGroupKey = (pname, time) => {
+        // 핵심: 요일 추출 성공 시 프로그램명 무관하게 같은 키로 병합
+        // → (정규 24회반) 월&수 ... 와 (정규 8회반) 월&수 ... 가 같은 시간대면 하나의 섹션
+        const _attSlotKey = (pname, t) => {
             const dows = applications._parseProgramDows(pname || '');
-            const dowKey = dows.length ? dows.slice().sort((a,b)=>a-b).join(',') : ('p:' + (pname||'미지정'));
-            return dowKey + '__' + (time||'미지정');
+            if (dows.length) return dows.slice().sort((a,b)=>a-b).join(',') + '__' + (t||'');
+            return 'p:' + (pname||'미지정') + '__' + (t||'');
         };
-        // 그룹 대표 라벨: 같은 그룹 내 program_name 중 가장 짧은 것 사용
-        const _attGroupLabel = (existing, newName) => {
+        const _attShortLabel = (existing, newName) => {
             if (!existing) return newName || '프로그램 미지정';
             return (newName||'').length < existing.length ? (newName||'') : existing;
         };
         const groups = {};
         filtered.forEach(a => {
-            const key = _attGroupKey(a.program_name, a.preferred_time);
+            const key = _attSlotKey(a.program_name, a.preferred_time);
             if (!groups[key]) groups[key] = { program: a.program_name||'프로그램 미지정', time: a.preferred_time||'시간 미지정', members: [] };
-            else groups[key].program = _attGroupLabel(groups[key].program, a.program_name);
+            else groups[key].program = _attShortLabel(groups[key].program, a.program_name);
             groups[key].members.push(a);
         });
 
@@ -2709,39 +2708,60 @@ ${(() => {
 
         const monthLabel = calYr + '년 ' + calMo + '월';
 
-        // ── 그룹화 헬퍼 (요일셋+시간 → 프로그램명 달라도 통합) ────────────
-        const _pdfGroupKey = (pname, t) => {
+        // ── 그룹화 헬퍼 ─────────────────────────────────────────────────────
+        // 핵심 원칙: 프로그램명이 달라도(24회반/8회반 등) 같은 요일셋+시간대이면
+        // 무조건 하나의 섹션으로 합침.
+        // 키 = 요일셋(정렬) + '__' + 시간대
+        //   - 요일 추출 성공: '1,3__09:00'
+        //   - 요일 추출 실패: preferred_time + program_name 모두 같을 때만 통합
+        const _slotKey = (pname, t) => {
             const dows = applications._parseProgramDows(pname || '');
-            const dowKey = dows.length ? dows.slice().sort((a,b)=>a-b).join(',') : ('p:' + (pname||''));
-            return dowKey + '__' + (t||'');
+            // 요일 추출 성공 → 요일셋+시간대만으로 키 구성 (프로그램명 무관)
+            if (dows.length) return dows.slice().sort((a,b)=>a-b).join(',') + '__' + (t||'');
+            // 요일 추출 실패 → 시간대+프로그램명으로 fallback
+            return 'p:' + (pname||'') + '__' + (t||'');
         };
-        const _pdfGroupLabel = (existing, newName) => {
+        // 대표 프로그램명: 더 짧은(간결한) 쪽 채택
+        const _shortLabel = (existing, newName) => {
             if (!existing) return newName || '프로그램 미지정';
             return (newName||'').length < existing.length ? (newName||'') : existing;
         };
 
-        // ── 1단계: 시간대별 세부 그룹화 ────────────────────────────────────
-        const timeGroups = {};
+        // ── 1단계: 요일셋+시간대 단위로 flat 그룹화 ────────────────────────
+        // 24회반·8회반 등 프로그램명이 달라도 동일 요일+시간이면 같은 슬롯으로 병합
+        const slotMap = {};   // key → { dowKey, time, program, members[] }
         filtered.forEach(a => {
-            const key = _pdfGroupKey(a.program_name, a.preferred_time);
-            if (!timeGroups[key]) timeGroups[key] = { program: a.program_name||'프로그램 미지정', time: a.preferred_time||'시간 미지정', members: [] };
-            else timeGroups[key].program = _pdfGroupLabel(timeGroups[key].program, a.program_name);
-            timeGroups[key].members.push(a);
+            const key = _slotKey(a.program_name, a.preferred_time);
+            const dows = applications._parseProgramDows(a.program_name || '');
+            const dowKey = dows.length ? dows.slice().sort((a2,b)=>a2-b).join(',') : '';
+            if (!slotMap[key]) {
+                slotMap[key] = {
+                    dowKey,
+                    time:    a.preferred_time || '시간 미지정',
+                    program: a.program_name   || '프로그램 미지정',
+                    members: []
+                };
+            } else {
+                // 대표 프로그램명 갱신 (더 짧은 것 채택)
+                slotMap[key].program = _shortLabel(slotMap[key].program, a.program_name);
+            }
+            slotMap[key].members.push(a);
         });
 
-        // ── 2단계: 요일셋 기준 상위 프로그램 그룹화 ────────────────────────
+        // ── 2단계: 요일셋 기준 상위 그룹화 (같은 요일 → 날짜 열 공유) ──────
+        // slotMap 엔트리 → progGroups: { dowKey, program, timeSlots[] }
         const progGroups = {};
-        Object.values(timeGroups).forEach(tg => {
-            const dows = applications._parseProgramDows(tg.program || '');
-            const pgKey = dows.length ? dows.slice().sort((a,b)=>a-b).join(',') : ('p:' + tg.program);
-            if (!progGroups[pgKey]) progGroups[pgKey] = { program: tg.program, timeSlots: [] };
-            else progGroups[pgKey].program = _pdfGroupLabel(progGroups[pgKey].program, tg.program);
-            progGroups[pgKey].timeSlots.push(tg);
+        Object.values(slotMap).forEach(slot => {
+            const pgKey = slot.dowKey || ('p:' + slot.program);
+            if (!progGroups[pgKey]) progGroups[pgKey] = { dowKey: slot.dowKey, program: slot.program, timeSlots: [] };
+            else progGroups[pgKey].program = _shortLabel(progGroups[pgKey].program, slot.program);
+            progGroups[pgKey].timeSlots.push(slot);
         });
 
-        // ── 그룹별 수업 날짜 목록 계산 ──────────────────────────────────────
-        const getGroupDates = (programName) => {
-            const dows = applications._parseProgramDows(programName);
+        // ── 그룹별 수업 날짜 목록 계산 (dowKey 직접 활용) ──────────────────
+        // dowKey 예: '1,3' = 월수, '2,4' = 화목
+        const getGroupDates = (dowKey) => {
+            const dows = dowKey ? dowKey.split(',').map(Number).filter(n => !isNaN(n)) : [];
             if (!dows.length) return manualDates.length ? manualDates : null;
             if (manualDates.length) {
                 const f2 = manualDates.filter(k => {
@@ -2767,15 +2787,16 @@ ${(() => {
             return String(a.ho||'').replace(/호$/,'').localeCompare(String(b.ho||'').replace(/호$/,''),'ko',{numeric:true});
         });
 
-        // ── 프로그램 정렬 (첫 요일 우선순위) ────────────────────────────────
-        const getDowPriority = (programName) => {
-            const dows = applications._parseProgramDows(programName);
+        // ── 프로그램 정렬 (첫 요일 우선순위, dowKey 직접 활용) ───────────────
+        const getDowPriority = (dowKey) => {
+            if (!dowKey) return 99;
+            const dows = dowKey.split(',').map(Number).filter(n => !isNaN(n));
             if (!dows.length) return 99;
             const first = Math.min(...dows);
             return first === 0 ? 98 : first;
         };
         const sortedProgGroups = Object.values(progGroups).sort((a, b) =>
-            getDowPriority(a.program) - getDowPriority(b.program)
+            getDowPriority(a.dowKey) - getDowPriority(b.dowKey)
         );
         sortedProgGroups.forEach(pg => {
             pg.timeSlots.sort((a, b) => (a.time||'').localeCompare(b.time||'', 'ko'));
@@ -2797,7 +2818,7 @@ ${(() => {
         let printContent = '';
 
         sortedProgGroups.forEach(pg => {
-            const groupRaw = getGroupDates(pg.program) || [];
+            const groupRaw = getGroupDates(pg.dowKey) || [];
             // 날짜 컬럼: 선택된 날짜 기준, 없으면 회차 번호 fallback
             const dateCols = groupRaw.length
                 ? groupRaw.map(k => applications._dateLabel(k))
@@ -2897,9 +2918,10 @@ ${(() => {
                         '</div></div>' +
 
                         // 프로그램·시간대 정보 바
+                        // 같은 요일+시간대에 여러 프로그램이 합쳐진 경우 ts.program 사용
                         '<div style="display:flex;justify-content:space-between;align-items:center;' +
                         'border-top:2px solid #333;border-bottom:1px solid #999;padding:3px 4px;margin-bottom:0">' +
-                        '<span style="font-size:9pt;font-weight:bold">' + pg.program + pageLabel + '</span>' +
+                        '<span style="font-size:9pt;font-weight:bold">' + (ts.program || pg.program) + pageLabel + '</span>' +
                         '<span style="font-size:8.5pt;font-weight:600;color:#333">' + ts.time + '</span>' +
                         '<span style="font-size:8pt;color:#555">총 <strong>' + ts.members.length + '</strong>명 · 월 <strong>' + dateCount + '</strong>회</span>' +
                         '</div>' +
