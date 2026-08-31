@@ -34,11 +34,14 @@ async function getComplexSmsConfig(sb, complexId) {
     };
 }
 
-// ── 헬퍼: 만료일에서 1개월 연장 ───────────────────────────────────────────────
-function addOneMonth(dateStr) {
+// ── 헬퍼: 만료일에서 duration_days 일수만큼 연장 (미설정 시 기본 35일) ───────
+function addDurationDays(dateStr, durationDays) {
     if (!dateStr) return null;
+    const days = (durationDays && Number.isInteger(durationDays) && durationDays > 0)
+        ? durationDays
+        : 35; // 2026-07 정책 기본값
     const d = new Date(dateStr);
-    d.setMonth(d.getMonth() + 1);
+    d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
 }
 
@@ -142,7 +145,19 @@ router.post('/api/renewal/confirm', async (req, res) => {
         if (error || !app) return res.status(404).json({ success: false, error: '신청을 찾을 수 없습니다' });
         if (!app.expiry_date) return res.status(400).json({ success: false, error: '만료일이 설정되지 않았습니다' });
 
-        const newExpiryDate = addOneMonth(app.expiry_date);
+        // 프로그램 duration_days 조회 (없으면 기본 35일 적용)
+        let durationDays = 35;
+        if (app.program_name && app.complex_id) {
+            const { data: prog } = await sb
+                .from('programs')
+                .select('duration_days')
+                .eq('name', app.program_name)
+                .eq('complex_id', app.complex_id)
+                .maybeSingle();
+            if (prog?.duration_days) durationDays = prog.duration_days;
+        }
+
+        const newExpiryDate = addDurationDays(app.expiry_date, durationDays);
 
         const { error: updateErr } = await sb.from('applications').update({
             expiry_date: newExpiryDate,
@@ -166,7 +181,7 @@ router.post('/api/renewal/confirm', async (req, res) => {
             newExpiryDate, sender: smsConfig.sender, smsEnabled: smsConfig.smsEnabled,
         });
 
-        res.json({ success: true, new_expiry_date: newExpiryDate, sms: smsResult });
+        res.json({ success: true, new_expiry_date: newExpiryDate, duration_days: durationDays, sms: smsResult });
     } catch (e) {
         console.error('[renewal] POST /confirm 오류:', e.message);
         res.status(500).json({ success: false, error: e.message });
