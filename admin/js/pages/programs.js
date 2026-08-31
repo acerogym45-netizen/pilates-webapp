@@ -127,9 +127,9 @@ const programs = {
             <div class="form-group">
                 <label>수강 기간 <small style="font-weight:normal;color:#888">(일수, 비우면 자동계산 미사용)</small></label>
                 <div style="display:flex;align-items:center;gap:8px">
-                    <input type="number" id="pDurationDays" value="${p?.duration_days||''}" min="1" max="365" placeholder="예: 28" style="width:100px">
+                    <input type="number" id="pDurationDays" value="${p?.duration_days||''}" min="1" max="365" placeholder="예: 35" style="width:100px">
                     <span style="font-size:.82rem;color:#888">일</span>
-                    <span style="font-size:.78rem;color:#aaa;margin-left:4px">주1회×4주=28일 / 주2회×4주=28일 / 주2회×8주=56일 / 주2회×12주=84일</span>
+                    <span style="font-size:.78rem;color:#aaa;margin-left:4px">주1회×5주=35일 / 주2회×4~5주=35일 / 주2회×8주=56일 / 주2회×12주=84일</span>
                 </div>
             </div>
             <div class="form-group"><label>설명</label><textarea id="pDesc" rows="3">${p ? escHtml(p.description||'') : ''}</textarea></div>
