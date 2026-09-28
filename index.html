@@ -575,8 +575,8 @@
                 </button>
             </div>
 
-            <!-- 3행: 내 신청 조회·취소·변경 / 해지 신청 -->
-            <div class="quick-row quick-row--two">
+            <!-- 3행: 내 신청 조회·취소·변경 / 수업 미리보기 / 해지 신청 -->
+            <div class="quick-row quick-row--three" id="quickRowAccent">
                 <button class="quick-btn quick-btn--accent" id="quickBtnManage" onclick="showMyManageModal()">
                     <i class="fas fa-list-check"></i>
                     <span>내 신청 조회·취소·변경</span>
@@ -586,6 +586,10 @@
                     <i class="fas fa-won-sign"></i>
                     <span>환불 신청</span>
                 </button> -->
+                <button class="quick-btn quick-btn--preview" id="quickBtnPreview" onclick="showClassPreviewModal()">
+                    <i class="fas fa-photo-film"></i>
+                    <span>수업 미리보기</span>
+                </button>
                 <button class="quick-btn quick-btn--accent" id="quickBtnCancelTab" onclick="showCancellationForm()">
                     <i class="fas fa-file-signature"></i>
                     <span>해지 신청</span>
@@ -1666,6 +1670,45 @@
             <div style="padding:12px 18px;display:flex;gap:8px;border-top:1px solid #f0f0f0">
                 <button onclick="closeRefundRequestModal()" style="flex:1;padding:10px;border:1px solid #d1d5db;border-radius:7px;background:#fff;font-size:.9rem;cursor:pointer;color:#555">취소</button>
                 <button onclick="submitRefundRequest()" style="flex:2;padding:10px;border:none;border-radius:7px;background:#e53e3e;color:#fff;font-size:.9rem;font-weight:700;cursor:pointer"><i class="fas fa-paper-plane"></i> 환불 신청 접수</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         수업 미리보기 모달
+    ══════════════════════════════════════════════════════ -->
+    <div id="classPreviewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);
+         z-index:9999;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto">
+        <div style="background:#fff;border-radius:16px;width:100%;max-width:480px;overflow:hidden;
+                    box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto">
+            <!-- 헤더 -->
+            <div id="classPreviewModalHeader"
+                 style="background:linear-gradient(135deg,var(--brand,#5b6cf6),var(--brand-d,#4857e8));
+                        color:#fff;padding:16px 18px;
+                        display:flex;align-items:center;justify-content:space-between">
+                <span style="font-weight:700;font-size:1rem">
+                    <i class="fas fa-photo-film"></i> 수업 미리보기
+                </span>
+                <button onclick="closeClassPreviewModal()"
+                        style="background:none;border:none;color:#fff;font-size:1.2rem;cursor:pointer">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <!-- 본문 -->
+            <div id="classPreviewBody" style="padding:0 0 8px">
+                <!-- JS로 채워짐 -->
+                <div style="text-align:center;padding:40px 20px;color:#9ca3af">
+                    <i class="fas fa-spinner fa-spin" style="font-size:1.5rem"></i>
+                    <p style="margin-top:8px;font-size:.85rem">수업 자료를 불러오는 중...</p>
+                </div>
+            </div>
+            <!-- 하단 -->
+            <div style="padding:10px 18px 16px;border-top:1px solid #f0f0f0">
+                <button onclick="closeClassPreviewModal()"
+                        style="width:100%;padding:11px;border:1px solid #e5e7eb;border-radius:10px;
+                               background:#f9fafb;font-size:.9rem;font-weight:600;cursor:pointer;color:#374151">
+                    닫기
+                </button>
             </div>
         </div>
     </div>

@@ -209,6 +209,17 @@ button { font-family: inherit; cursor: pointer; }
     background: #e0dbff;
     color: #3730a3;
 }
+/* 수업 미리보기 버튼 — 초록 계열 */
+.quick-btn--preview {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+    border-radius: 10px;
+}
+.quick-btn--preview:hover {
+    background: #d1fae5;
+    color: #047857;
+}
 
 /* ════════════════════════════════════════════════
    카드 섹션

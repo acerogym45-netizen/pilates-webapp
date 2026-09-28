@@ -705,4 +705,42 @@ router.post('/schedule-mode', async (req, res) => {
     }
 });
 
+// GET /api/complexes/:id/class-preview
+// complexes 테이블의 class_preview_images JSONB 컬럼 반환
+router.get('/:id/class-preview', async (req, res) => {
+    try {
+        const sb = getSupabase();
+        const { data, error } = await sb
+            .from('complexes')
+            .select('class_preview_images, class_preview_intro')
+            .eq('id', req.params.id)
+            .single();
+        if (error) throw error;
+        const images = Array.isArray(data?.class_preview_images) ? data.class_preview_images : [];
+        res.json({ success: true, data: images, intro: data?.class_preview_intro || '' });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// PUT /api/complexes/:id/class-preview
+// body: { images: [{url, caption}], intro: string }
+router.put('/:id/class-preview', async (req, res) => {
+    try {
+        const sb = getSupabase();
+        const { images, intro } = req.body;
+        const patch = {};
+        if (Array.isArray(images)) patch.class_preview_images = images.slice(0, 20);
+        if (intro !== undefined) patch.class_preview_intro = intro || null;
+        if (Object.keys(patch).length === 0) {
+            return res.status(400).json({ success: false, error: 'images 또는 intro 중 하나 이상 필요합니다' });
+        }
+        const { error } = await sb.from('complexes').update(patch).eq('id', req.params.id);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 module.exports = router;
