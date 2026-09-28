@@ -5970,3 +5970,132 @@ function initHotelI18n() {
     _applyHotelI18n();
     _updateLangSwitcher(_hotelLang);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   수업 미리보기 모달
+   ─ complexes 테이블의 class_preview_images JSONB 컬럼에서 URL 배열 로드
+   ─ 미설정 시 안내 문구 표시
+   ═══════════════════════════════════════════════════════════════════════════ */
+async function showClassPreviewModal() {
+    const modal = document.getElementById('classPreviewModal');
+    const body  = document.getElementById('classPreviewBody');
+    if (!modal || !body) return;
+
+    // 모달 열기 (로딩 상태)
+    body.innerHTML = `
+        <div style="text-align:center;padding:40px 20px;color:#9ca3af">
+            <i class="fas fa-spinner fa-spin" style="font-size:1.5rem"></i>
+            <p style="margin-top:8px;font-size:.85rem">수업 자료를 불러오는 중...</p>
+        </div>`;
+    modal.style.display = 'flex';
+
+    try {
+        // 현재 단지 코드 파악 (URL 파라미터 또는 complexContext)
+        const complexId = (typeof complexContext !== 'undefined' && complexContext.getComplex)
+            ? complexContext.getComplex()?.id
+            : null;
+
+        if (!complexId) throw new Error('단지 정보를 불러올 수 없습니다.');
+
+        // GET /api/complexes/:id/class-preview
+        const res  = await fetch(`/api/complexes/${complexId}/class-preview`);
+        const json = await res.json();
+
+        if (!json.success) throw new Error(json.error || '데이터 로드 실패');
+
+        const images = json.data || [];  // [{ url, caption }] 배열
+
+        if (images.length === 0) {
+            body.innerHTML = _classPreviewEmpty();
+            return;
+        }
+
+        body.innerHTML = _classPreviewContent(images, json.intro);
+
+    } catch (e) {
+        console.error('[classPreview]', e.message);
+        body.innerHTML = `
+            <div style="text-align:center;padding:32px 20px;color:#ef4444">
+                <i class="fas fa-exclamation-triangle" style="font-size:1.5rem"></i>
+                <p style="margin-top:8px;font-size:.85rem">${e.message}</p>
+            </div>`;
+    }
+}
+
+/** 미리보기 이미지가 없을 때 안내 */
+function _classPreviewEmpty() {
+    return `
+        <div style="text-align:center;padding:32px 20px 24px">
+            <div style="width:64px;height:64px;background:#f0fdf4;border-radius:50%;
+                        display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
+                <i class="fas fa-image" style="font-size:1.6rem;color:#6ee7b7"></i>
+            </div>
+            <p style="font-weight:700;color:#1f2937;margin-bottom:6px">수업 자료 준비 중</p>
+            <p style="font-size:.8rem;color:#9ca3af;line-height:1.6">
+                수업 미리보기 이미지가 아직 등록되지 않았습니다.<br>
+                곧 업데이트될 예정입니다.
+            </p>
+        </div>`;
+}
+
+/** 미리보기 이미지 갤러리 렌더링 */
+function _classPreviewContent(images, intro) {
+    const introHtml = intro
+        ? `<div style="padding:14px 18px 0;font-size:.83rem;color:#374151;line-height:1.6;
+                       background:#f9fafb;border-bottom:1px solid #f0f0f0">
+               <i class="fas fa-info-circle" style="color:var(--brand,#5b6cf6);margin-right:4px"></i>
+               ${intro}
+           </div>`
+        : '';
+
+    const galleryItems = images.map((img, idx) => {
+        const caption = img.caption
+            ? `<div style="padding:6px 12px 10px;font-size:.75rem;font-weight:600;
+                           color:#374151;background:#f9fafb;border-top:1px solid #f0f0f0">
+                   ${img.caption}
+               </div>`
+            : '';
+        return `
+            <div style="margin:0 0 2px;cursor:pointer" onclick="_togglePreviewExpand(this)">
+                <div style="position:relative;overflow:hidden;background:#f3f4f6">
+                    <img src="${img.url}"
+                         alt="${img.caption || '수업 사진 ' + (idx + 1)}"
+                         loading="lazy"
+                         style="width:100%;display:block;max-height:260px;object-fit:cover;
+                                transition:transform .3s ease"
+                         onerror="this.parentElement.parentElement.style.display='none'">
+                    <div style="position:absolute;bottom:6px;right:8px;
+                                background:rgba(0,0,0,.45);color:#fff;border-radius:6px;
+                                padding:2px 7px;font-size:.62rem">
+                        ${idx + 1} / ${images.length}
+                    </div>
+                </div>
+                ${caption}
+            </div>`;
+    }).join('');
+
+    return `
+        ${introHtml}
+        <div style="padding:12px 18px 4px;display:flex;align-items:center;gap:6px">
+            <span style="font-size:.75rem;font-weight:700;color:#6b7280">
+                <i class="fas fa-images"></i> 수업 사진 ${images.length}장
+            </span>
+            <span style="font-size:.7rem;color:#d1d5db">· 이미지를 탭하면 확대됩니다</span>
+        </div>
+        <div style="margin-top:6px">${galleryItems}</div>`;
+}
+
+/** 이미지 탭 시 확대/축소 토글 */
+function _togglePreviewExpand(wrapper) {
+    const img = wrapper.querySelector('img');
+    if (!img) return;
+    const isExpanded = img.style.maxHeight === 'none';
+    img.style.maxHeight  = isExpanded ? '260px' : 'none';
+    img.style.objectFit  = isExpanded ? 'cover'  : 'contain';
+    img.style.background = isExpanded ? ''       : '#111';
+}
+
+function closeClassPreviewModal() {
+    const modal = document.getElementById('classPreviewModal');
+    if (modal) modal.style.display = 'none';
+}
