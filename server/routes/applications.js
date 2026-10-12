@@ -131,12 +131,13 @@ router.get('/program-summary', async (req, res) => {
         if (!allIds.length && !allNames.length) return res.json({ success: true, data: [] });
 
         // 신청 데이터 조회 — 반드시 해당 단지(cxId)만
+        // expiry_date도 함께 조회하여 JS 집계 단계에서 만료 회원 제외
         let appsById = [], appsByName = [];
 
         if (allIds.length) {
             const { data, error: e1 } = await sb
                 .from('applications')
-                .select('id, program_id, program_name, preferred_time, status')
+                .select('id, program_id, program_name, preferred_time, status, expiry_date')
                 .in('program_id', allIds)
                 .eq('complex_id', cxId);     // ← 단지 필터 필수
             if (e1) throw sbErr(e1, 'program-summary: applications by id');
@@ -147,7 +148,7 @@ router.get('/program-summary', async (req, res) => {
             // program_id가 NULL인 신청(구 데이터)은 단지+프로그램명으로 매칭
             const { data, error: e2 } = await sb
                 .from('applications')
-                .select('id, program_id, program_name, preferred_time, status')
+                .select('id, program_id, program_name, preferred_time, status, expiry_date')
                 .in('program_name', allNames)
                 .is('program_id', null)
                 .eq('complex_id', cxId);     // ← 단지 필터 필수
@@ -158,6 +159,15 @@ router.get('/program-summary', async (req, res) => {
         // 두 쿼리 결과 병합 (id 기준 중복 제거)
         const seen = new Set(appsById.map(a => a.id));
         const apps = [...appsById, ...appsByName.filter(a => !seen.has(a.id))];
+
+        // ★ 만료 회원 제외 헬퍼: expiry_date가 오늘 이전이면 approved 카운트에서 제외
+        // status='approved'이지만 유효기간이 지난 경우를 정원 계산에서 걸러냄
+        const _todaySummary = new Date().toISOString().slice(0, 10);
+        function isValidApproved(a) {
+            if (a.status !== 'approved') return false;
+            if (!a.expiry_date) return true;           // NULL = 무기한
+            return a.expiry_date >= _todaySummary;     // 오늘 이상이면 유효
+        }
 
         // program_id → 프로그램명 역방향 맵 구성 (교차 검증용)
         const idToName = {};
@@ -187,7 +197,8 @@ router.get('/program-summary', async (req, res) => {
                 return grp.ids.includes(a.program_id);
             });
 
-            const approved  = progApps.filter(a => a.status === 'approved');
+            // ★ 만료 회원 제외: expiry_date가 오늘 이전인 approved는 정원에서 제외
+            const approved  = progApps.filter(a => isValidApproved(a));
             const waiting   = progApps.filter(a => a.status === 'waiting');
             const cancelled = progApps.filter(a => a.status === 'cancelled');
 
@@ -881,12 +892,14 @@ router.post('/', async (req, res) => {
                 // ── 정원 카운트 — share_timeslot_capacity 설정에 따라 분기 ──
                 // ON : 단지 + 동일 days + 시간대 합산 (같은 요일 프로모션 자리 공유)
                 // OFF: 프로그램별 독립 카운트 (기존 방식)
+                const _todayForCapacity = new Date().toISOString().slice(0, 10);
                 let approvedCntQuery = sb
                     .from('applications')
                     .select('*', { count: 'exact', head: true })
                     .eq('complex_id', program.complex_id)
                     .eq('preferred_time', preferred_time)
-                    .eq('status', 'approved');
+                    .eq('status', 'approved')
+                    .or(`expiry_date.is.null,expiry_date.gte.${_todayForCapacity}`);
                 if (complexSettings.share_timeslot_capacity) {
                     // ON: 같은 단지 + 같은 days(요일)의 프로그램 ID 목록으로 필터
                     if (program.days) {
@@ -1563,11 +1576,14 @@ router.get('/:id/available-slots', async (req, res) => {
         }
 
         // 모든 프로그램의 시간대별 승인 인원 조회 (program_id + program_name 모두 가져옴)
+        // expiry_date 필터: NULL(무기한) 또는 오늘 이상인 유효 회원만 카운트
+        const _todayForSlots = new Date().toISOString().slice(0, 10);
         const { data: allApproved } = await sb
             .from('applications')
             .select('program_id, program_name, preferred_time')
             .eq('complex_id', app.complex_id)
-            .eq('status', 'approved');
+            .eq('status', 'approved')
+            .or(`expiry_date.is.null,expiry_date.gte.${_todayForSlots}`);
 
         // program name → id 역매핑 (null program_id 레코드를 name으로 연결하기 위함)
         const nameToId = {};
@@ -1747,6 +1763,8 @@ router.post('/:id/change-time', async (req, res) => {
         // ★ 핵심 규칙: is_active=true인 프로그램만 합산 (비활성 프로그램의 이전 승인자 제외)
         // ★ shareCapacity=OFF 시 .or() PostgREST 파싱 문제(특수문자/공백 포함 프로그램명) 회피
         //   → program_id 기준 count + program_id=null 기준 count 분리 후 합산
+        // ★ expiry_date 필터: NULL(무기한) 또는 오늘 이상인 유효 회원만 카운트
+        const _todayForChange = new Date().toISOString().slice(0, 10);
         let approvedCnt = 0;
 
         if (shareCapacity && targetProgram.days) {
@@ -1767,6 +1785,7 @@ router.post('/:id/change-time', async (req, res) => {
                     .eq('complex_id', targetProgram.complex_id)
                     .eq('preferred_time', new_preferred_time)
                     .eq('status', 'approved')
+                    .or(`expiry_date.is.null,expiry_date.gte.${_todayForChange}`)
                     .in('program_id', changeSameDayIds);
                 approvedCnt += c1 || 0;
 
@@ -1779,6 +1798,7 @@ router.post('/:id/change-time', async (req, res) => {
                         .eq('complex_id', targetProgram.complex_id)
                         .eq('preferred_time', new_preferred_time)
                         .eq('status', 'approved')
+                        .or(`expiry_date.is.null,expiry_date.gte.${_todayForChange}`)
                         .is('program_id', null)
                         .in('program_name', changeSameDayNames);
                     approvedCnt += c2 || 0;
@@ -1794,6 +1814,7 @@ router.post('/:id/change-time', async (req, res) => {
                 .eq('complex_id', targetProgram.complex_id)
                 .eq('preferred_time', new_preferred_time)
                 .eq('status', 'approved')
+                .or(`expiry_date.is.null,expiry_date.gte.${_todayForChange}`)
                 .eq('program_id', targetProgramId);
             approvedCnt += (c1 || 0);
 
@@ -1804,6 +1825,7 @@ router.post('/:id/change-time', async (req, res) => {
                 .eq('complex_id', targetProgram.complex_id)
                 .eq('preferred_time', new_preferred_time)
                 .eq('status', 'approved')
+                .or(`expiry_date.is.null,expiry_date.gte.${_todayForChange}`)
                 .is('program_id', null)
                 .eq('program_name', targetProgram.name);
             approvedCnt += (c2 || 0);
@@ -2083,12 +2105,15 @@ async function promoteWaitingApplicant(sb, programId, preferredTime) {
     }
 
     // 승인 카운트 — 설정에 따라 분기
+    // expiry_date 필터: NULL(무기한) 또는 오늘 이상인 유효 회원만 카운트
+    const _todayForPromo = new Date().toISOString().slice(0, 10);
     let approvedQuery = sb
         .from('applications')
         .select('*', { count: 'exact', head: true })
         .eq('complex_id', program.complex_id)
         .eq('preferred_time', preferredTime)
-        .eq('status', 'approved');
+        .eq('status', 'approved')
+        .or(`expiry_date.is.null,expiry_date.gte.${_todayForPromo}`);
     if (shareCapacity) {
         // ON: 같은 days 프로그램끼리만 합산
         if (sameDayIdsForPromo && sameDayIdsForPromo.length > 0) {
