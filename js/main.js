@@ -1015,7 +1015,7 @@ async function loadTimeSlotStatus() {
             }); // Only group lessons (excluding makeup/personal)
         
         // Load approved applications
-        const response = await fetch(`/api/applications?complexCode=${complexCode}&status=approved&limit=1000`);
+        const response = await fetch(`/api/applications?complexCode=${complexCode}&status=approved&activeOnly=true&limit=1000`);
         const result = await response.json();
         const contracts = result.data || [];
         
@@ -3445,7 +3445,7 @@ async function loadPrograms() {
         // 프로그램 목록 + 승인된 신청 수 + 신청기간 설정(apply-settings) 병렬 조회
         const fetchPromises = [
             fetch(`/api/programs?complexCode=${complexCode}&includeInactive=true`).then(r => r.json()),
-            fetch(`/api/applications?complexCode=${complexCode}&status=approved&limit=1000`).then(r => r.json()),
+            fetch(`/api/applications?complexCode=${complexCode}&status=approved&activeOnly=true&limit=1000`).then(r => r.json()),
         ];
         if (complexId) {
             fetchPromises.push(
