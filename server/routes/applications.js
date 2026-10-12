@@ -26,6 +26,14 @@ router.get('/', async (req, res) => {
         if (complexId)   query = query.eq('complex_id', complexId);
         if (complexCode) query = query.eq('complexes.code', complexCode);
         if (status)      query = query.eq('status', status);
+        // ★ activeOnly=true: 만료 회원 제외 (입주민 접수처 인원 카운팅용)
+        // expiry_date가 오늘 이전인 레코드를 제외하여 유효 회원만 반환
+        // NULL(무기한) 또는 오늘 이상인 경우만 포함
+        // ※ 관리자 목록은 activeOnly 없이 조회하여 만료 회원도 표시 가능
+        if (req.query.activeOnly === 'true') {
+            const _today = new Date().toISOString().slice(0, 10);
+            query = query.or(`expiry_date.is.null,expiry_date.gte.${_today}`);
+        }
         if (programId)   query = query.eq('program_id', programId);
         if (dong)        query = query.ilike('dong', `%${dong}%`);
         if (ho)          query = query.ilike('ho', `%${ho}%`);
