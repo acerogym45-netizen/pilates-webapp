@@ -640,13 +640,18 @@ router.get('/:id/capacity', async (req, res) => {
             sameDayProgramIds = (sameDayProgs || []).map(p => p.id);
         }
 
+        // 오늘 날짜 (YYYY-MM-DD) — 만료된 회원 제외 기준
+        const todayStr = new Date().toISOString().slice(0, 10);
+
         const capacityData = await Promise.all(timeSlots.map(async (slot) => {
             // share_timeslot_capacity ON: 같은 단지+같은 days+시간대 합산 / OFF: 프로그램별 독립
+            // expiry_date 필터: NULL(무기한) 또는 오늘 이상인 유효 회원만 카운트
             let approvedQ = sb.from('applications')
                 .select('*', { count: 'exact', head: true })
                 .eq('complex_id', complexId)
                 .eq('preferred_time', slot)
-                .eq('status', 'approved');
+                .eq('status', 'approved')
+                .or(`expiry_date.is.null,expiry_date.gte.${todayStr}`);
             let waitingQ = sb.from('applications')
                 .select('*', { count: 'exact', head: true })
                 .eq('complex_id', complexId)
