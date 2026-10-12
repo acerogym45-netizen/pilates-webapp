@@ -1349,10 +1349,6 @@ function updateTimeSlotOptions() {
 
     let optionsHTML = '<option value="">선택하세요</option>';
 
-    // display_approved_count 오버라이드 맵 { "HH:MM": N } — 타임별 독립
-    const overrideMap = (window.programDisplayOverride && window.programDisplayOverride[selectedProgram])
-        || null;
-
     // ── 대기 접수 가능 여부 — 이 단지에서만 적용 ──────────────────────────
     // complexes.waiting_enabled=true 인 단지: 정원 마감 슬롯도 '🟡 대기접수'로 선택 가능
     // false/미설정 단지(청주SK·라마다호텔 등): 기존과 동일하게 disabled
@@ -1360,13 +1356,11 @@ function updateTimeSlotOptions() {
 
     availableTimeSlots.forEach(timeCode => {
         // slots 키가 HH:MM 이므로 바로 조회
+        // ★ display_approved_count 오버라이드 제거:
+        //   만료 회원 포함된 구(舊) 오버라이드 값이 남아있으면 실제보다 높은 숫자가 표시됨
+        //   입주민 드롭다운은 항상 activeOnly=true로 조회한 realCount만 표시
         const realCount = (slots && slots[timeCode] != null) ? slots[timeCode] : 0;
-        // display override: 값이 존재하고 1 이상인 경우만 표시에 사용
-        // → 0이 저장된 경우(초기화 직후 잔여값)는 실제값을 사용하여 입주민 페이지 즉시 반영
-        const overrideVal = overrideMap ? overrideMap[timeCode] : undefined;
-        const displayCount = (overrideVal != null && overrideVal > 0)
-            ? overrideVal
-            : realCount;
+        const displayCount = realCount;  // 실제 유효 회원 수만 표시
         const isFull = realCount >= maxCapacity;
         const isAlmostFull = !isFull && realCount >= (maxCapacity - 1);
         const timeDisplay = timeDisplayMap[timeCode] || timeCode;
