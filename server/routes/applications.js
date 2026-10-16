@@ -10,7 +10,7 @@ const crypto  = require('crypto');
 const router  = express.Router();
 const { getSupabase, sbErr } = require('../db-supabase');
 const { triggerWaitingQueue, checkApplyTypeSetting } = require('../utils/waiting');
-const { sendLessonRequestSms, sendPaymentPendingSms, sendApprovalConfirmedSms, sendMakeupConfirmedSms } = require('../utils/sms');
+const { sendLessonRequestSms, sendPaymentPendingSms, sendApprovalConfirmedSms, sendMakeupConfirmedSms, sendRenewalConfirmedSms } = require('../utils/sms');
 
 // ── 목록 조회 ────────────────────────────────────────────────
 router.get('/', async (req, res) => {
@@ -668,13 +668,15 @@ router.post('/', async (req, res) => {
                     // 정규 수업을 신청하는 경우:
                     //   - 기존 신청이 무료체험뿐이면 허용 → 표준 체크 스킵
                     //   - 기존에 정규 수업이 있으면 차단
+                    const _todayForJh = new Date().toISOString().slice(0, 10);
                     const { data: existForJh } = await sb
                         .from('applications')
-                        .select('id, program_name, status')
+                        .select('id, program_name, status, expiry_date')
                         .eq('complex_id', complex_id)
                         .eq('dong', dong).eq('ho', ho)
                         .eq('name', name).eq('phone', phone)
-                        .in('status', ['approved', 'waiting']);
+                        .in('status', ['approved', 'waiting'])
+                        .or(`expiry_date.is.null,expiry_date.gte.${_todayForJh}`);  // 만료 회원 제외
 
                     // 신청 프로그램 카테고리 판별
                     let tType = 'group';
@@ -740,15 +742,18 @@ router.post('/', async (req, res) => {
                 }
 
                 // 동 + 호 + 이름 + 전화번호가 모두 일치하는 활성 신청 전체 조회
+                // (만료된 레코드는 제외 — 재등록 신청 차단 방지)
+                const _todayForDup = new Date().toISOString().slice(0, 10);
                 const { data: existingApps } = await sb
                     .from('applications')
-                    .select('id, program_name, program_id, status')
+                    .select('id, program_name, program_id, status, expiry_date')
                     .eq('complex_id', complex_id)
                     .eq('dong', dong)
                     .eq('ho', ho)
                     .eq('name', name)
                     .eq('phone', phone)
-                    .in('status', ['approved', 'waiting']);
+                    .in('status', ['approved', 'waiting'])
+                    .or(`expiry_date.is.null,expiry_date.gte.${_todayForDup}`);  // 만료 회원 제외
 
                 if (existingApps && existingApps.length > 0) {
                     // 기존 신청들의 타입 분류 (이름 기반 heuristic)
@@ -1291,7 +1296,58 @@ router.put('/:id', async (req, res) => {
             }
         }
 
-        res.json({ success: true, data: updated, approvalSmsSent });
+        // ── 관리자 수동 만료일 변경 시 연장 완료 SMS 발송 ──────────────────────
+        // 조건: ① status 가 approved 인 상태 유지  AND
+        //       ② expiry_date 가 실제로 달라졌음  AND
+        //       ③ 새 expiry_date 가 오늘 이후 (과거로의 수정은 SMS 불필요)
+        //       ④ 승인 전환 SMS 가 이미 발송되지 않은 경우 (중복 방지)
+        // 시나리오: 연장 TM 응답 기간이 지난 후 관리자가 직접 만료일을 늘려줄 때
+        let renewalSmsSent = false;
+        // 승인 상태 유지 중 만료일만 변경된 경우: status 가 undefined(변경없음) 이거나 여전히 'approved'
+        if (!approvalSmsSent && (status === undefined || status === 'approved') && current.status === 'approved') {
+            const newExpiry = updated.expiry_date;
+            const oldExpiry = current.expiry_date;
+            const todayStr  = new Date().toISOString().slice(0, 10);
+            if (
+                expiry_date !== undefined &&          // 이번 요청에 expiry_date 포함
+                newExpiry &&                          // 새 만료일이 있음
+                newExpiry !== oldExpiry &&            // 실제로 변경됨
+                newExpiry > todayStr &&               // 새 만료일이 미래
+                updated.status === 'approved'         // 승인 상태인 회원
+            ) {
+                try {
+                    const { data: cxInfo } = await sb
+                        .from('complexes')
+                        .select('name, sms_sender, sms_enabled')
+                        .eq('id', current.complex_id)
+                        .single();
+
+                    const smsResult = await sendRenewalConfirmedSms({
+                        phone:       current.phone,
+                        name:        current.name,
+                        complexName: cxInfo?.name       || '',
+                        programName: updated.program_name || current.program_name || '',
+                        newExpiryDate: newExpiry,
+                        sender:      cxInfo?.sms_sender || null,
+                        smsEnabled:  cxInfo?.sms_enabled != null ? Boolean(cxInfo.sms_enabled) : null,
+                    });
+                    console.log('[수동연장] 연장완료 SMS 발송 결과:', smsResult);
+                    renewalSmsSent = smsResult.success;
+
+                    // renewal_status·token 초기화 (TM 흐름 리셋)
+                    await sb.from('applications').update({
+                        renewal_status:      null,
+                        renewal_token:       null,
+                        renewal_deadline:    null,
+                        renewal_notified_at: null,
+                    }).eq('id', req.params.id);
+                } catch (smsErr) {
+                    console.error('[수동연장] SMS 발송 중 오류 (저장은 정상 완료):', smsErr.message);
+                }
+            }
+        }
+
+        res.json({ success: true, data: updated, approvalSmsSent, renewalSmsSent });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
     }
