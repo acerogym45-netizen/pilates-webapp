@@ -884,7 +884,11 @@ const applications = {
                             : a.renewal_status === 'declined'
                             ? `<span style="color:#dc2626;font-weight:600">✖ 연장 비희망</span>`
                             : a.renewal_status === 'expired'
-                            ? `<span style="color:#9ca3af;font-weight:600">만료 처리됨</span>`
+                            ? `<span style="color:#9ca3af;font-weight:600">만료 처리됨</span>
+                               <button onclick="applications.sendRenewalNotice('${a.id}')"
+                                style="margin-left:8px;padding:3px 10px;background:#6b7280;color:#fff;border:none;border-radius:6px;font-size:.75rem;cursor:pointer;font-weight:600">
+                                <i class='fas fa-paper-plane'></i> TM 재발송
+                               </button>`
                             : `<button onclick="applications.sendRenewalNotice('${a.id}')"
                                 style="padding:4px 12px;background:#4f46e5;color:#fff;border:none;border-radius:6px;font-size:.78rem;cursor:pointer;font-weight:600">
                                 <i class='fas fa-paper-plane'></i> TM 발송
