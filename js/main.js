@@ -855,10 +855,13 @@ async function checkDuplicateApplication(contractData) {
             const jhParams = new URLSearchParams({ complexCode, dong, ho, limit: 100 });
             const jhResponse = await fetch(`/api/applications?${jhParams}`);
             const jhResult = await jhResponse.json();
+            const _todayJh = new Date().toISOString().slice(0, 10);
             const jhActiveContracts = (jhResult.data || []).filter(c =>
                 c.name  === name  &&
                 c.phone === phone &&
-                (c.status === 'approved' || c.status === 'waiting')
+                (c.status === 'approved' || c.status === 'waiting') &&
+                // 만료된 레코드 제외 (재등록 차단 방지)
+                (!c.expiry_date || c.expiry_date >= _todayJh)
             );
 
             const targetIsTrial = _isFreeTrialProgram(lesson_type);
@@ -906,10 +909,13 @@ async function checkDuplicateApplication(contractData) {
         const result = await response.json();
         const contracts = result.data || [];
 
+        const _todayDup = new Date().toISOString().slice(0, 10);
         const activeContracts = contracts.filter(c =>
             c.name  === name  &&
             c.phone === phone &&
-            (c.status === 'approved' || c.status === 'waiting')
+            (c.status === 'approved' || c.status === 'waiting') &&
+            // 만료된 레코드 제외 (재등록 차단 방지)
+            (!c.expiry_date || c.expiry_date >= _todayDup)
         );
 
         // 같은 카테고리의 신청만 중복으로 판단
